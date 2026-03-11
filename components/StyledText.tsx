@@ -1,5 +1,8 @@
-import { Text, TextProps } from './Themed';
+import React from 'react';
+import { Text, type TextProps } from 'react-native';
 
-export function MonoText(props: TextProps) {
-  return <Text {...props} style={[props.style, { fontFamily: 'SpaceMono' }]} />;
+type MonoTextProps = TextProps & { className?: string };
+
+export function MonoText({ className, ...props }: MonoTextProps) {
+  return <Text {...props} className={['font-mono', className].filter(Boolean).join(' ')} />;
 }
