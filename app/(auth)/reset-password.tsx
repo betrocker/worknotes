@@ -1,15 +1,20 @@
 import React, { useState } from 'react';
 import { Link } from 'expo-router';
-import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 import { LargeHeader } from '@/components/LargeHeader';
+import { usePlaceholderTextColor } from '@/components/usePlaceholderTextColor';
+import { AppTextInput } from '@/components/AppTextInput';
 import { supabase } from '@/lib/supabase';
 
 export default function ResetPasswordScreen() {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const placeholderTextColor = usePlaceholderTextColor(submitting);
 
   const sendReset = async () => {
     setSubmitting(true);
@@ -23,23 +28,24 @@ export default function ResetPasswordScreen() {
 
     setSubmitting(false);
     if (resetError) setError(resetError.message);
-    else setInfo('Poslali smo link na email. Otvori ga da promenis lozinku.');
+    else setInfo(t('auth.resetPassword.sent'));
   };
 
   return (
     <View className="flex-1 bg-[#F2F2F7] dark:bg-black">
-      <LargeHeader title="Lozinka" subtitle="Posalji link za reset." />
+      <LargeHeader title={t('auth.resetPassword.title')} subtitle={t('auth.resetPassword.subtitle')} />
       <View className="px-6">
-        <View className="overflow-hidden rounded-2xl border border-black/10 bg-white/80 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/80">
-          <Text className="text-sm font-medium text-black/60 dark:text-white/70">Email</Text>
-          <TextInput
+        <View className="overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
+          <Text className="text-sm font-medium text-black/60 dark:text-white/70">{t('common.email')}</Text>
+          <AppTextInput
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
             keyboardType="email-address"
-            placeholder="email@domen.com"
-            placeholderTextColor="rgba(60,60,67,0.6)"
-            className="mt-2 rounded-xl bg-black/5 px-4 py-3 text-base text-black dark:bg-white/10 dark:text-white"
+            placeholder={t('auth.placeholders.email')}
+            placeholderMuted={submitting}
+            placeholderTextColor={placeholderTextColor}
+            className="mt-2"
           />
 
           {error ? <Text className="mt-3 text-sm text-red-600">{error}</Text> : null}
@@ -48,17 +54,17 @@ export default function ResetPasswordScreen() {
           <Pressable
             disabled={submitting}
             onPress={sendReset}
-            className="mt-5 items-center justify-center rounded-xl bg-[#007AFF] py-3 disabled:opacity-60 dark:bg-[#0A84FF]">
+            className="mt-5 items-center justify-center rounded-3xl bg-[#007AFF] py-3 disabled:opacity-60 dark:bg-[#0A84FF]">
             {submitting ? (
               <ActivityIndicator color="white" />
             ) : (
-              <Text className="text-base font-semibold text-white">Posalji link</Text>
+              <Text className="text-base font-semibold text-white">{t('auth.resetPassword.submit')}</Text>
             )}
           </Pressable>
 
           <Link href="/(auth)/sign-in" asChild>
             <Pressable className="mt-3 py-2">
-              <Text className="text-sm text-[#007AFF] dark:text-[#0A84FF]">Nazad na prijavu</Text>
+              <Text className="text-sm text-[#007AFF] dark:text-[#0A84FF]">{t('auth.resetPassword.backToSignIn')}</Text>
             </Pressable>
           </Link>
         </View>
@@ -66,4 +72,3 @@ export default function ResetPasswordScreen() {
     </View>
   );
 }
-

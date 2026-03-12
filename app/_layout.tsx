@@ -13,12 +13,14 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import "react-native-reanimated";
 import "../global.css";
 
 import { AuthProvider, useAuth } from "@/providers/AuthProvider";
 import { useColorScheme } from "@/components/useColorScheme";
+import i18n from "@/lib/i18n";
+import { getStoredLanguage, guessInitialLanguage } from "@/lib/language";
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -41,6 +43,7 @@ export default function RootLayout() {
     Manrope_600SemiBold,
     ...Ionicons.font,
   });
+  const [i18nReady, setI18nReady] = useState(false);
 
   // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
@@ -48,12 +51,30 @@ export default function RootLayout() {
   }, [error]);
 
   useEffect(() => {
-    if (loaded) {
+    let mounted = true;
+    (async () => {
+      try {
+        const stored = await getStoredLanguage();
+        const next = stored ?? guessInitialLanguage();
+        if (i18n.language !== next) {
+          await i18n.changeLanguage(next);
+        }
+      } finally {
+        if (mounted) setI18nReady(true);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (loaded && i18nReady) {
       SplashScreen.hideAsync();
     }
-  }, [loaded]);
+  }, [i18nReady, loaded]);
 
-  if (!loaded) {
+  if (!loaded || !i18nReady) {
     return null;
   }
 

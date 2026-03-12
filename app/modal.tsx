@@ -1,12 +1,15 @@
 import { StatusBar } from 'expo-status-bar';
 import { Platform, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 import EditScreenInfo from '@/components/EditScreenInfo';
 
 export default function ModalScreen() {
+  const { t } = useTranslation();
+
   return (
     <View className="flex-1 items-center justify-center bg-[#F2F2F7] px-6 dark:bg-black">
-      <Text className="text-xl font-bold text-black dark:text-white">Modal</Text>
+      <Text className="text-xl font-bold text-black dark:text-white">{t('modal.title')}</Text>
       <View className="my-8 h-px w-4/5 bg-black/10 dark:bg-white/15" />
       <EditScreenInfo path="app/modal.tsx" />
 

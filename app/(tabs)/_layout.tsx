@@ -1,7 +1,6 @@
 import React from 'react';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { Link, Tabs } from 'expo-router';
-import { Pressable } from 'react-native';
+import { Tabs } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 
 import Colors from '@/constants/Colors';
 import { FloatingTabBar } from '@/components/FloatingTabBar';
@@ -9,6 +8,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme() ?? 'light';
+  const { t } = useTranslation();
 
   return (
     <Tabs
@@ -20,27 +20,15 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Poslovi',
-          headerRight: () => (
-            <Link href="/modal" asChild>
-              <Pressable>
-                {({ pressed }) => (
-                  <Ionicons
-                    name="information-circle-outline"
-                    size={24}
-                    color={Colors[colorScheme].text}
-                    style={{ marginRight: 15, opacity: pressed ? 0.5 : 1 }}
-                  />
-                )}
-              </Pressable>
-            </Link>
-          ),
+          title: t('tabs.home'),
         }}
       />
-      <Tabs.Screen name="clients" options={{ title: 'Klijenti' }} />
-      <Tabs.Screen name="new" options={{ title: 'Novi' }} />
-      <Tabs.Screen name="payments" options={{ title: 'Placanja' }} />
-      <Tabs.Screen name="more" options={{ title: 'Vise' }} />
+      <Tabs.Screen name="klijenti" options={{ title: t('tabs.clients') }} />
+      <Tabs.Screen name="poslovi" options={{ title: t('tabs.jobs') }} />
+      <Tabs.Screen name="dugovanja" options={{ title: t('tabs.debts') }} />
+      <Tabs.Screen name="podesavanja" options={{ title: t('tabs.settings') }} />
+      <Tabs.Screen name="klijent/new" options={{ href: null }} />
+      <Tabs.Screen name="klijent/[id]" options={{ href: null }} />
     </Tabs>
   );
 }

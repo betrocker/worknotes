@@ -10,18 +10,20 @@ import { useColorScheme } from '@/components/useColorScheme';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
+const TAB_ROUTE_NAMES = new Set(['index', 'klijenti', 'poslovi', 'dugovanja', 'podesavanja']);
+
 function getIconForRoute(routeName: string, focused: boolean): IoniconName {
   switch (routeName) {
     case 'index':
-      return focused ? 'briefcase' : 'briefcase-outline';
-    case 'clients':
+      return focused ? 'home' : 'home-outline';
+    case 'klijenti':
       return focused ? 'people' : 'people-outline';
-    case 'new':
-      return focused ? 'add-circle' : 'add-circle-outline';
-    case 'payments':
-      return focused ? 'card' : 'card-outline';
-    case 'more':
-      return focused ? 'menu' : 'menu-outline';
+    case 'poslovi':
+      return focused ? 'briefcase' : 'briefcase-outline';
+    case 'dugovanja':
+      return focused ? 'cash' : 'cash-outline';
+    case 'podesavanja':
+      return focused ? 'settings' : 'settings-outline';
     default:
       return focused ? 'ellipse' : 'ellipse-outline';
   }
@@ -32,8 +34,15 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
 
+  const focusedRoute = state.routes[state.index];
+  const focusedIsTab = !!focusedRoute && TAB_ROUTE_NAMES.has(focusedRoute.name);
+
+  const visibleRoutes = useMemo(() => {
+    return state.routes.filter((route) => TAB_ROUTE_NAMES.has(route.name));
+  }, [state.routes]);
+
   const [barWidth, setBarWidth] = useState(0);
-  const tabCount = state.routes.length;
+  const tabCount = visibleRoutes.length;
 
   const padding = 8;
   const itemWidth = useMemo(() => {
@@ -45,12 +54,18 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
 
   useEffect(() => {
     if (!itemWidth) return;
+    if (!focusedRoute) return;
+    if (!visibleRoutes.length) return;
+    const visibleIndex = Math.max(
+      0,
+      visibleRoutes.findIndex((route) => route.key === focusedRoute?.key)
+    );
     Animated.timing(translateX, {
-      toValue: state.index * itemWidth,
+      toValue: visibleIndex * itemWidth,
       duration: 180,
       useNativeDriver: true,
     }).start();
-  }, [itemWidth, state.index, translateX]);
+  }, [focusedRoute?.key, itemWidth, translateX, visibleRoutes]);
 
   const onLayout = (event: LayoutChangeEvent) => {
     setBarWidth(event.nativeEvent.layout.width);
@@ -59,6 +74,8 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   const bottom = Math.max(insets.bottom, 12) + 8;
   const backgroundFallback = colors.tabBarBackground;
 
+  if (!focusedIsTab) return null;
+
   return (
     <View
       pointerEvents="box-none"
@@ -66,7 +83,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
       style={{ bottom }}
       onLayout={onLayout}>
       <View
-        className="overflow-hidden rounded-full"
+        className="overflow-hidden rounded-3xl"
         style={{
           shadowColor: '#000',
           shadowOpacity: colorScheme === 'dark' ? 0.35 : 0.18,
@@ -80,7 +97,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
             backgroundColor: backgroundFallback,
             borderColor: colors.tabBarBorder,
             borderWidth: 1,
-            borderRadius: 9999,
+            borderRadius: 24,
           }}
         />
 
@@ -101,7 +118,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
               top: padding,
               bottom: padding,
               width: itemWidth,
-              borderRadius: 9999,
+              borderRadius: 24,
               backgroundColor: colors.tint,
               opacity: colorScheme === 'dark' ? 0.22 : 0.14,
               transform: [{ translateX }],
@@ -110,11 +127,11 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
         )}
 
         <View className="flex-row items-center" style={{ padding }}>
-          {state.routes.map((route, index) => {
+          {visibleRoutes.map((route, index) => {
             const { options } = descriptors[route.key];
             const label = options.title ?? route.name;
 
-            const isFocused = state.index === index;
+            const isFocused = focusedRoute?.key === route.key;
             const iconName = getIconForRoute(route.name, isFocused);
             const color = isFocused ? colors.text : colors.tabIconDefault;
 
