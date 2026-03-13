@@ -75,6 +75,7 @@ export type Database = {
           price: number | null;
           status: string | null;
           scheduled_date: string | null;
+          completed_at: string | null;
           created_at: string | null;
         };
         Insert: {
@@ -86,6 +87,7 @@ export type Database = {
           price?: number | null;
           status?: string | null;
           scheduled_date?: string | null;
+          completed_at?: string | null;
           created_at?: string | null;
         };
         Update: {
@@ -97,6 +99,7 @@ export type Database = {
           price?: number | null;
           status?: string | null;
           scheduled_date?: string | null;
+          completed_at?: string | null;
           created_at?: string | null;
         };
         Relationships: [
@@ -216,4 +219,3 @@ export type Database = {
     CompositeTypes: Record<string, never>;
   };
 };
-

@@ -29,6 +29,13 @@ export default function TabLayout() {
       <Tabs.Screen name="podesavanja" options={{ title: t('tabs.settings') }} />
       <Tabs.Screen name="klijent/new" options={{ href: null }} />
       <Tabs.Screen name="klijent/[id]" options={{ href: null }} />
+      <Tabs.Screen name="posao/new" options={{ href: null }} />
+      <Tabs.Screen name="posao/[id]" options={{ href: null }} />
+      <Tabs.Screen name="posao/[id]/edit" options={{ href: null }} />
+      <Tabs.Screen name="posao/[id]/payment/new" options={{ href: null }} />
+      <Tabs.Screen name="posao/[id]/payment/[paymentId]/edit" options={{ href: null }} />
+      <Tabs.Screen name="posao/[id]/expense/new" options={{ href: null }} />
+      <Tabs.Screen name="posao/[id]/expense/[expenseId]/edit" options={{ href: null }} />
     </Tabs>
   );
 }

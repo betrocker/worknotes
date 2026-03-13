@@ -1,0 +1,104 @@
+import { supabase } from '@/lib/supabase';
+
+export type JobListItem = {
+  id: string;
+  title: string | null;
+  description: string | null;
+  price: number | null;
+  status: string | null;
+  scheduled_date: string | null;
+  completed_at: string | null;
+  client: { name: string | null } | null;
+};
+
+export type JobInput = {
+  title: string;
+  description?: string | null;
+  price?: number | null;
+  status?: string | null;
+  scheduled_date?: string | null;
+  client_id?: string | null;
+};
+
+export async function listJobs(userId: string): Promise<JobListItem[]> {
+  const { data, error } = await supabase
+    .from('jobs')
+    .select('id,title,description,price,status,scheduled_date,completed_at,client:clients(name)')
+    .eq('user_id', userId)
+    .order('scheduled_date', { ascending: true })
+    .order('created_at', { ascending: false })
+    .overrideTypes<JobListItem[], { merge: false }>();
+
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export async function createJob(userId: string, input: JobInput): Promise<void> {
+  const payload = {
+    user_id: userId,
+    client_id: input.client_id ?? null,
+    title: input.title,
+    description: input.description ?? null,
+    price: input.price ?? null,
+    status: input.status ?? null,
+    scheduled_date: input.scheduled_date ?? null,
+  };
+
+  const { error } = await supabase.from('jobs').insert(payload);
+  if (error) throw new Error(error.message);
+}
+
+export type JobDetail = {
+  id: string;
+  title: string | null;
+  description: string | null;
+  price: number | null;
+  status: string | null;
+  scheduled_date: string | null;
+  completed_at: string | null;
+  client_id: string | null;
+  client: { name: string | null; phone: string | null } | null;
+};
+
+export async function getJobById(userId: string, id: string): Promise<JobDetail | null> {
+  const { data, error } = await supabase
+    .from('jobs')
+    .select('id,title,description,price,status,scheduled_date,completed_at,client_id,client:clients(name,phone)')
+    .eq('user_id', userId)
+    .eq('id', id)
+    .maybeSingle()
+    .overrideTypes<JobDetail, { merge: false }>();
+
+  if (error) throw new Error(error.message);
+  return data ?? null;
+}
+
+export async function updateJob(userId: string, id: string, input: JobInput): Promise<void> {
+  const status = input.status ?? null;
+  const payload = {
+    client_id: input.client_id ?? null,
+    title: input.title,
+    description: input.description ?? null,
+    price: input.price ?? null,
+    status,
+    scheduled_date: input.scheduled_date ?? null,
+    completed_at: status === 'done' ? new Date().toISOString() : null,
+  };
+
+  const { error } = await supabase.from('jobs').update(payload).eq('user_id', userId).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+export async function updateJobStatus(userId: string, id: string, status: string | null): Promise<void> {
+  const payload = {
+    status,
+    completed_at: status === 'done' ? new Date().toISOString() : null,
+  };
+  const { error } = await supabase.from('jobs').update(payload).eq('user_id', userId).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteJob(userId: string, id: string): Promise<void> {
+  const { error } = await supabase.from('jobs').delete().eq('user_id', userId).eq('id', id);
+  if (error) throw new Error(error.message);
+}

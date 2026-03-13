@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ScrollView, Switch, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
@@ -7,6 +7,7 @@ import { useColorScheme, useSetColorScheme } from '@/components/useColorScheme';
 import { LargeHeader } from '@/components/LargeHeader';
 import { UserMenuButton } from '@/components/UserMenuButton';
 import { setStoredLanguage } from '@/lib/language';
+import { getNotificationsEnabled, setNotificationsEnabled } from '@/lib/notifications';
 
 export default function PodesavanjaScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -15,6 +16,18 @@ export default function PodesavanjaScreen() {
 
   const isDark = colorScheme === 'dark';
   const isEnglish = (i18n.resolvedLanguage ?? i18n.language).toLowerCase().startsWith('en');
+  const [notificationsEnabled, setNotificationsEnabledState] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const enabled = await getNotificationsEnabled();
+      if (mounted) setNotificationsEnabledState(enabled);
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <ScrollView
@@ -39,6 +52,26 @@ export default function PodesavanjaScreen() {
               </Text>
             </View>
             <Switch value={isDark} onValueChange={(next) => setColorScheme(next ? 'dark' : 'light')} />
+          </View>
+        </View>
+
+        <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/80 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/80">
+          <View className="flex-row items-center justify-between">
+            <View className="flex-1 pr-4">
+              <Text className="text-base font-semibold text-black dark:text-white">
+                {t('settings.notifications')}
+              </Text>
+              <Text className="mt-1 text-sm text-black/60 dark:text-white/70">
+                {t('settings.notificationsHelp')}
+              </Text>
+            </View>
+            <Switch
+              value={notificationsEnabled}
+              onValueChange={(next) => {
+                setNotificationsEnabledState(next);
+                void setNotificationsEnabled(next);
+              }}
+            />
           </View>
         </View>
 

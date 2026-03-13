@@ -54,7 +54,7 @@ export function LargeHeader({
       <View className="px-6 pb-6" style={{ paddingTop: insets.top + 12 }}>
         <View className="flex-row items-center justify-between">
           <View className="flex-1 pr-4">
-            <Text className="font-semibold text-[34px] leading-[40px] tracking-tight text-black dark:text-white">
+            <Text className="font-bold text-[34px] leading-[40px] tracking-tight text-black dark:text-white">
               {title}
             </Text>
           </View>

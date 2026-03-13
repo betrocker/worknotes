@@ -4,11 +4,6 @@ import {
   DefaultTheme,
   ThemeProvider,
 } from "@react-navigation/native";
-import {
-  Manrope_400Regular,
-  Manrope_500Medium,
-  Manrope_600SemiBold,
-} from "@expo-google-fonts/manrope";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { useRouter, useSegments } from "expo-router";
@@ -38,9 +33,6 @@ SplashScreen.preventAutoHideAsync();
 export default function RootLayout() {
   const [loaded, error] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
-    Manrope_400Regular,
-    Manrope_500Medium,
-    Manrope_600SemiBold,
     ...Ionicons.font,
   });
   const [i18nReady, setI18nReady] = useState(false);

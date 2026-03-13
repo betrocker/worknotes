@@ -12,7 +12,6 @@ module.exports = {
         xl: ['1.3125rem', { lineHeight: '1.875rem' }], // 21px
       },
       fontFamily: {
-        display: ['Manrope_600SemiBold'],
         mono: ['SpaceMono'],
       },
     },

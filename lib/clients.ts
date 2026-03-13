@@ -19,6 +19,55 @@ export async function listClients(userId: string): Promise<DbClient[]> {
   return data ?? [];
 }
 
+type ClientDebtRow = {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  note: string | null;
+  jobs: Array<{
+    price: number | null;
+    payments: Array<{ amount: number | null }>;
+  }>;
+};
+
+export type ClientWithDebt = {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  note: string | null;
+  debt: number;
+};
+
+export async function listClientsWithDebt(userId: string): Promise<ClientWithDebt[]> {
+  const { data, error } = await supabase
+    .from('clients')
+    .select('id,name,phone,note,jobs:jobs(price,payments(amount))')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .overrideTypes<ClientDebtRow[], { merge: false }>();
+
+  if (error) throw new Error(error.message);
+  const rows = data ?? [];
+  return rows.map((client) => {
+    const totals = client.jobs.reduce(
+      (acc, job) => {
+        acc.totalPrice += job.price ?? 0;
+        acc.totalPaid += (job.payments ?? []).reduce((sum, p) => sum + (p.amount ?? 0), 0);
+        return acc;
+      },
+      { totalPrice: 0, totalPaid: 0 }
+    );
+    const debt = Math.max(0, totals.totalPrice - totals.totalPaid);
+    return {
+      id: client.id,
+      name: client.name,
+      phone: client.phone,
+      note: client.note,
+      debt,
+    };
+  });
+}
+
 export async function getClientById(userId: string, id: string): Promise<DbClient | null> {
   const { data, error } = await supabase
     .from('clients')

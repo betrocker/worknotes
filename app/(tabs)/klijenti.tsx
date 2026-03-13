@@ -3,7 +3,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Linking, Platform, Pressable, Text, View } from 'react-native';
 
 import Colors from '@/constants/Colors';
 import { LargeHeader } from '@/components/LargeHeader';
@@ -11,15 +11,12 @@ import { UserMenuButton } from '@/components/UserMenuButton';
 import { useColorScheme } from '@/components/useColorScheme';
 import { usePlaceholderTextColor } from '@/components/usePlaceholderTextColor';
 import { AppTextInput } from '@/components/AppTextInput';
-import { listClients } from '@/lib/clients';
+import { listClientsWithDebt, type ClientWithDebt } from '@/lib/clients';
 import { useAuth } from '@/providers/AuthProvider';
-
-type ClientListItem = { id: string; name: string | null; phone: string | null };
-type ClientListItemWithNote = ClientListItem & { note: string | null };
 
 export default function KlijentiScreen() {
   const router = useRouter();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { session } = useAuth();
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
@@ -27,18 +24,18 @@ export default function KlijentiScreen() {
 
   const userId = session?.user?.id ?? null;
 
-  const [items, setItems] = useState<ClientListItemWithNote[]>([]);
+  const [items, setItems] = useState<ClientWithDebt[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) return;
-    setLoading(true);
-    setError(null);
+      setLoading(true);
+      setError(null);
     try {
-      const data = await listClients(userId);
-      setItems(data.map((c) => ({ id: c.id, name: c.name, phone: c.phone, note: c.note })));
+      const data = await listClientsWithDebt(userId);
+      setItems(data);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -62,6 +59,59 @@ export default function KlijentiScreen() {
       return name.includes(q) || phone.includes(q) || note.includes(q);
     });
   }, [items, query]);
+
+  const locale = i18n.language === 'sr' ? 'sr-Latn-RS' : i18n.language;
+  const formatMoney = useMemo(
+    () =>
+      new Intl.NumberFormat(locale, {
+        style: 'currency',
+        currency: 'EUR',
+        maximumFractionDigits: 0,
+      }),
+    [locale]
+  );
+
+  const openUrl = useCallback(
+    async (url: string) => {
+      try {
+        const supported = await Linking.canOpenURL(url);
+        if (!supported) return;
+        await Linking.openURL(url);
+      } catch {
+        // ignore
+      }
+    },
+    []
+  );
+
+  const onCall = useCallback(
+    (phone: string) => {
+      const digits = phone.replace(/[^\d+]/g, '');
+      if (!digits) return;
+      void openUrl(`tel:${digits}`);
+    },
+    [openUrl]
+  );
+
+  const onSms = useCallback(
+    (phone: string) => {
+      const digits = phone.replace(/[^\d+]/g, '');
+      if (!digits) return;
+      const url = `sms:${digits}`;
+      void openUrl(url);
+    },
+    [openUrl]
+  );
+
+  const onViber = useCallback(
+    (phone: string) => {
+      const digits = phone.replace(/[^\d+]/g, '');
+      if (!digits) return;
+      const url = `viber://chat?number=${encodeURIComponent(digits)}`;
+      void openUrl(url);
+    },
+    [openUrl]
+  );
 
   const onAdd = () => {
     router.push({ pathname: '/(tabs)/klijent/new' as any });
@@ -156,6 +206,44 @@ export default function KlijentiScreen() {
                             numberOfLines={2}>
                             {item.note}
                           </Text>
+                        </View>
+                      ) : null}
+
+                      {item.debt > 0 ? (
+                        <View className="mt-2 flex-row items-center">
+                          <Ionicons name="cash-outline" size={16} color={colors.secondaryText} />
+                          <Text className="ml-2 text-base text-black/70 dark:text-white/80" numberOfLines={1}>
+                            {t('clients.debt')}: {formatMoney.format(item.debt)}
+                          </Text>
+                        </View>
+                      ) : null}
+
+                      {item.phone ? (
+                        <View className="mt-3 flex-row items-center">
+                          <Pressable
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              onCall(item.phone!);
+                            }}
+                            className="mr-2 h-9 w-9 items-center justify-center rounded-full bg-black/5 dark:bg-white/10">
+                            <Ionicons name="call-outline" size={18} color={colors.text} />
+                          </Pressable>
+                          <Pressable
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              onSms(item.phone!);
+                            }}
+                            className="mr-2 h-9 w-9 items-center justify-center rounded-full bg-[#E8F0FF] dark:bg-[#1E2A44]">
+                            <Ionicons name="chatbubble-outline" size={18} color={colors.text} />
+                          </Pressable>
+                          <Pressable
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              onViber(item.phone!);
+                            }}
+                            className="h-9 w-9 items-center justify-center rounded-full bg-[#E8F7EF] dark:bg-[#203326]">
+                            <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.text} />
+                          </Pressable>
                         </View>
                       ) : null}
                     </View>
