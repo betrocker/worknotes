@@ -15,19 +15,22 @@ import {
 } from 'react-native';
 
 import Colors from '@/constants/Colors';
+import { StickyFormHeader } from '@/components/StickyFormHeader';
 import { useColorScheme } from '@/components/useColorScheme';
 import { AppTextInput } from '@/components/AppTextInput';
+import { parseDateInput } from '@/lib/date';
 import { getPaymentById, updatePayment, deletePayment } from '@/lib/job-finance';
 
 export default function EditPaymentScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ id?: string; paymentId?: string }>();
+  const params = useLocalSearchParams<{ id?: string; paymentId?: string; returnTo?: string }>();
   const { t, i18n } = useTranslation();
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
 
   const jobId = typeof params.id === 'string' ? params.id : null;
   const paymentId = typeof params.paymentId === 'string' ? params.paymentId : null;
+  const returnTo = typeof params.returnTo === 'string' ? params.returnTo : 'job';
 
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
@@ -52,14 +55,13 @@ export default function EditPaymentScreen() {
 
   const parsedDate = useMemo(() => {
     if (!paymentDate) return new Date();
-    const parsed = new Date(paymentDate);
-    return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+    return parseDateInput(paymentDate) ?? new Date();
   }, [paymentDate]);
 
   const displayDate = useMemo(() => {
     if (!paymentDate) return null;
-    const parsed = new Date(paymentDate);
-    if (Number.isNaN(parsed.getTime())) return paymentDate;
+    const parsed = parseDateInput(paymentDate);
+    if (!parsed) return paymentDate;
     return dateFormatter.format(parsed);
   }, [dateFormatter, paymentDate]);
 
@@ -70,6 +72,22 @@ export default function EditPaymentScreen() {
     const numeric = Number(trimmed.replace(',', '.'));
     if (!Number.isFinite(numeric) || numeric <= 0) return null;
     return numeric;
+  };
+
+  const goBackOrJobDetail = () => {
+    if (returnTo === 'home') {
+      router.replace('/(tabs)' as any);
+      return;
+    }
+    if (returnTo === 'clients') {
+      router.replace('/(tabs)/klijenti' as any);
+      return;
+    }
+    if (returnTo === 'debts') {
+      router.replace('/(tabs)/dugovanja' as any);
+      return;
+    }
+    router.replace({ pathname: '/(tabs)/posao/[id]' as any, params: { id: jobId } });
   };
 
 
@@ -99,14 +117,15 @@ export default function EditPaymentScreen() {
 
   const onSave = async () => {
     if (!paymentId || !jobId) return;
+    let didNavigate = false;
     const numericAmount = parseAmount(amount);
     if (numericAmount == null) {
       setError(t('jobs.amountInvalid'));
       return;
     }
     if (paymentDate.trim()) {
-      const parsed = new Date(paymentDate.trim());
-      if (Number.isNaN(parsed.getTime())) {
+      const parsed = parseDateInput(paymentDate.trim());
+      if (!parsed) {
         setError(t('jobs.paymentDateLabel') + ' *');
         return;
       }
@@ -119,11 +138,12 @@ export default function EditPaymentScreen() {
         payment_date: paymentDate.trim() || null,
         note: note.trim() || null,
       });
-      router.replace({ pathname: '/(tabs)/posao/[id]' as any, params: { id: jobId } });
+      didNavigate = true;
+      goBackOrJobDetail();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setSubmitting(false);
+      if (!didNavigate) setSubmitting(false);
     }
   };
 
@@ -137,7 +157,7 @@ export default function EditPaymentScreen() {
         onPress: async () => {
           try {
             await deletePayment(paymentId);
-            router.replace({ pathname: '/(tabs)/posao/[id]' as any, params: { id: jobId } });
+            goBackOrJobDetail();
           } catch (e: unknown) {
             setError(e instanceof Error ? e.message : String(e));
           }
@@ -147,7 +167,7 @@ export default function EditPaymentScreen() {
   };
 
   const onBack = () => {
-    router.replace({ pathname: '/(tabs)/posao/[id]' as any, params: { id: jobId } });
+    goBackOrJobDetail();
   };
 
   return (
@@ -155,42 +175,29 @@ export default function EditPaymentScreen() {
       className="flex-1 bg-[#F2F2F7] dark:bg-black"
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}>
-      <ScrollView className="flex-1" contentContainerClassName="pb-32" keyboardShouldPersistTaps="handled">
-        <View className="px-6 pb-4 pt-14">
-          <View className="flex-row items-center justify-between">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('common.back')}
-              onPress={onBack}
-              className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
-              <Ionicons name="chevron-back" size={20} color={colors.text} />
-            </Pressable>
-
-            <View className="flex-row items-center">
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        className="flex-1"
+        contentContainerClassName="pb-32"
+        keyboardShouldPersistTaps="handled">
+        <StickyFormHeader
+          title={t('jobs.editPayment')}
+          onBack={onBack}
+          onSave={onSave}
+          saveLabel={t('common.save')}
+          submitting={submitting}
+          right={
+            <View className="mr-3">
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={t('jobs.deletePayment')}
                 onPress={onDelete}
-                className="mr-3 h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
+                className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
                 <Ionicons name="trash" size={18} color="#FF3B30" />
               </Pressable>
-              <Pressable
-                disabled={submitting}
-                onPress={onSave}
-                className="h-10 items-center justify-center rounded-3xl bg-[#007AFF] px-5 disabled:opacity-60 dark:bg-[#0A84FF]">
-                {submitting ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <Text className="text-base font-semibold text-white">{t('common.save')}</Text>
-                )}
-              </Pressable>
             </View>
-          </View>
-
-          <Text className="mt-4 font-semibold text-[34px] leading-[40px] tracking-tight text-black dark:text-white">
-            {t('jobs.editPayment')}
-          </Text>
-        </View>
+          }
+        />
 
         <View className="px-6">
           <View className="overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
@@ -235,7 +242,7 @@ export default function EditPaymentScreen() {
                 mode="date"
                 display={Platform.OS === 'ios' ? 'inline' : 'default'}
                 onChange={(event, selectedDate) => {
-                  if (Platform.OS !== 'ios') setShowDatePicker(false);
+                  setShowDatePicker(false);
                   if (event.type === 'dismissed') return;
                   if (selectedDate) setPaymentDate(formatDate(selectedDate));
                 }}

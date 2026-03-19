@@ -187,19 +187,28 @@ export type Database = {
         Row: {
           id: string;
           job_id: string | null;
+          user_id: string | null;
+          kind: string | null;
           image_url: string | null;
+          storage_path: string | null;
           created_at: string | null;
         };
         Insert: {
           id?: string;
           job_id?: string | null;
+          user_id?: string | null;
+          kind?: string | null;
           image_url?: string | null;
+          storage_path?: string | null;
           created_at?: string | null;
         };
         Update: {
           id?: string;
           job_id?: string | null;
+          user_id?: string | null;
+          kind?: string | null;
           image_url?: string | null;
+          storage_path?: string | null;
           created_at?: string | null;
         };
         Relationships: [
@@ -208,6 +217,13 @@ export type Database = {
             columns: ['job_id'];
             isOneToOne: false;
             referencedRelation: 'jobs';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'job_images_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
             referencedColumns: ['id'];
           },
         ];

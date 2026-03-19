@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import {
@@ -14,31 +14,40 @@ import {
 } from 'react-native';
 
 import Colors from '@/constants/Colors';
+import { StickyFormHeader } from '@/components/StickyFormHeader';
 import { useColorScheme } from '@/components/useColorScheme';
 import { usePlaceholderTextColor } from '@/components/usePlaceholderTextColor';
 import { AppTextInput } from '@/components/AppTextInput';
 import { listClients } from '@/lib/clients';
+import { parseDateInput } from '@/lib/date';
 import { createJob } from '@/lib/jobs';
-import { scheduleJobReminder } from '@/lib/notifications';
+import {
+  getDefaultJobReminderPreference,
+  scheduleJobReminder,
+  setJobReminderPreference,
+  type JobReminderOption,
+} from '@/lib/notifications';
 import { useAuth } from '@/providers/AuthProvider';
 
 type ClientOption = { id: string; name: string | null };
 
 export default function NewJobScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ clientId?: string }>();
   const { t, i18n } = useTranslation();
   const { session } = useAuth();
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
 
   const userId = session?.user?.id ?? null;
+  const preselectedClientId = typeof params.clientId === 'string' ? params.clientId : null;
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
   const [statusValue, setStatusValue] = useState('');
   const [statusText, setStatusText] = useState('');
-  const [scheduledDate, setScheduledDate] = useState('');
+  const [reminderType, setReminderType] = useState<JobReminderOption>('same_day');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [clientId, setClientId] = useState<string | null>(null);
   const [clients, setClients] = useState<ClientOption[]>([]);
@@ -62,6 +71,15 @@ export default function NewJobScreen() {
     [t]
   );
 
+  const reminderOptions = useMemo(
+    () => [
+      { value: 'none' as const, label: t('jobs.reminders.none') },
+      { value: 'same_day' as const, label: t('jobs.reminders.sameDay') },
+      { value: 'day_before' as const, label: t('jobs.reminders.dayBefore') },
+    ],
+    [t]
+  );
+
   useEffect(() => {
     if (statusValue === 'scheduled') {
       setStatusText(t('jobs.statuses.scheduled'));
@@ -78,17 +96,32 @@ export default function NewJobScreen() {
     setLoadingClients(true);
     try {
       const data = await listClients(userId);
-      setClients(data.map((client) => ({ id: client.id, name: client.name })));
+      const mapped = data.map((client) => ({ id: client.id, name: client.name }));
+      setClients(mapped);
+      if (preselectedClientId && mapped.some((client) => client.id === preselectedClientId)) {
+        setClientId(preselectedClientId);
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoadingClients(false);
     }
-  }, [userId]);
+  }, [preselectedClientId, userId]);
 
   useEffect(() => {
     void loadClients();
   }, [loadClients]);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const nextReminder = await getDefaultJobReminderPreference();
+      if (mounted) setReminderType(nextReminder);
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const parseAmount = useCallback((value: string): number | null => {
     const trimmed = value.trim();
@@ -107,8 +140,8 @@ export default function NewJobScreen() {
       return;
     }
     if (scheduledDate.trim()) {
-      const parsed = new Date(scheduledDate.trim());
-      if (Number.isNaN(parsed.getTime())) {
+      const parsed = parseDateInput(scheduledDate.trim());
+      if (!parsed) {
         setError(t('jobs.dateLabel') + ' *');
         return;
       }
@@ -122,7 +155,7 @@ export default function NewJobScreen() {
     setSubmitting(true);
     setError(null);
     try {
-      await createJob(userId, {
+      const job = await createJob(userId, {
         title: trimmedTitle,
         description: description.trim() || null,
         price: numericPrice,
@@ -130,10 +163,13 @@ export default function NewJobScreen() {
         scheduled_date: scheduledDate.trim() || null,
         client_id: clientId,
       });
+      await setJobReminderPreference(job.id, reminderType);
       if (statusValue.trim() === 'scheduled' && scheduledDate.trim()) {
         await scheduleJobReminder({
+          jobId: job.id,
           title: trimmedTitle,
           scheduledDate: scheduledDate.trim(),
+          reminderType,
           clientName: selectedClient?.name ?? null,
         });
       }
@@ -163,6 +199,7 @@ export default function NewJobScreen() {
     const dd = String(date.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
   }, []);
+  const [scheduledDate, setScheduledDate] = useState(() => formatDate(new Date()));
 
   const locale = i18n.language === 'sr' ? 'sr-Latn-RS' : i18n.language;
   const dateFormatter = useMemo(
@@ -172,14 +209,13 @@ export default function NewJobScreen() {
 
   const parsedDate = useMemo(() => {
     if (!scheduledDate) return new Date();
-    const parsed = new Date(scheduledDate);
-    return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+    return parseDateInput(scheduledDate) ?? new Date();
   }, [scheduledDate]);
 
   const displayDate = useMemo(() => {
     if (!scheduledDate) return null;
-    const parsed = new Date(scheduledDate);
-    if (Number.isNaN(parsed.getTime())) return scheduledDate;
+    const parsed = parseDateInput(scheduledDate);
+    if (!parsed) return scheduledDate;
     return dateFormatter.format(parsed);
   }, [dateFormatter, scheduledDate]);
 
@@ -190,38 +226,17 @@ export default function NewJobScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}>
       <ScrollView
+        stickyHeaderIndices={[0]}
         className="flex-1"
         contentContainerClassName="pb-32"
         keyboardShouldPersistTaps="handled">
-        <View className="px-6 pb-4 pt-14">
-          <View className="flex-row items-center justify-between">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('common.back')}
-              onPress={onBack}
-              className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
-              <Ionicons name="chevron-back" size={20} color={colors.text} />
-            </Pressable>
-
-            <Pressable
-              disabled={submitting}
-              onPress={onSave}
-              className="h-10 items-center justify-center rounded-3xl bg-[#007AFF] px-5 disabled:opacity-60 dark:bg-[#0A84FF]">
-              {submitting ? (
-                <ActivityIndicator color="white" />
-              ) : (
-                <Text className="text-base font-semibold text-white">{t('common.save')}</Text>
-              )}
-            </Pressable>
-          </View>
-
-          <Text className="mt-4 font-semibold text-[34px] leading-[40px] tracking-tight text-black dark:text-white">
-            {t('jobs.add')}
-          </Text>
-          <Text className="mt-1 text-base text-black/60 dark:text-white/70">
-            {t('screens.jobs.subtitle')}
-          </Text>
-        </View>
+        <StickyFormHeader
+          title={t('jobs.add')}
+          onBack={onBack}
+          onSave={onSave}
+          saveLabel={t('common.save')}
+          submitting={submitting}
+        />
 
         <View className="px-6">
           <View className="overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
@@ -350,14 +365,41 @@ export default function NewJobScreen() {
                 mode="date"
                 display={Platform.OS === 'ios' ? 'inline' : 'default'}
                 onChange={(event, selectedDate) => {
-                  if (Platform.OS !== 'ios') {
-                    setShowDatePicker(false);
-                  }
+                  setShowDatePicker(false);
                   if (event.type === 'dismissed') return;
                   if (selectedDate) setScheduledDate(formatDate(selectedDate));
                 }}
               />
             ) : null}
+
+            <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">
+              {t('jobs.reminderLabel')}
+            </Text>
+            <View className="mt-2 flex-row flex-wrap">
+              {reminderOptions.map((option) => {
+                const selected = reminderType === option.value;
+                return (
+                  <Pressable
+                    key={option.value}
+                    onPress={() => setReminderType(option.value)}
+                    className={[
+                      'mr-2 mt-2 rounded-3xl px-4 py-2',
+                      selected
+                        ? 'bg-[#007AFF] dark:bg-[#0A84FF]'
+                        : 'bg-black/5 dark:bg-white/10',
+                    ].join(' ')}>
+                    <Text
+                      className={
+                        selected
+                          ? 'text-sm font-semibold text-white'
+                          : 'text-sm text-black dark:text-white'
+                      }>
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
 
           <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">{t('jobs.priceLabel')}</Text>
           <AppTextInput

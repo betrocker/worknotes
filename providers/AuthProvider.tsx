@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import type { Session } from '@supabase/supabase-js';
 
 import { supabase } from '@/lib/supabase';
+import { getUserDisplayName } from '@/lib/user';
 
 type AuthContextValue = {
   initialized: boolean;
@@ -53,20 +54,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     void (async () => {
       try {
-        const meta = user.user_metadata as Record<string, unknown> | undefined;
-        const fullName =
-          typeof meta?.full_name === 'string'
-            ? meta.full_name
-            : typeof meta?.name === 'string'
-              ? meta.name
-              : null;
+        const displayName = getUserDisplayName(user, '');
 
         // Ensure `public.users` row exists and uses the same UUID as the Supabase Auth user.
         const { error } = await supabase.from('users').upsert(
           {
             id: user.id,
             email: user.email ?? null,
-            name: fullName?.trim() || null,
+            name: displayName || null,
             phone: (user.phone as string | undefined) ?? null,
           },
           { onConflict: 'id' }

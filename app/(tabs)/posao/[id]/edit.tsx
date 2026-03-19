@@ -21,8 +21,15 @@ import { useColorScheme } from '@/components/useColorScheme';
 import { usePlaceholderTextColor } from '@/components/usePlaceholderTextColor';
 import { AppTextInput } from '@/components/AppTextInput';
 import { listClients } from '@/lib/clients';
+import { parseDateInput } from '@/lib/date';
 import { getJobById, updateJob, type JobDetail } from '@/lib/jobs';
-import { scheduleJobReminder } from '@/lib/notifications';
+import {
+  cancelJobReminder,
+  getJobReminderPreference,
+  scheduleJobReminder,
+  setJobReminderPreference,
+  type JobReminderOption,
+} from '@/lib/notifications';
 import { useAuth } from '@/providers/AuthProvider';
 
 type ClientOption = { id: string; name: string | null };
@@ -44,6 +51,7 @@ export default function EditJobScreen() {
   const [price, setPrice] = useState('');
   const [statusValue, setStatusValue] = useState('');
   const [statusText, setStatusText] = useState('');
+  const [reminderType, setReminderType] = useState<JobReminderOption>('same_day');
   const [scheduledDate, setScheduledDate] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [clientId, setClientId] = useState<string | null>(null);
@@ -69,6 +77,15 @@ export default function EditJobScreen() {
     [t]
   );
 
+  const reminderOptions = useMemo(
+    () => [
+      { value: 'none' as const, label: t('jobs.reminders.none') },
+      { value: 'same_day' as const, label: t('jobs.reminders.sameDay') },
+      { value: 'day_before' as const, label: t('jobs.reminders.dayBefore') },
+    ],
+    [t]
+  );
+
 
   const locale = i18n.language === 'sr' ? 'sr-Latn-RS' : i18n.language;
   const dateFormatter = useMemo(
@@ -85,14 +102,13 @@ export default function EditJobScreen() {
 
   const parsedDate = useMemo(() => {
     if (!scheduledDate) return new Date();
-    const parsed = new Date(scheduledDate);
-    return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+    return parseDateInput(scheduledDate) ?? new Date();
   }, [scheduledDate]);
 
   const displayDate = useMemo(() => {
     if (!scheduledDate) return null;
-    const parsed = new Date(scheduledDate);
-    if (Number.isNaN(parsed.getTime())) return scheduledDate;
+    const parsed = parseDateInput(scheduledDate);
+    if (!parsed) return scheduledDate;
     return dateFormatter.format(parsed);
   }, [dateFormatter, scheduledDate]);
 
@@ -134,6 +150,7 @@ export default function EditJobScreen() {
       }
       setScheduledDate(data.scheduled_date ?? '');
       setClientId(data.client_id ?? null);
+      setReminderType(await getJobReminderPreference(id));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -173,8 +190,8 @@ export default function EditJobScreen() {
       return;
     }
     if (scheduledDate.trim()) {
-      const parsed = new Date(scheduledDate.trim());
-      if (Number.isNaN(parsed.getTime())) {
+      const parsed = parseDateInput(scheduledDate.trim());
+      if (!parsed) {
         setError(t('jobs.dateLabel') + ' *');
         return;
       }
@@ -188,6 +205,7 @@ export default function EditJobScreen() {
     setSubmitting(true);
     setError(null);
     try {
+      await setJobReminderPreference(id, reminderType);
       await updateJob(userId, id, {
         title: trimmedTitle,
         description: description.trim() || null,
@@ -198,10 +216,14 @@ export default function EditJobScreen() {
       });
       if (statusValue.trim() === 'scheduled' && scheduledDate.trim()) {
         await scheduleJobReminder({
+          jobId: id,
           title: trimmedTitle,
           scheduledDate: scheduledDate.trim(),
+          reminderType,
           clientName: selectedClient?.name ?? null,
         });
+      } else {
+        await cancelJobReminder(id);
       }
       router.replace({ pathname: '/(tabs)/posao/[id]' as any, params: { id } });
     } catch (e: unknown) {
@@ -291,7 +313,6 @@ export default function EditJobScreen() {
             <Text className="mt-4 font-semibold text-[34px] leading-[40px] tracking-tight text-black dark:text-white">
               {t('jobs.edit')}
             </Text>
-            <Text className="mt-1 text-base text-black/60 dark:text-white/70">{t('screens.jobs.subtitle')}</Text>
           </View>
         </View>
 
@@ -435,14 +456,39 @@ export default function EditJobScreen() {
                     mode="date"
                     display={Platform.OS === 'ios' ? 'inline' : 'default'}
                     onChange={(event, selectedDate) => {
-                      if (Platform.OS !== 'ios') {
-                        setShowDatePicker(false);
-                      }
+                      setShowDatePicker(false);
                       if (event.type === 'dismissed') return;
                       if (selectedDate) setScheduledDate(formatDate(selectedDate));
                     }}
                   />
                 ) : null}
+
+                <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">
+                  {t('jobs.reminderLabel')}
+                </Text>
+                <View className="mt-2 flex-row flex-wrap">
+                  {reminderOptions.map((option) => {
+                    const selected = reminderType === option.value;
+                    return (
+                      <Pressable
+                        key={option.value}
+                        onPress={() => setReminderType(option.value)}
+                        className={[
+                          'mr-2 mt-2 rounded-3xl px-4 py-2',
+                          selected ? 'bg-[#007AFF] dark:bg-[#0A84FF]' : 'bg-black/5 dark:bg-white/10',
+                        ].join(' ')}>
+                        <Text
+                          className={
+                            selected
+                              ? 'text-sm font-semibold text-white'
+                              : 'text-sm text-black dark:text-white'
+                          }>
+                          {option.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
 
                 <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">
                   {t('jobs.priceLabel')}

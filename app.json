@@ -1,16 +1,16 @@
 {
   "expo": {
-    "name": "expo-tailwind-router",
-    "slug": "expo-tailwind-router",
+    "name": "Tefter",
+    "slug": "tefter",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "expotailwindrouter",
+    "scheme": "tefter",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/images/splash-icon.png",
+      "image": "./assets/images/maskotavawe.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0C63E7"
     },
     "ios": {
       "supportsTablet": true
@@ -31,7 +31,22 @@
     },
     "plugins": [
       "expo-router",
-      "expo-localization"
+      "expo-localization",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Tefter koristi galeriju za dodavanje slika pre i posle posla.",
+          "cameraPermission": "Tefter koristi kameru za fotografisanje slika pre i posle posla."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#1A4FE0",
+          "defaultChannel": "job-reminders"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

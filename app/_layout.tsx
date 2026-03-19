@@ -5,17 +5,21 @@ import {
   ThemeProvider,
 } from "@react-navigation/native";
 import { useFonts } from "expo-font";
+import { Asset } from "expo-asset";
 import { Stack } from "expo-router";
 import { useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useState } from "react";
-import "react-native-reanimated";
+import { StyleSheet, View } from "react-native";
 import "../global.css";
 
 import { AuthProvider, useAuth } from "@/providers/AuthProvider";
+import { AppSplashScreen } from "@/components/AppSplashScreen";
+import { SplashVisibilityProvider } from "@/components/SplashVisibilityContext";
 import { useColorScheme } from "@/components/useColorScheme";
 import i18n from "@/lib/i18n";
 import { getStoredLanguage, guessInitialLanguage } from "@/lib/language";
+import { initializeNotifications } from "@/lib/notifications";
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -36,6 +40,7 @@ export default function RootLayout() {
     ...Ionicons.font,
   });
   const [i18nReady, setI18nReady] = useState(false);
+  const [assetsReady, setAssetsReady] = useState(false);
 
   // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
@@ -61,12 +66,31 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (loaded && i18nReady) {
+    let mounted = true;
+    (async () => {
+      try {
+        await Asset.loadAsync([require("../assets/images/maskotavawe.png")]);
+      } finally {
+        if (mounted) setAssetsReady(true);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (loaded && i18nReady && assetsReady) {
       SplashScreen.hideAsync();
     }
-  }, [i18nReady, loaded]);
+  }, [assetsReady, i18nReady, loaded]);
 
-  if (!loaded || !i18nReady) {
+  useEffect(() => {
+    if (!loaded || !i18nReady || !assetsReady) return;
+    void initializeNotifications();
+  }, [assetsReady, i18nReady, loaded]);
+
+  if (!loaded || !i18nReady || !assetsReady) {
     return null;
   }
 
@@ -82,9 +106,23 @@ function RootLayoutNav() {
   const { initialized, session } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
     if (!initialized) return;
+
+    const timer = setTimeout(() => {
+      setShowSplash(false);
+    }, 5000);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [initialized]);
+
+  useEffect(() => {
+    if (!initialized) return;
+    if (showSplash) return;
 
     const inAuthGroup = segments[0] === "(auth)";
 
@@ -93,15 +131,31 @@ function RootLayoutNav() {
     } else if (session && inAuthGroup) {
       router.replace("/(tabs)");
     }
-  }, [initialized, router, segments, session]);
+  }, [initialized, router, segments, session, showSplash]);
+
+  if (!initialized) {
+    return <AppSplashScreen />;
+  }
 
   return (
-    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: "modal" }} />
-      </Stack>
-    </ThemeProvider>
+    <View style={{ flex: 1, backgroundColor: "#1A4FE0" }}>
+      <SplashVisibilityProvider showSplash={showSplash}>
+        <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+          <Stack>
+            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="modal" options={{ presentation: "modal" }} />
+          </Stack>
+        </ThemeProvider>
+      </SplashVisibilityProvider>
+
+      {showSplash ? (
+        <View style={StyleSheet.absoluteFill}>
+          <View style={StyleSheet.absoluteFill}>
+            <AppSplashScreen />
+          </View>
+        </View>
+      ) : null}
+    </View>
   );
 }

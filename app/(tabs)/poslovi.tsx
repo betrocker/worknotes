@@ -1,22 +1,24 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
 
 import Colors from '@/constants/Colors';
+import { MascotEmptyState } from '@/components/MascotEmptyState';
 import { LargeHeader } from '@/components/LargeHeader';
-import { UserMenuButton } from '@/components/UserMenuButton';
 import { useColorScheme } from '@/components/useColorScheme';
 import { usePlaceholderTextColor } from '@/components/usePlaceholderTextColor';
 import { AppTextInput } from '@/components/AppTextInput';
+import { parseDateInput } from '@/lib/date';
 import { listJobs, updateJobStatus, type JobListItem } from '@/lib/jobs';
-import { scheduleJobReminder } from '@/lib/notifications';
+import { cancelJobReminder, getJobReminderPreference, scheduleJobReminder } from '@/lib/notifications';
 import { useAuth } from '@/providers/AuthProvider';
 
 export default function PosloviScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ filter?: string }>();
   const { t, i18n } = useTranslation();
   const { session } = useAuth();
   const colorScheme = useColorScheme() ?? 'light';
@@ -30,6 +32,13 @@ export default function PosloviScreen() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const nextFilter = params.filter;
+    if (nextFilter === 'all' || nextFilter === 'active' || nextFilter === 'done' || nextFilter === 'scheduled') {
+      setFilter(nextFilter);
+    }
+  }, [params.filter]);
 
   const locale = i18n.language === 'sr' ? 'sr-Latn-RS' : i18n.language;
   const dateFormatter = useMemo(
@@ -89,8 +98,8 @@ export default function PosloviScreen() {
   const formatDate = useCallback(
     (value: string | null) => {
       if (!value) return t('jobs.unscheduled');
-      const parsed = new Date(value);
-      if (Number.isNaN(parsed.getTime())) return value;
+      const parsed = parseDateInput(value);
+      if (!parsed) return value;
       return dateFormatter.format(parsed);
     },
     [dateFormatter, t]
@@ -148,11 +157,16 @@ export default function PosloviScreen() {
       try {
         await updateJobStatus(userId, job.id, next);
         if (next === 'scheduled' && job.scheduled_date) {
+          const reminderType = await getJobReminderPreference(job.id);
           await scheduleJobReminder({
+            jobId: job.id,
             title: job.title || t('jobs.untitled'),
             scheduledDate: job.scheduled_date,
+            reminderType,
             clientName: job.client?.name ?? null,
           });
+        } else {
+          await cancelJobReminder(job.id);
         }
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : String(e));
@@ -184,7 +198,6 @@ export default function PosloviScreen() {
     <View className="flex-1 bg-[#F2F2F7] dark:bg-black">
       <LargeHeader
         title={t('tabs.jobs')}
-        subtitle={t('screens.jobs.subtitle')}
         right={
           <View className="flex-row items-center">
             <Pressable
@@ -194,12 +207,11 @@ export default function PosloviScreen() {
               className="mr-3 h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
               <Ionicons name="add" size={22} color={colors.text} />
             </Pressable>
-            <UserMenuButton />
           </View>
         }
       />
 
-      <View className="px-6 pb-32 pt-3">
+      <View className="flex-1 px-6 pt-3">
         <View className="relative">
           <AppTextInput
             value={query}
@@ -262,25 +274,21 @@ export default function PosloviScreen() {
 
         {error ? <Text className="mt-3 text-sm text-red-600">{error}</Text> : null}
 
-        <View className="mt-4">
+        <View className="mt-4 flex-1">
           {loading ? (
             <View className="items-center py-6">
               <ActivityIndicator />
             </View>
           ) : (
             <FlatList
+              className="flex-1"
               data={filtered}
               keyExtractor={(item) => item.id}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 128 }}
               ItemSeparatorComponent={() => <View className="h-3" />}
               ListEmptyComponent={() => (
-                <View className="overflow-hidden rounded-3xl border border-black/10 bg-white/80 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/80">
-                  <Text className="text-lg font-semibold text-black dark:text-white">
-                    {t('jobs.emptyTitle')}
-                  </Text>
-                  <Text className="mt-1 text-base text-black/60 dark:text-white/70">
-                    {t('jobs.emptyBody')}
-                  </Text>
-                </View>
+                <MascotEmptyState title={t('jobs.emptyTitle')} body={t('jobs.emptyBody')} imageSize={164} compact />
               )}
               renderItem={({ item }) => {
                 const price = formatPrice(item.price);
@@ -289,7 +297,7 @@ export default function PosloviScreen() {
                     onPress={() => router.push({ pathname: '/(tabs)/posao/[id]' as any, params: { id: item.id } })}
                     className="overflow-hidden rounded-3xl border border-black/10 bg-white/80 px-4 py-4 dark:border-white/10 dark:bg-[#1C1C1E]/80">
                     <View className="flex-row items-center justify-between">
-                      <Text className="flex-1 pr-3 text-xl font-semibold text-black dark:text-white" numberOfLines={1}>
+                      <Text className="flex-1 pr-3 text-[18px] font-extrabold text-[#1C2745] dark:text-white" numberOfLines={1}>
                         {item.title || t('jobs.untitled')}
                       </Text>
                       <Pressable

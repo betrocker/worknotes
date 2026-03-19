@@ -1,11 +1,9 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 
-import Colors from '@/constants/Colors';
-import { useColorScheme } from '@/components/useColorScheme';
+import { StickyFormHeader } from '@/components/StickyFormHeader';
 import { usePlaceholderTextColor } from '@/components/usePlaceholderTextColor';
 import { AppTextInput } from '@/components/AppTextInput';
 import { createClient } from '@/lib/clients';
@@ -15,8 +13,6 @@ export default function NewClientScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const { session } = useAuth();
-  const colorScheme = useColorScheme() ?? 'light';
-  const colors = Colors[colorScheme];
 
   const userId = session?.user?.id ?? null;
 
@@ -57,34 +53,17 @@ export default function NewClientScreen() {
   };
 
   return (
-    <ScrollView className="flex-1 bg-[#F2F2F7] dark:bg-black" contentContainerClassName="pb-32">
-      <View className="px-6 pb-4 pt-14">
-        <View className="flex-row items-center justify-between">
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('common.back')}
-            onPress={onBack}
-            className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
-            <Ionicons name="chevron-back" size={20} color={colors.text} />
-          </Pressable>
-
-          <Pressable
-            disabled={submitting}
-            onPress={onSave}
-            className="h-10 items-center justify-center rounded-3xl bg-[#007AFF] px-5 disabled:opacity-60 dark:bg-[#0A84FF]">
-            {submitting ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text className="text-base font-semibold text-white">{t('common.save')}</Text>
-            )}
-          </Pressable>
-        </View>
-
-        <Text className="mt-4 font-semibold text-[34px] leading-[40px] tracking-tight text-black dark:text-white">
-          {t('clients.add')}
-        </Text>
-        <Text className="mt-1 text-base text-black/60 dark:text-white/70">{t('screens.clients.subtitle')}</Text>
-      </View>
+    <ScrollView
+      stickyHeaderIndices={[0]}
+      className="flex-1 bg-[#F2F2F7] dark:bg-black"
+      contentContainerClassName="pb-32">
+      <StickyFormHeader
+        title={t('clients.add')}
+        onBack={onBack}
+        onSave={onSave}
+        saveLabel={t('common.save')}
+        submitting={submitting}
+      />
 
       <View className="px-6">
         <View className="overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">

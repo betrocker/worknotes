@@ -13,8 +13,7 @@ import {
   View,
 } from 'react-native';
 
-import Colors from '@/constants/Colors';
-import { useColorScheme } from '@/components/useColorScheme';
+import { StickyFormHeader } from '@/components/StickyFormHeader';
 import { AppTextInput } from '@/components/AppTextInput';
 import { getExpenseById, updateExpense, deleteExpense } from '@/lib/job-finance';
 
@@ -22,8 +21,6 @@ export default function EditExpenseScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string; expenseId?: string }>();
   const { t } = useTranslation();
-  const colorScheme = useColorScheme() ?? 'light';
-  const colors = Colors[colorScheme];
 
   const jobId = typeof params.id === 'string' ? params.id : null;
   const expenseId = typeof params.expenseId === 'string' ? params.expenseId : null;
@@ -116,42 +113,29 @@ export default function EditExpenseScreen() {
       className="flex-1 bg-[#F2F2F7] dark:bg-black"
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}>
-      <ScrollView className="flex-1" contentContainerClassName="pb-32" keyboardShouldPersistTaps="handled">
-        <View className="px-6 pb-4 pt-14">
-          <View className="flex-row items-center justify-between">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('common.back')}
-              onPress={onBack}
-              className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
-              <Ionicons name="chevron-back" size={20} color={colors.text} />
-            </Pressable>
-
-            <View className="flex-row items-center">
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        className="flex-1"
+        contentContainerClassName="pb-32"
+        keyboardShouldPersistTaps="handled">
+        <StickyFormHeader
+          title={t('jobs.editExpense')}
+          onBack={onBack}
+          onSave={onSave}
+          saveLabel={t('common.save')}
+          submitting={submitting}
+          right={
+            <View className="mr-3">
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={t('jobs.deleteExpense')}
                 onPress={onDelete}
-                className="mr-3 h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
+                className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
                 <Ionicons name="trash" size={18} color="#FF3B30" />
               </Pressable>
-              <Pressable
-                disabled={submitting}
-                onPress={onSave}
-                className="h-10 items-center justify-center rounded-3xl bg-[#007AFF] px-5 disabled:opacity-60 dark:bg-[#0A84FF]">
-                {submitting ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <Text className="text-base font-semibold text-white">{t('common.save')}</Text>
-                )}
-              </Pressable>
             </View>
-          </View>
-
-          <Text className="mt-4 font-semibold text-[34px] leading-[40px] tracking-tight text-black dark:text-white">
-            {t('jobs.editExpense')}
-          </Text>
-        </View>
+          }
+        />
 
         <View className="px-6">
           <View className="overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">

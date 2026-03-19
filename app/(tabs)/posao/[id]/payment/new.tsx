@@ -1,10 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useCallback, useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -14,22 +14,24 @@ import {
 } from 'react-native';
 
 import Colors from '@/constants/Colors';
+import { StickyFormHeader } from '@/components/StickyFormHeader';
 import { useColorScheme } from '@/components/useColorScheme';
 import { AppTextInput } from '@/components/AppTextInput';
+import { parseDateInput } from '@/lib/date';
 import { createPayment } from '@/lib/job-finance';
 
 export default function NewPaymentScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ id?: string }>();
+  const params = useLocalSearchParams<{ id?: string; returnTo?: string }>();
   const { t, i18n } = useTranslation();
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
 
   const jobId = typeof params.id === 'string' ? params.id : null;
+  const returnTo = typeof params.returnTo === 'string' ? params.returnTo : 'job';
 
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
-  const [paymentDate, setPaymentDate] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,17 +48,28 @@ export default function NewPaymentScreen() {
     const dd = String(date.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
   }, []);
+  const [paymentDate, setPaymentDate] = useState(() => formatDate(new Date()));
+
+  useFocusEffect(
+    useCallback(() => {
+      setAmount('');
+      setNote('');
+      setShowDatePicker(false);
+      setSubmitting(false);
+      setError(null);
+      setPaymentDate(formatDate(new Date()));
+    }, [formatDate])
+  );
 
   const parsedDate = useMemo(() => {
     if (!paymentDate) return new Date();
-    const parsed = new Date(paymentDate);
-    return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+    return parseDateInput(paymentDate) ?? new Date();
   }, [paymentDate]);
 
   const displayDate = useMemo(() => {
     if (!paymentDate) return null;
-    const parsed = new Date(paymentDate);
-    if (Number.isNaN(parsed.getTime())) return paymentDate;
+    const parsed = parseDateInput(paymentDate);
+    if (!parsed) return paymentDate;
     return dateFormatter.format(parsed);
   }, [dateFormatter, paymentDate]);
 
@@ -69,16 +82,33 @@ export default function NewPaymentScreen() {
     return numeric;
   }, []);
 
+  const goBackOrJobDetail = useCallback(() => {
+    if (returnTo === 'home') {
+      router.replace('/(tabs)' as any);
+      return;
+    }
+    if (returnTo === 'clients') {
+      router.replace('/(tabs)/klijenti' as any);
+      return;
+    }
+    if (returnTo === 'debts') {
+      router.replace('/(tabs)/dugovanja' as any);
+      return;
+    }
+    router.replace({ pathname: '/(tabs)/posao/[id]' as any, params: { id: jobId } });
+  }, [jobId, returnTo, router]);
+
   const onSave = async () => {
     if (!jobId) return;
+    let didNavigate = false;
     const numericAmount = parseAmount(amount);
     if (numericAmount == null) {
       setError(t('jobs.amountInvalid'));
       return;
     }
     if (paymentDate.trim()) {
-      const parsed = new Date(paymentDate.trim());
-      if (Number.isNaN(parsed.getTime())) {
+      const parsed = parseDateInput(paymentDate.trim());
+      if (!parsed) {
         setError(t('jobs.paymentDateLabel') + ' *');
         return;
       }
@@ -91,16 +121,17 @@ export default function NewPaymentScreen() {
         payment_date: paymentDate.trim() || null,
         note: note.trim() || null,
       });
-      router.replace({ pathname: '/(tabs)/posao/[id]' as any, params: { id: jobId } });
+      didNavigate = true;
+      goBackOrJobDetail();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setSubmitting(false);
+      if (!didNavigate) setSubmitting(false);
     }
   };
 
   const onBack = () => {
-    router.replace({ pathname: '/(tabs)/posao/[id]' as any, params: { id: jobId } });
+    goBackOrJobDetail();
   };
 
   return (
@@ -108,33 +139,18 @@ export default function NewPaymentScreen() {
       className="flex-1 bg-[#F2F2F7] dark:bg-black"
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}>
-      <ScrollView className="flex-1" contentContainerClassName="pb-32" keyboardShouldPersistTaps="handled">
-        <View className="px-6 pb-4 pt-14">
-          <View className="flex-row items-center justify-between">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('common.back')}
-              onPress={onBack}
-              className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
-              <Ionicons name="chevron-back" size={20} color={colors.text} />
-            </Pressable>
-
-            <Pressable
-              disabled={submitting}
-              onPress={onSave}
-              className="h-10 items-center justify-center rounded-3xl bg-[#007AFF] px-5 disabled:opacity-60 dark:bg-[#0A84FF]">
-              {submitting ? (
-                <ActivityIndicator color="white" />
-              ) : (
-                <Text className="text-base font-semibold text-white">{t('common.save')}</Text>
-              )}
-            </Pressable>
-          </View>
-
-          <Text className="mt-4 font-semibold text-[34px] leading-[40px] tracking-tight text-black dark:text-white">
-            {t('jobs.addPayment')}
-          </Text>
-        </View>
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        className="flex-1"
+        contentContainerClassName="pb-32"
+        keyboardShouldPersistTaps="handled">
+        <StickyFormHeader
+          title={t('jobs.addPayment')}
+          onBack={onBack}
+          onSave={onSave}
+          saveLabel={t('common.save')}
+          submitting={submitting}
+        />
 
         <View className="px-6">
           <View className="overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
@@ -173,7 +189,7 @@ export default function NewPaymentScreen() {
                 mode="date"
                 display={Platform.OS === 'ios' ? 'inline' : 'default'}
                 onChange={(event, selectedDate) => {
-                  if (Platform.OS !== 'ios') setShowDatePicker(false);
+                  setShowDatePicker(false);
                   if (event.type === 'dismissed') return;
                   if (selectedDate) setPaymentDate(formatDate(selectedDate));
                 }}

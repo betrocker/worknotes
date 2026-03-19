@@ -16,6 +16,9 @@ export default function TabLayout() {
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme].tint,
         headerShown: false,
+        sceneStyle: {
+          backgroundColor: "#1A4FE0",
+        },
       }}>
       <Tabs.Screen
         name="index"
@@ -25,10 +28,11 @@ export default function TabLayout() {
       />
       <Tabs.Screen name="klijenti" options={{ title: t('tabs.clients') }} />
       <Tabs.Screen name="poslovi" options={{ title: t('tabs.jobs') }} />
-      <Tabs.Screen name="dugovanja" options={{ title: t('tabs.debts') }} />
-      <Tabs.Screen name="podesavanja" options={{ title: t('tabs.settings') }} />
+      <Tabs.Screen name="dugovanja" options={{ title: t('tabs.debtsShort') }} />
+      <Tabs.Screen name="podesavanja" options={{ title: t('tabs.profile') }} />
       <Tabs.Screen name="klijent/new" options={{ href: null }} />
       <Tabs.Screen name="klijent/[id]" options={{ href: null }} />
+      <Tabs.Screen name="klijent/[id]/edit" options={{ href: null }} />
       <Tabs.Screen name="posao/new" options={{ href: null }} />
       <Tabs.Screen name="posao/[id]" options={{ href: null }} />
       <Tabs.Screen name="posao/[id]/edit" options={{ href: null }} />

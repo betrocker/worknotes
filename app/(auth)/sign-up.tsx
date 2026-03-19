@@ -1,10 +1,22 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
-import { LargeHeader } from '@/components/LargeHeader';
 import { useColorScheme } from '@/components/useColorScheme';
 import { usePlaceholderTextColor } from '@/components/usePlaceholderTextColor';
 import { AppTextInput } from '@/components/AppTextInput';
@@ -12,14 +24,37 @@ import { supabase } from '@/lib/supabase';
 import { startGoogleOAuth } from '@/lib/oauth';
 
 export default function SignUpScreen() {
+  const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
   const colorScheme = useColorScheme() ?? 'light';
+  const isDark = colorScheme === 'dark';
   const { t } = useTranslation();
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [keyboardInset, setKeyboardInset] = useState(0);
   const placeholderTextColor = usePlaceholderTextColor(submitting);
+  const sheetMinHeight = Math.max(540, height - (insets.top + 220));
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardInset(event.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardInset(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const signUpWithGoogle = async () => {
     setSubmitting(true);
@@ -29,18 +64,29 @@ export default function SignUpScreen() {
     setSubmitting(false);
     if (!result.ok && result.error) {
       setError(result.error);
-    } else if (!result.ok && !result.error) {
-      setError(null);
     }
   };
 
   const signUp = async () => {
+    const trimmedUsername = username.trim();
+    if (!trimmedUsername) {
+      setError(t('auth.signUp.usernameRequired'));
+      setInfo(null);
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
     setInfo(null);
     const { error: signUpError, data } = await supabase.auth.signUp({
       email: email.trim(),
       password,
+      options: {
+        data: {
+          username: trimmedUsername,
+          name: trimmedUsername,
+        },
+      },
     });
     setSubmitting(false);
     if (signUpError) {
@@ -48,83 +94,195 @@ export default function SignUpScreen() {
       return;
     }
 
-    // Depending on Supabase email confirmation settings, session may be null until verified.
     if (!data.session) {
       setInfo(t('auth.signUp.checkEmail'));
     }
   };
 
   return (
-    <View className="flex-1 bg-[#F2F2F7] dark:bg-black">
-      <LargeHeader title={t('auth.signUp.title')} subtitle={t('auth.signUp.subtitle')} />
-      <View className="px-6">
-        <View className="overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
-          <Pressable
-            disabled={submitting}
-            onPress={signUpWithGoogle}
-            className="flex-row items-center justify-center rounded-3xl border border-black/10 bg-white py-3 disabled:opacity-60 dark:border-white/10 dark:bg-[#2C2C2E]">
-            <Ionicons
-              name="logo-google"
-              size={18}
-              color={submitting ? '#8E8E93' : colorScheme === 'dark' ? '#FFFFFF' : '#000000'}
-            />
-            <Text className="ml-2 text-base font-semibold text-black dark:text-white">
-              {t('auth.signUp.google')}
+    <LinearGradient
+      colors={isDark ? ['#081225', '#12305C', '#10213E', '#0B111C'] : ['#1A4FE0', '#3B73F0', '#7FA8FF', '#EEF3FF']}
+      locations={isDark ? [0, 0.28, 0.65, 1] : [0, 0.24, 0.62, 1]}
+      start={{ x: 0.5, y: 0 }}
+      end={{ x: 0.5, y: 1 }}
+      style={{ flex: 1 }}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}>
+        <View style={{ flex: 1, justifyContent: 'space-between' }}>
+          <View style={{ minHeight: 250, paddingTop: insets.top + 18, paddingHorizontal: 24 }}>
+            <Text className="text-[32px] font-extrabold leading-[38px] text-white">
+              {t('auth.signUp.title')}
             </Text>
-          </Pressable>
+            <Text className="mt-2 max-w-[220px] text-[15px] leading-[22px] text-white/88">
+              {t('auth.signUp.subtitle')}
+            </Text>
 
-          <View className="my-4 flex-row items-center">
-            <View className="h-px flex-1 bg-black/10 dark:bg-white/15" />
-            <Text className="mx-3 text-xs text-black/50 dark:text-white/50">{t('common.or')}</Text>
-            <View className="h-px flex-1 bg-black/10 dark:bg-white/15" />
+            <Image
+              source={require('../../assets/images/maskotathumbup.png')}
+              resizeMode="contain"
+              style={{
+                position: 'absolute',
+                right: -6,
+                top: insets.top + 8,
+                width: 220,
+                height: 220,
+              }}
+            />
           </View>
 
-          <Text className="text-sm font-medium text-black/60 dark:text-white/70">{t('common.email')}</Text>
-          <AppTextInput
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            placeholder={t('auth.placeholders.email')}
-            placeholderMuted={submitting}
-            placeholderTextColor={placeholderTextColor}
-            className="mt-2"
-          />
+          <View
+            style={{
+              minHeight: sheetMinHeight,
+              borderTopLeftRadius: 34,
+              borderTopRightRadius: 34,
+              backgroundColor: isDark ? 'rgba(18,21,30,0.98)' : 'rgba(247,249,255,0.97)',
+              borderWidth: 1,
+              borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.84)',
+              paddingHorizontal: 18,
+              paddingTop: 18,
+              paddingBottom: 28,
+              shadowColor: '#000000',
+              shadowOpacity: isDark ? 0.32 : 0.16,
+              shadowRadius: 16,
+              shadowOffset: { width: 0, height: -4 },
+              elevation: 18,
+            }}>
+            <View
+              style={{
+                flex: 1,
+                borderRadius: 28,
+                backgroundColor: isDark ? 'rgba(28,32,44,0.92)' : 'rgba(255,255,255,0.86)',
+                borderWidth: 1,
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(235,240,255,0.96)',
+                padding: 16,
+                shadowColor: '#000000',
+                shadowOpacity: isDark ? 0.26 : 0.18,
+                shadowRadius: 10,
+                shadowOffset: { width: 2, height: 6 },
+                elevation: 12,
+              }}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+                contentContainerStyle={{ paddingBottom: keyboardInset + 20 }}>
+              <Pressable
+                disabled={submitting}
+                onPress={signUpWithGoogle}
+                className="flex-row items-center justify-center rounded-[22px] border py-3.5 disabled:opacity-60"
+                style={{
+                  borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(20,37,77,0.08)',
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.88)',
+                }}>
+                <Ionicons
+                  name="logo-google"
+                  size={18}
+                  color={submitting ? '#8E8E93' : isDark ? '#FFFFFF' : '#1C2745'}
+                />
+                <Text className="ml-2 text-[15px] font-bold text-[#1C2745] dark:text-white">
+                  {t('auth.signUp.google')}
+                </Text>
+              </Pressable>
 
-          <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">{t('common.password')}</Text>
-          <AppTextInput
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            placeholder={t('auth.signUp.passwordPlaceholder')}
-            placeholderMuted={submitting}
-            placeholderTextColor={placeholderTextColor}
-            className="mt-2"
-          />
+              <View className="my-5 flex-row items-center">
+                <View className="h-px flex-1 bg-black/10 dark:bg-white/10" />
+                <Text className="mx-3 text-xs font-medium text-black/45 dark:text-white/45">
+                  {t('common.or')}
+                </Text>
+                <View className="h-px flex-1 bg-black/10 dark:bg-white/10" />
+              </View>
 
-          {error ? <Text className="mt-3 text-sm text-red-600">{error}</Text> : null}
-          {info ? <Text className="mt-3 text-sm text-black/60 dark:text-white/70">{info}</Text> : null}
-
-          <Pressable
-            disabled={submitting}
-            onPress={signUp}
-            className="mt-5 items-center justify-center rounded-3xl bg-[#007AFF] py-3 disabled:opacity-60 dark:bg-[#0A84FF]">
-            {submitting ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text className="text-base font-semibold text-white">{t('auth.signUp.submit')}</Text>
-            )}
-          </Pressable>
-
-          <Link href="/(auth)/sign-in" asChild>
-            <Pressable className="mt-3 py-2">
-              <Text className="text-sm text-[#007AFF] dark:text-[#0A84FF]">
-                {t('auth.signUp.alreadyHave')}
+              <Text className="text-[13px] font-semibold uppercase tracking-[0.3px] text-black/55 dark:text-white/60">
+                {t('auth.signUp.username')}
               </Text>
-            </Pressable>
-          </Link>
+              <AppTextInput
+                value={username}
+                onChangeText={setUsername}
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder={t('auth.signUp.usernamePlaceholder')}
+                placeholderMuted={submitting}
+                placeholderTextColor={placeholderTextColor}
+                className="mt-2 rounded-[22px] border border-black/5 bg-[#F6F8FF] px-4 py-3.5 dark:border-white/10 dark:bg-[#232836]"
+              />
+
+              <Text className="mt-4 text-[13px] font-semibold uppercase tracking-[0.3px] text-black/55 dark:text-white/60">
+                {t('common.email')}
+              </Text>
+              <AppTextInput
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                autoCorrect={false}
+                placeholder={t('auth.placeholders.email')}
+                placeholderMuted={submitting}
+                placeholderTextColor={placeholderTextColor}
+                className="mt-2 rounded-[22px] border border-black/5 bg-[#F6F8FF] px-4 py-3.5 dark:border-white/10 dark:bg-[#232836]"
+              />
+
+              <Text className="mt-4 text-[13px] font-semibold uppercase tracking-[0.3px] text-black/55 dark:text-white/60">
+                {t('common.password')}
+              </Text>
+              <View className="mt-2 justify-center">
+                <AppTextInput
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!passwordVisible}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  placeholder={t('auth.signUp.passwordPlaceholder')}
+                  placeholderMuted={submitting}
+                  placeholderTextColor={placeholderTextColor}
+                  className="rounded-[22px] border border-black/5 bg-[#F6F8FF] px-4 py-3.5 pr-12 dark:border-white/10 dark:bg-[#232836]"
+                />
+                <Pressable
+                  onPress={() => setPasswordVisible((current) => !current)}
+                  hitSlop={10}
+                  style={{ position: 'absolute', right: 14 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('auth.passwordVisibility.toggle')}>
+                  <Ionicons
+                    name={passwordVisible ? 'eye-off-outline' : 'eye-outline'}
+                    size={20}
+                    color={isDark ? '#AEB8D4' : '#6C789A'}
+                  />
+                </Pressable>
+              </View>
+              <Text className="mt-2 text-[12px] text-black/50 dark:text-white/50">
+                {passwordVisible ? t('auth.passwordVisibility.hide') : t('auth.passwordVisibility.show')}
+              </Text>
+
+              {error ? <Text className="mt-3 text-sm text-red-500">{error}</Text> : null}
+              {info ? <Text className="mt-3 text-sm text-black/60 dark:text-white/70">{info}</Text> : null}
+
+              <Pressable
+                disabled={submitting}
+                onPress={signUp}
+                className="mt-5 items-center justify-center rounded-[22px] py-3.5 disabled:opacity-60"
+                style={{ backgroundColor: '#2F68ED' }}>
+                {submitting ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <Text className="text-[15px] font-bold text-white">{t('auth.signUp.submit')}</Text>
+                )}
+              </Pressable>
+
+              <Link href="/(auth)/sign-in" asChild>
+                <Pressable className="mt-3 py-2">
+                  <Text className="text-center text-[13px] font-semibold text-[#3C69D9]">
+                    {t('auth.signUp.alreadyHave')}
+                  </Text>
+                </Pressable>
+              </Link>
+              </ScrollView>
+            </View>
+          </View>
         </View>
-      </View>
-    </View>
+      </KeyboardAvoidingView>
+    </LinearGradient>
   );
 }

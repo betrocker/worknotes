@@ -6,7 +6,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Animated, Platform, Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
 
 import Colors from '@/constants/Colors';
+import { listClientsWithDebt } from '@/lib/clients';
 import { useColorScheme } from '@/components/useColorScheme';
+import { useAuth } from '@/providers/AuthProvider';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -23,7 +25,7 @@ function getIconForRoute(routeName: string, focused: boolean): IoniconName {
     case 'dugovanja':
       return focused ? 'cash' : 'cash-outline';
     case 'podesavanja':
-      return focused ? 'settings' : 'settings-outline';
+      return focused ? 'person' : 'person-outline';
     default:
       return focused ? 'ellipse' : 'ellipse-outline';
   }
@@ -33,6 +35,8 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
+  const { session } = useAuth();
+  const userId = session?.user?.id ?? null;
 
   const focusedRoute = state.routes[state.index];
   const focusedIsTab = !!focusedRoute && TAB_ROUTE_NAMES.has(focusedRoute.name);
@@ -51,6 +55,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   }, [barWidth, tabCount]);
 
   const translateX = useRef(new Animated.Value(0)).current;
+  const [debtsBadgeCount, setDebtsBadgeCount] = useState(0);
 
   useEffect(() => {
     if (!itemWidth) return;
@@ -67,13 +72,35 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
     }).start();
   }, [focusedRoute?.key, itemWidth, translateX, visibleRoutes]);
 
+  useEffect(() => {
+    if (!userId) {
+      setDebtsBadgeCount(0);
+      return;
+    }
+
+    let mounted = true;
+    (async () => {
+      try {
+        const clients = await listClientsWithDebt(userId);
+        if (!mounted) return;
+        setDebtsBadgeCount(clients.filter((client) => client.debt > 0).length);
+      } catch {
+        if (!mounted) return;
+        setDebtsBadgeCount(0);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [focusedRoute?.key, userId]);
+
   const onLayout = (event: LayoutChangeEvent) => {
     setBarWidth(event.nativeEvent.layout.width);
   };
 
   const bottom = Math.max(insets.bottom, 12) + 8;
-  const backgroundFallback = colors.tabBarBackground;
-
+  const tabBarRadius = 30;
   if (!focusedIsTab) return null;
 
   return (
@@ -83,31 +110,32 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
       style={{ bottom }}
       onLayout={onLayout}>
       <View
-        className="overflow-hidden rounded-3xl"
+        className="rounded-[30px]"
         style={{
           shadowColor: '#000',
-          shadowOpacity: colorScheme === 'dark' ? 0.35 : 0.18,
-          shadowRadius: 18,
-          shadowOffset: { width: 0, height: 10 },
-          elevation: 18,
+          shadowOpacity: colorScheme === 'dark' ? 0.46 : 0.3,
+          shadowRadius: 26,
+          shadowOffset: { width: 0, height: 14 },
+          elevation: 26,
         }}>
+        <View className="overflow-hidden rounded-[30px]">
         <View
           className="absolute inset-0"
           style={{
-            backgroundColor: backgroundFallback,
+            backgroundColor:
+              colorScheme === 'dark' ? 'rgba(28,28,30,0.78)' : 'rgba(246,246,248,0.86)',
             borderColor: colors.tabBarBorder,
             borderWidth: 1,
-            borderRadius: 24,
+            borderRadius: tabBarRadius,
           }}
         />
 
-        {Platform.OS === 'ios' && (
-          <BlurView
-            intensity={60}
-            tint={colorScheme === 'dark' ? 'dark' : 'light'}
-            style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
-          />
-        )}
+        <BlurView
+          intensity={Platform.OS === 'ios' ? 72 : 42}
+          tint={colorScheme === 'dark' ? 'dark' : 'light'}
+          {...(Platform.OS === 'android' ? { experimentalBlurMethod: 'dimezisBlurView' as const } : {})}
+          style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
+        />
 
         {itemWidth > 0 && (
           <Animated.View
@@ -118,7 +146,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
               top: padding,
               bottom: padding,
               width: itemWidth,
-              borderRadius: 24,
+              borderRadius: tabBarRadius - padding,
               backgroundColor: colors.tint,
               opacity: colorScheme === 'dark' ? 0.22 : 0.14,
               transform: [{ translateX }],
@@ -126,7 +154,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
           />
         )}
 
-        <View className="flex-row items-center" style={{ padding }}>
+        <View style={{ padding, flexDirection: 'row', alignItems: 'center' }}>
           {visibleRoutes.map((route, index) => {
             const { options } = descriptors[route.key];
             const label = options.title ?? route.name;
@@ -134,6 +162,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
             const isFocused = focusedRoute?.key === route.key;
             const iconName = getIconForRoute(route.name, isFocused);
             const color = isFocused ? colors.text : colors.tabIconDefault;
+            const badgeCount = route.name === 'dugovanja' ? debtsBadgeCount : 0;
 
             const onPress = () => {
               const event = navigation.emit({
@@ -164,7 +193,32 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
                 onPress={onPress}
                 onLongPress={onLongPress}
                 className="flex-1 items-center justify-center py-2">
-                <Ionicons name={iconName} size={24} color={color} />
+                <View style={{ position: 'relative' }}>
+                  <Ionicons name={iconName} size={24} color={color} />
+                  {badgeCount > 0 ? (
+                    <View
+                      style={{
+                        position: 'absolute',
+                        top: -6,
+                        right: -12,
+                        minWidth: 18,
+                        height: 18,
+                        paddingHorizontal: 4,
+                        borderRadius: 999,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: '#FF453A',
+                        borderWidth: 1.5,
+                        borderColor: colorScheme === 'dark' ? 'rgba(28,28,30,0.92)' : 'rgba(255,255,255,0.95)',
+                      }}>
+                      <Text
+                        style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '700' }}
+                        numberOfLines={1}>
+                        {badgeCount > 99 ? '99+' : badgeCount}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
                 <Text
                   className={isFocused ? 'mt-1 text-[12px] font-semibold' : 'mt-1 text-[12px] font-medium'}
                   style={{ color }}
@@ -174,6 +228,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
               </Pressable>
             );
           })}
+        </View>
         </View>
       </View>
     </View>

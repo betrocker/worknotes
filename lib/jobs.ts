@@ -1,5 +1,13 @@
 import { supabase } from '@/lib/supabase';
 
+const getLocalToday = () => {
+  const now = new Date();
+  const yyyy = String(now.getFullYear());
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
 export type JobListItem = {
   id: string;
   title: string | null;
@@ -11,6 +19,10 @@ export type JobListItem = {
   client: { name: string | null } | null;
 };
 
+export type JobRecord = {
+  id: string;
+};
+
 export type JobInput = {
   title: string;
   description?: string | null;
@@ -19,6 +31,32 @@ export type JobInput = {
   scheduled_date?: string | null;
   client_id?: string | null;
 };
+
+type JobStatusRow = {
+  status: string | null;
+  completed_at: string | null;
+};
+
+async function resolveCompletedAt(
+  userId: string,
+  id: string,
+  nextStatus: string | null
+): Promise<string | null> {
+  if (nextStatus !== 'done') return null;
+
+  const { data, error } = await supabase
+    .from('jobs')
+    .select('status,completed_at')
+    .eq('user_id', userId)
+    .eq('id', id)
+    .maybeSingle()
+    .overrideTypes<JobStatusRow, { merge: false }>();
+
+  if (error) throw new Error(error.message);
+  if (!data) return getLocalToday();
+  if (data.status === 'done' && data.completed_at) return data.completed_at;
+  return getLocalToday();
+}
 
 export async function listJobs(userId: string): Promise<JobListItem[]> {
   const { data, error } = await supabase
@@ -33,19 +71,27 @@ export async function listJobs(userId: string): Promise<JobListItem[]> {
   return data ?? [];
 }
 
-export async function createJob(userId: string, input: JobInput): Promise<void> {
+export async function createJob(userId: string, input: JobInput): Promise<JobRecord> {
+  const status = input.status ?? null;
   const payload = {
     user_id: userId,
     client_id: input.client_id ?? null,
     title: input.title,
     description: input.description ?? null,
     price: input.price ?? null,
-    status: input.status ?? null,
+    status,
     scheduled_date: input.scheduled_date ?? null,
+    completed_at: status === 'done' ? getLocalToday() : null,
   };
 
-  const { error } = await supabase.from('jobs').insert(payload);
+  const { data, error } = await supabase
+    .from('jobs')
+    .insert(payload)
+    .select('id')
+    .single()
+    .overrideTypes<JobRecord, { merge: false }>();
   if (error) throw new Error(error.message);
+  return data;
 }
 
 export type JobDetail = {
@@ -75,6 +121,7 @@ export async function getJobById(userId: string, id: string): Promise<JobDetail 
 
 export async function updateJob(userId: string, id: string, input: JobInput): Promise<void> {
   const status = input.status ?? null;
+  const completedAt = await resolveCompletedAt(userId, id, status);
   const payload = {
     client_id: input.client_id ?? null,
     title: input.title,
@@ -82,7 +129,7 @@ export async function updateJob(userId: string, id: string, input: JobInput): Pr
     price: input.price ?? null,
     status,
     scheduled_date: input.scheduled_date ?? null,
-    completed_at: status === 'done' ? new Date().toISOString() : null,
+    completed_at: completedAt,
   };
 
   const { error } = await supabase.from('jobs').update(payload).eq('user_id', userId).eq('id', id);
@@ -90,9 +137,10 @@ export async function updateJob(userId: string, id: string, input: JobInput): Pr
 }
 
 export async function updateJobStatus(userId: string, id: string, status: string | null): Promise<void> {
+  const completedAt = await resolveCompletedAt(userId, id, status);
   const payload = {
     status,
-    completed_at: status === 'done' ? new Date().toISOString() : null,
+    completed_at: completedAt,
   };
   const { error } = await supabase.from('jobs').update(payload).eq('user_id', userId).eq('id', id);
   if (error) throw new Error(error.message);
