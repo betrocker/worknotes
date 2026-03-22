@@ -103,13 +103,13 @@ export type JobDetail = {
   scheduled_date: string | null;
   completed_at: string | null;
   client_id: string | null;
-  client: { name: string | null; phone: string | null } | null;
+  client: { name: string | null; phone: string | null; address: string | null } | null;
 };
 
 export async function getJobById(userId: string, id: string): Promise<JobDetail | null> {
   const { data, error } = await supabase
     .from('jobs')
-    .select('id,title,description,price,status,scheduled_date,completed_at,client_id,client:clients(name,phone)')
+    .select('id,title,description,price,status,scheduled_date,completed_at,client_id,client:clients(name,phone,address)')
     .eq('user_id', userId)
     .eq('id', id)
     .maybeSingle()

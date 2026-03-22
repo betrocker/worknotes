@@ -1,7 +1,6 @@
 import React from "react";
-import { Platform, StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { BlurView } from "expo-blur";
 
 import Colors from "@/constants/Colors";
 import { useColorScheme } from "@/components/useColorScheme";
@@ -25,32 +24,15 @@ export function LargeHeader({
 
   const containerStyle = elevated ? { zIndex: 20 } : { zIndex: 20 };
 
-  const showBlur = blur && Platform.OS === "ios";
-  const overlayBackgroundColor =
-    colorScheme === "dark"
-      ? "rgba(28,28,30,0.28)"
-      : "rgba(255,255,255,0.28)";
-
   return (
-    <View style={[{ position: "relative" }, containerStyle]}>
-      {showBlur ? (
-        <BlurView
-          intensity={35}
-          tint={colorScheme === "dark" ? "dark" : "light"}
-          style={StyleSheet.absoluteFill}
-        />
-      ) : (
-        <View
-          pointerEvents="none"
-          style={[
-            StyleSheet.absoluteFill,
-            { backgroundColor: overlayBackgroundColor },
-          ]}
-        />
-      )}
-
-      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: overlayBackgroundColor }]} />
-
+    <View
+      style={[
+        {
+          position: "relative",
+          backgroundColor: colors.background,
+        },
+        containerStyle,
+      ]}>
       <View style={{ paddingTop: insets.top + 12, paddingHorizontal: 24, paddingBottom: 24 }}>
         <View className="flex-row items-center justify-between">
           <View className="flex-1 pr-4">

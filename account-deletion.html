@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="sr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tefter | Brisanje naloga</title>
+    <style>
+      :root {
+        --bg: #f4f7fb;
+        --card: #ffffff;
+        --text: #152033;
+        --muted: #5c6b82;
+        --line: #dbe4f0;
+        --accent: #1d4ed8;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: linear-gradient(180deg, #dbeafe 0%, var(--bg) 180px);
+        color: var(--text);
+      }
+
+      .wrap {
+        width: 100%;
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 32px 20px 64px;
+      }
+
+      .hero {
+        padding: 16px 4px 28px;
+      }
+
+      .eyebrow {
+        margin: 0;
+        color: var(--accent);
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 10px 0 8px;
+        font-size: clamp(32px, 6vw, 44px);
+        line-height: 1.04;
+      }
+
+      .subtitle {
+        margin: 0;
+        max-width: 720px;
+        color: var(--muted);
+        font-size: 17px;
+        line-height: 1.6;
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        padding: 28px 24px;
+        box-shadow: 0 18px 50px rgba(20, 32, 51, 0.08);
+      }
+
+      h2 {
+        margin: 28px 0 10px;
+        font-size: 22px;
+        line-height: 1.2;
+      }
+
+      h2:first-child {
+        margin-top: 0;
+      }
+
+      p {
+        margin: 0 0 14px;
+        font-size: 16px;
+        line-height: 1.7;
+      }
+
+      ol,
+      ul {
+        margin: 0 0 18px;
+        padding-left: 22px;
+      }
+
+      li {
+        margin: 0 0 8px;
+        font-size: 16px;
+        line-height: 1.6;
+      }
+
+      .box {
+        margin-top: 18px;
+        padding: 16px 18px;
+        border-radius: 18px;
+        background: #f7faff;
+        border: 1px solid var(--line);
+      }
+
+      .warn {
+        margin-top: 18px;
+        padding: 16px 18px;
+        border-radius: 18px;
+        background: #fff8ef;
+        border: 1px solid #f3d6a6;
+      }
+
+      .footer {
+        margin-top: 20px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      a {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <section class="hero">
+        <p class="eyebrow">Tefter</p>
+        <h1>Brisanje naloga</h1>
+        <p class="subtitle">
+          Ova stranica objašnjava kako korisnik može da zatraži brisanje svog naloga i podataka iz
+          aplikacije Tefter, kao i koje informacije se tom prilikom uklanjaju.
+        </p>
+      </section>
+
+      <section class="card">
+        <p><strong>Poslednje ažuriranje:</strong> 22. mart 2026.</p>
+
+        <p>
+          Korisnik aplikacije <strong>Tefter</strong> može u bilo kom trenutku da zatraži brisanje
+          svog naloga i povezanih podataka.
+        </p>
+
+        <h2>1. Kako da zatražiš brisanje naloga</h2>
+        <p>Brisanje naloga trenutno možeš da zatražiš slanjem zahteva na sledeću email adresu:</p>
+
+        <div class="box">
+          <p><strong>Tefter podrška</strong></p>
+          <p>Email: <a href="mailto:unesi-svoj-email@domen.com">unesi-svoj-email@domen.com</a></p>
+        </div>
+
+        <p>U zahtevu pošalji:</p>
+        <ul>
+          <li>email adresu naloga koji želiš da obrišeš</li>
+          <li>kratku napomenu da tražiš trajno brisanje naloga</li>
+        </ul>
+
+        <h2>2. Šta se briše</h2>
+        <p>Nakon potvrde zahteva za brisanje, biće uklonjeni podaci povezani sa nalogom, uključujući:</p>
+        <ul>
+          <li>korisnički nalog i profil</li>
+          <li>podaci o klijentima</li>
+          <li>podaci o poslovima</li>
+          <li>uplate, troškovi i dugovanja</li>
+          <li>stavke računa i generisani poslovni podaci</li>
+          <li>slike pre i posle posla</li>
+          <li>podaci firme i logo firme</li>
+        </ul>
+
+        <h2>3. Šta može biti zadržano privremeno</h2>
+        <p>
+          Određeni tehnički ili rezervni zapisi mogu privremeno ostati sačuvani u backup sistemima
+          ili logovima, isključivo u meri neophodnoj za bezbednost, stabilnost sistema i zakonske
+          obaveze.
+        </p>
+        <p>
+          Takvi podaci nisu dostupni za redovno korišćenje u aplikaciji i uklanjaju se u skladu sa
+          internim rokovima čuvanja.
+        </p>
+
+        <h2>4. Rok za obradu zahteva</h2>
+        <p>
+          Zahtevi za brisanje naloga obrađuju se u razumnom roku nakon potvrde identiteta korisnika
+          i provere zahteva.
+        </p>
+
+        <div class="warn">
+          <p>
+            <strong>Važno:</strong> Brisanje naloga je trajno i nakon završetka postupka podaci se
+            ne mogu vratiti.
+          </p>
+        </div>
+
+        <h2>5. Alternativa pre potpunog brisanja</h2>
+        <p>
+          Ako ne želiš trajno brisanje naloga, možeš jednostavno prestati da koristiš aplikaciju ili
+          ukloniti aplikaciju sa uređaja. To ne briše automatski nalog niti podatke sa servera.
+        </p>
+
+        <h2>6. Kontakt</h2>
+        <p>
+          Za sva pitanja u vezi sa brisanjem naloga i podataka obrati se podršci putem email adrese
+          navedene na ovoj stranici.
+        </p>
+
+        <p class="footer">
+          Pre objave zameni kontakt email stvarnim kontaktom koji koristiš za podršku i obradu
+          zahteva.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import * as Print from 'expo-print';
 import { File, Paths } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
@@ -13,6 +14,7 @@ import {
   Animated,
   FlatList,
   Image,
+  KeyboardAvoidingView,
   Linking,
   Modal,
   Platform,
@@ -25,12 +27,21 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AppTextInput } from '@/components/AppTextInput';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import { parseDateInput } from '@/lib/date';
+import { generateInvoicePdf } from '@/lib/invoice';
+import { getOrCreateInvoiceForJob } from '@/lib/invoices';
+import {
+  createJobInvoiceItem,
+  deleteJobInvoiceItem,
+  listJobInvoiceItems,
+  updateJobInvoiceItem,
+  type JobInvoiceItemRow,
+} from '@/lib/job-invoice-items';
 import { deleteJobImage, listJobImages, type JobImageKind, type JobImageRow, uploadJobImage } from '@/lib/job-images';
 import { deleteJob, getJobById, type JobDetail } from '@/lib/jobs';
 import { listExpenses, listPayments, type ExpenseRow, type PaymentRow } from '@/lib/job-finance';
@@ -40,6 +51,7 @@ import {
   getJobReminderPreference,
   type JobReminderOption,
 } from '@/lib/notifications';
+import { getUserDisplayName } from '@/lib/user';
 import { useAuth } from '@/providers/AuthProvider';
 
 export default function JobDetailScreen() {
@@ -62,6 +74,7 @@ export default function JobDetailScreen() {
   const [job, setJob] = useState<JobDetail | null>(null);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
+  const [invoiceItems, setInvoiceItems] = useState<JobInvoiceItemRow[]>([]);
   const [images, setImages] = useState<JobImageRow[]>([]);
   const [pendingImages, setPendingImages] = useState<
     Array<{ uri: string; kind: JobImageKind; key: string }>
@@ -75,12 +88,20 @@ export default function JobDetailScreen() {
   const [previewKind, setPreviewKind] = useState<JobImageKind | null>(null);
   const [previewIndex, setPreviewIndex] = useState(0);
   const [androidZoom, setAndroidZoom] = useState(1);
+  const [itemModalOpen, setItemModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<JobInvoiceItemRow | null>(null);
+  const [itemTitle, setItemTitle] = useState('');
+  const [itemUnit, setItemUnit] = useState('');
+  const [itemQuantity, setItemQuantity] = useState('1');
+  const [itemUnitPrice, setItemUnitPrice] = useState('');
+  const [itemSubmitting, setItemSubmitting] = useState(false);
   const [selectedImageKind, setSelectedImageKind] = useState<JobImageKind | null>(null);
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
   const [expandedImageSections, setExpandedImageSections] = useState<Record<JobImageKind, boolean>>({
     before: false,
     after: false,
   });
+  const [invoiceSubmitting, setInvoiceSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -109,14 +130,16 @@ export default function JobDetailScreen() {
       const data = await getJobById(userId, id);
       setJob(data);
       setReminderType(await getJobReminderPreference(id));
-      const [paymentRows, expenseRows, imageRows] = await Promise.all([
+      const [paymentRows, expenseRows, imageRows, invoiceItemRows] = await Promise.all([
         listPayments(id),
         listExpenses(id),
         listJobImages(id),
+        listJobInvoiceItems(id),
       ]);
       setPayments(paymentRows);
       setExpenses(expenseRows);
       setImages(imageRows);
+      setInvoiceItems(invoiceItemRows);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -206,7 +229,8 @@ export default function JobDetailScreen() {
       return new Intl.NumberFormat(locale, {
         style: 'currency',
         currency: 'EUR',
-        maximumFractionDigits: 0,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
       }).format(value);
     },
     [locale, t]
@@ -240,6 +264,10 @@ export default function JobDetailScreen() {
     () => expenses.reduce((sum, item) => sum + (item.amount ?? 0), 0),
     [expenses]
   );
+  const invoiceItemsTotal = useMemo(
+    () => invoiceItems.reduce((sum, item) => sum + (item.total ?? 0), 0),
+    [invoiceItems]
+  );
   const profit = totalPaid - totalExpense;
   const tipAmount = useMemo(() => {
     if (!job?.price) return 0;
@@ -265,6 +293,7 @@ export default function JobDetailScreen() {
     () => pendingImages.filter((item) => item.kind === 'after'),
     [pendingImages]
   );
+  const hasInvoiceItems = invoiceItems.length > 0;
   const previewImages = useMemo(
     () => (previewKind === 'after' ? afterImages : previewKind === 'before' ? beforeImages : []),
     [afterImages, beforeImages, previewKind]
@@ -282,6 +311,7 @@ export default function JobDetailScreen() {
 
   const phone = job?.client?.phone ?? null;
   const phoneDigits = phone ? phone.replace(/[^\d+]/g, '') : null;
+  const userMeta = (session?.user?.user_metadata as Record<string, unknown> | undefined) ?? undefined;
 
   const [customMessage, setCustomMessage] = useState('');
 
@@ -322,6 +352,221 @@ export default function JobDetailScreen() {
       const url = `viber://chat?number=${encodeURIComponent(phoneDigits)}&text=${encodeURIComponent(message)}`;
       void openUrl(url);
     }, [customMessage, openUrl, phoneDigits]);
+
+  const onShareInvoice = useCallback(async () => {
+    if (!job || !userId) return;
+
+    setInvoiceSubmitting(true);
+    setError(null);
+    let generated = false;
+    try {
+      const invoiceRecord = await getOrCreateInvoiceForJob(userId, job.id);
+
+      const file = await generateInvoicePdf({
+        locale,
+        invoiceNumberValue: invoiceRecord.invoice_number,
+        issueDateValue: invoiceRecord.issued_at,
+        labels: {
+          invoiceTitle: t('jobs.invoice.title'),
+          invoiceNumber: t('jobs.invoice.number'),
+          issueDate: t('jobs.invoice.issueDate'),
+          serviceDate: t('jobs.invoice.serviceDate'),
+          servicePlace: t('jobs.invoice.servicePlace'),
+          issuer: t('jobs.invoice.issuer'),
+          client: t('jobs.invoice.client'),
+          clientName: t('jobs.invoice.clientName'),
+          clientAddress: t('jobs.invoice.clientAddress'),
+          clientPhone: t('jobs.invoice.clientPhone'),
+          pib: t('settings.companyPib'),
+          registrationNumber: t('settings.companyRegistrationNumberShort'),
+          accountNumber: t('settings.companyAccountNumber'),
+          jobTitle: t('jobs.invoice.jobTitle'),
+          jobDescription: t('jobs.invoice.jobDescription'),
+          scheduledDate: t('jobs.invoice.scheduledDate'),
+          completedDate: t('jobs.invoice.completedDate'),
+          tableService: t('jobs.invoice.tableService'),
+          tableUnit: t('jobs.invoice.tableUnit'),
+          tableQuantity: t('jobs.invoice.tableQuantity'),
+          tablePrice: t('jobs.invoice.tablePrice'),
+          tableTotal: t('jobs.invoice.tableTotal'),
+          unitService: t('jobs.invoice.unitService'),
+          totalPrice: t('jobs.invoice.totalPrice'),
+          totalPaid: t('jobs.invoice.totalPaid'),
+          outstanding: t('jobs.invoice.outstanding'),
+          tip: t('jobs.invoice.tip'),
+          notesTitle: t('jobs.invoice.notesTitle'),
+          taxNoteTitle: t('jobs.invoice.taxNoteTitle'),
+          taxNoteBody: t('jobs.invoice.taxNoteBody'),
+          validWithoutSignature: t('jobs.invoice.validWithoutSignature'),
+          footer: t('jobs.invoice.footer'),
+        },
+        company: {
+          name:
+            typeof userMeta?.company_name === 'string' && userMeta.company_name.trim()
+              ? userMeta.company_name
+              : getUserDisplayName(session?.user, 'Tefter'),
+          phone: typeof userMeta?.company_phone === 'string' ? userMeta.company_phone : null,
+          address: typeof userMeta?.company_address === 'string' ? userMeta.company_address : null,
+          pib: typeof userMeta?.company_pib === 'string' ? userMeta.company_pib : null,
+          registrationNumber:
+            typeof userMeta?.company_registration_number === 'string'
+              ? userMeta.company_registration_number
+              : null,
+          accountNumber:
+            typeof userMeta?.company_account_number === 'string'
+              ? userMeta.company_account_number
+              : null,
+          logoUrl: typeof userMeta?.company_logo_url === 'string' ? userMeta.company_logo_url : null,
+        },
+        client: {
+          name: job.client?.name ?? null,
+          phone: job.client?.phone ?? null,
+          address: job.client?.address ?? null,
+        },
+        job: {
+          id: job.id,
+          title: job.title,
+          description: job.description,
+          scheduledDate: job.scheduled_date,
+          completedAt: job.completed_at,
+          price: job.price,
+          totalPaid,
+          outstanding: outstanding ?? 0,
+          tipAmount,
+        },
+        items: invoiceItems.map((item) => ({
+          title: item.title ?? '—',
+          unit: item.unit,
+          quantity: item.quantity ?? 1,
+          unitPrice: item.unit_price ?? 0,
+          total: item.total ?? 0,
+        })),
+      });
+
+      generated = true;
+      setInvoiceSubmitting(false);
+
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        await Print.printAsync({ uri: file.uri });
+        return;
+      }
+
+      await Sharing.shareAsync(file.uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: t('jobs.invoice.shareAction'),
+      });
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+      setInvoiceSubmitting(false);
+    } finally {
+      if (!generated) {
+        setInvoiceSubmitting(false);
+      }
+    }
+  }, [invoiceItems, job, locale, outstanding, session?.user, t, tipAmount, totalPaid, userId, userMeta]);
+
+  const resetItemForm = useCallback(() => {
+    setEditingItem(null);
+    setItemTitle('');
+    setItemUnit('');
+    setItemQuantity('1');
+    setItemUnitPrice('');
+  }, []);
+
+  const openNewItemModal = useCallback(() => {
+    resetItemForm();
+    if (!hasInvoiceItems && job?.price) {
+      setItemUnitPrice(String(job.price));
+    }
+    setItemModalOpen(true);
+  }, [hasInvoiceItems, job?.price, resetItemForm]);
+
+  const openEditItemModal = useCallback((item: JobInvoiceItemRow) => {
+    setEditingItem(item);
+    setItemTitle(item.title ?? '');
+    setItemUnit(item.unit ?? '');
+    setItemQuantity(String(item.quantity ?? 1));
+    setItemUnitPrice(String(item.unit_price ?? 0));
+    setItemModalOpen(true);
+  }, []);
+
+  const closeItemModal = useCallback(() => {
+    setItemModalOpen(false);
+    setItemSubmitting(false);
+    resetItemForm();
+  }, [resetItemForm]);
+
+  const onSubmitInvoiceItem = useCallback(async () => {
+    if (!userId || !id) return;
+
+    const title = itemTitle.trim();
+    const quantity = Number(itemQuantity.replace(',', '.'));
+    const unitPrice = Number(itemUnitPrice.replace(',', '.'));
+
+    if (!title) {
+      setError(t('jobs.invoiceItemsTitleRequired'));
+      return;
+    }
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setError(t('jobs.invoiceItemsQuantityInvalid'));
+      return;
+    }
+    if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+      setError(t('jobs.invoiceItemsPriceInvalid'));
+      return;
+    }
+
+    setItemSubmitting(true);
+    setError(null);
+    try {
+      if (editingItem) {
+        await updateJobInvoiceItem(editingItem.id, id, {
+          title,
+          unit: itemUnit.trim() || null,
+          quantity,
+          unit_price: unitPrice,
+        });
+      } else {
+        await createJobInvoiceItem(userId, id, {
+          title,
+          unit: itemUnit.trim() || null,
+          quantity,
+          unit_price: unitPrice,
+        });
+      }
+      closeItemModal();
+      await load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+      setItemSubmitting(false);
+    }
+  }, [userId, id, itemTitle, itemQuantity, itemUnitPrice, t, editingItem, itemUnit, closeItemModal, load]);
+
+  const onDeleteInvoiceItem = useCallback(
+    (item: JobInvoiceItemRow) => {
+      if (!id) return;
+      Alert.alert(t('jobs.invoiceItemsDeleteTitle'), t('jobs.invoiceItemsDeleteMessage'), [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              try {
+                setError(null);
+                await deleteJobInvoiceItem(item.id, id);
+                await load();
+              } catch (e: unknown) {
+                setError(e instanceof Error ? e.message : String(e));
+              }
+            })();
+          },
+        },
+      ]);
+    },
+    [id, load, t]
+  );
 
   const onPickImages = useCallback(
     (kind: JobImageKind, source: 'camera' | 'library') => {
@@ -830,38 +1075,14 @@ export default function JobDetailScreen() {
         stickyHeaderIndices={[0]}
         className="flex-1 bg-[#F2F2F7] dark:bg-black"
         contentContainerClassName="pb-32">
-        <View style={{ position: 'relative', zIndex: 20 }}>
-        {Platform.OS === 'ios' ? (
-          <BlurView
-            intensity={35}
-            tint={colorScheme === 'dark' ? 'dark' : 'light'}
-            style={StyleSheet.absoluteFill}
-          />
-        ) : (
-          <View
-            pointerEvents="none"
-            style={[
-              StyleSheet.absoluteFill,
-              { backgroundColor: colorScheme === 'dark' ? 'rgba(28,28,30,0.28)' : 'rgba(255,255,255,0.28)' },
-            ]}
-          />
-        )}
-
-        <View
-          pointerEvents="none"
-          style={[
-            StyleSheet.absoluteFill,
-            { backgroundColor: colorScheme === 'dark' ? 'rgba(28,28,30,0.28)' : 'rgba(255,255,255,0.28)' },
-          ]}
-        />
-
+        <View style={{ position: 'relative', zIndex: 20, backgroundColor: colors.background }}>
         <View className="px-6 pb-6" style={{ paddingTop: insets.top + 12 }}>
           <View className="flex-row items-center justify-between">
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t('common.back')}
             onPress={onBack}
-            className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
+            className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
             <Ionicons name="chevron-back" size={20} color={colors.text} />
           </Pressable>
 
@@ -870,14 +1091,14 @@ export default function JobDetailScreen() {
               accessibilityRole="button"
               accessibilityLabel={t('jobs.delete')}
               onPress={onDelete}
-              className="mr-3 h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
+              className="mr-3 h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
               <Ionicons name="trash" size={18} color="#FF3B30" />
             </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t('jobs.edit')}
               onPress={onEdit}
-              className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
+              className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
               <Ionicons name="create-outline" size={18} color={colors.text} />
             </Pressable>
           </View>
@@ -961,6 +1182,97 @@ export default function JobDetailScreen() {
         <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
           <View className="flex-row items-center justify-between">
             <Text className="text-[18px] font-extrabold text-[#1C2745] dark:text-white">
+              {t('jobs.invoiceSection')}
+            </Text>
+            <Pressable
+              onPress={() => {
+                void onShareInvoice();
+              }}
+              disabled={invoiceSubmitting}
+              className="flex-row items-center rounded-3xl bg-black/5 px-2.5 py-2 disabled:opacity-60 dark:bg-white/10">
+              {invoiceSubmitting ? (
+                <ActivityIndicator size="small" color={colors.text} />
+              ) : (
+                <>
+                  <Ionicons name="document-text-outline" size={14} color={colors.text} />
+                  <Text className="ml-1 text-[12px] font-semibold text-black dark:text-white">
+                    {t('jobs.invoice.shortAction')}
+                  </Text>
+                </>
+              )}
+            </Pressable>
+          </View>
+
+          <View className="mt-4 rounded-3xl bg-black/[0.03] p-3 dark:bg-white/[0.05]">
+            <View className="flex-row items-center justify-between">
+              <Text className="text-[15px] font-extrabold text-[#1C2745] dark:text-white">
+                {t('jobs.invoiceItems')}
+              </Text>
+              <Pressable
+                onPress={openNewItemModal}
+                className="flex-row items-center rounded-3xl bg-[#E8F0FF] px-3 py-2 dark:bg-[#1E2A44]">
+                <Ionicons name="add" size={14} color={colors.text} />
+                <Text className="ml-1 text-[12px] font-semibold text-black dark:text-white">
+                  {t('jobs.invoiceItemsAdd')}
+                </Text>
+              </Pressable>
+            </View>
+
+            {hasInvoiceItems ? (
+              <View className="mt-3">
+                {invoiceItems.map((item, index) => (
+                  <View key={item.id}>
+                    {index > 0 ? <View className="my-3 h-px bg-black/10 dark:bg-white/10" /> : null}
+                    <View className="flex-row items-start justify-between">
+                      <View className="mr-3 flex-1">
+                        <Text className="text-[15px] font-semibold text-black dark:text-white">
+                          {item.title || t('jobs.invoiceItemsUntitled')}
+                        </Text>
+                        <Text className="mt-1 text-sm text-black/60 dark:text-white/70">
+                          {(item.quantity ?? 0).toLocaleString(locale)} {item.unit || t('jobs.invoice.unitService')} x{' '}
+                          {formatPrice(item.unit_price ?? 0)}
+                        </Text>
+                      </View>
+                      <View className="items-end">
+                        <Text className="text-[15px] font-bold text-black dark:text-white">
+                          {formatPrice(item.total ?? 0)}
+                        </Text>
+                        <View className="mt-2 flex-row items-center">
+                          <Pressable
+                            onPress={() => openEditItemModal(item)}
+                            className="mr-2 h-8 w-8 items-center justify-center rounded-full bg-black/5 dark:bg-white/10">
+                            <Ionicons name="create-outline" size={15} color={colors.text} />
+                          </Pressable>
+                          <Pressable
+                            onPress={() => onDeleteInvoiceItem(item)}
+                            className="h-8 w-8 items-center justify-center rounded-full bg-[#FDEBEE] dark:bg-[#3A1F24]">
+                            <Ionicons name="trash-outline" size={15} color="#FF3B30" />
+                          </Pressable>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                ))}
+                <View className="mt-3 flex-row items-center justify-between rounded-2xl bg-white/70 px-3 py-2 dark:bg-[#2A2A2C]">
+                  <Text className="text-sm font-medium text-black/60 dark:text-white/70">
+                    {t('jobs.invoiceItemsTotal')}
+                  </Text>
+                  <Text className="text-base font-bold text-black dark:text-white">
+                    {formatPrice(invoiceItemsTotal)}
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <Text className="mt-3 text-sm text-black/60 dark:text-white/70">
+                {t('jobs.invoiceItemsEmpty')}
+              </Text>
+            )}
+          </View>
+        </View>
+
+        <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
+          <View className="flex-row items-center justify-between">
+            <Text className="text-[18px] font-extrabold text-[#1C2745] dark:text-white">
               {t('jobs.financials')}
             </Text>
             <View className="flex-row items-center">
@@ -971,13 +1283,19 @@ export default function JobDetailScreen() {
                     params: { id, returnTo: 'job' },
                   })
                 }
-                className="mr-2 rounded-3xl bg-[#E8F0FF] px-3 py-2 dark:bg-[#1E2A44]">
-                <Text className="text-sm font-semibold text-black dark:text-white">{t('jobs.addPayment')}</Text>
+                className="mr-2 flex-row items-center rounded-3xl bg-[#E8F0FF] px-2.5 py-2 dark:bg-[#1E2A44]">
+                <Ionicons name="wallet-outline" size={14} color={colors.text} />
+                <Text className="ml-1 text-[12px] font-semibold text-black dark:text-white">
+                  {t('jobs.paymentShort')}
+                </Text>
               </Pressable>
               <Pressable
                 onPress={() => router.push({ pathname: '/(tabs)/posao/[id]/expense/new' as any, params: { id } })}
-                className="rounded-3xl bg-[#FDEBEE] px-3 py-2 dark:bg-[#3A1F24]">
-                <Text className="text-sm font-semibold text-black dark:text-white">{t('jobs.addExpense')}</Text>
+                className="flex-row items-center rounded-3xl bg-[#FDEBEE] px-2.5 py-2 dark:bg-[#3A1F24]">
+                <Ionicons name="receipt-outline" size={14} color={colors.text} />
+                <Text className="ml-1 text-[12px] font-semibold text-black dark:text-white">
+                  {t('jobs.expenseShort')}
+                </Text>
               </Pressable>
             </View>
           </View>
@@ -1130,6 +1448,80 @@ export default function JobDetailScreen() {
         </View>
       </View>
     </ScrollView>
+
+    <Modal transparent visible={itemModalOpen} animationType="fade" onRequestClose={closeItemModal}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        className="flex-1 justify-end bg-black/35">
+        <Pressable onPress={closeItemModal} className="absolute inset-0" />
+        <View className="rounded-t-[32px] bg-white px-6 pb-6 pt-5 dark:bg-[#1C1C1E]">
+          <View className="mb-4 flex-row items-center justify-between">
+            <Text className="text-[22px] font-extrabold text-[#1C2745] dark:text-white">
+              {editingItem ? t('jobs.invoiceItemsEdit') : t('jobs.invoiceItemsCreate')}
+            </Text>
+            <Pressable
+              onPress={closeItemModal}
+              className="h-10 w-10 items-center justify-center rounded-full bg-black/5 dark:bg-white/10">
+              <Ionicons name="close" size={18} color={colors.text} />
+            </Pressable>
+          </View>
+
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+            automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+            showsVerticalScrollIndicator={false}>
+            <Text className="mb-2 text-[16px] font-semibold text-black dark:text-white">
+              {t('jobs.invoiceItemsFieldTitle')}
+            </Text>
+            <AppTextInput value={itemTitle} onChangeText={setItemTitle} placeholder={t('jobs.invoiceItemsFieldTitlePlaceholder')} />
+
+            <Text className="mb-2 mt-4 text-[16px] font-semibold text-black dark:text-white">
+              {t('jobs.invoiceItemsFieldUnit')}
+            </Text>
+            <AppTextInput value={itemUnit} onChangeText={setItemUnit} placeholder={t('jobs.invoiceItemsFieldUnitPlaceholder')} />
+
+            <View className="mt-4 flex-row">
+              <View className="mr-3 flex-1">
+                <Text className="mb-2 text-[16px] font-semibold text-black dark:text-white">
+                  {t('jobs.invoiceItemsFieldQuantity')}
+                </Text>
+                <AppTextInput
+                  value={itemQuantity}
+                  onChangeText={setItemQuantity}
+                  placeholder="1"
+                  keyboardType="decimal-pad"
+                />
+              </View>
+              <View className="flex-1">
+                <Text className="mb-2 text-[16px] font-semibold text-black dark:text-white">
+                  {t('jobs.invoiceItemsFieldUnitPrice')}
+                </Text>
+                <AppTextInput
+                  value={itemUnitPrice}
+                  onChangeText={setItemUnitPrice}
+                  placeholder="0"
+                  keyboardType="decimal-pad"
+                />
+              </View>
+            </View>
+
+            <Pressable
+              onPress={() => {
+                void onSubmitInvoiceItem();
+              }}
+              disabled={itemSubmitting}
+              className="mt-6 items-center rounded-3xl bg-[#1D4ED8] px-4 py-4 disabled:opacity-60">
+              {itemSubmitting ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text className="text-base font-semibold text-white">{t('common.save')}</Text>
+              )}
+            </Pressable>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
 
       <Modal transparent visible={Boolean(previewKind && previewImages.length)} animationType="fade" onRequestClose={onClosePreview}>
         <View className="flex-1 bg-black">

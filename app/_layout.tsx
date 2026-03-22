@@ -6,11 +6,11 @@ import {
 } from "@react-navigation/native";
 import { useFonts } from "expo-font";
 import { Asset } from "expo-asset";
-import { Stack } from "expo-router";
-import { useRouter, useSegments } from "expo-router";
+import { Redirect, Stack } from "expo-router";
+import { useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Text, TextInput, View } from "react-native";
 import "../global.css";
 
 import { AuthProvider, useAuth } from "@/providers/AuthProvider";
@@ -20,6 +20,9 @@ import { useColorScheme } from "@/components/useColorScheme";
 import i18n from "@/lib/i18n";
 import { getStoredLanguage, guessInitialLanguage } from "@/lib/language";
 import { initializeNotifications } from "@/lib/notifications";
+import { useBilling, BillingProvider } from "@/providers/BillingProvider";
+import { OnboardingProvider, useOnboarding } from "@/providers/OnboardingProvider";
+import { ThemePreferenceProvider, useThemePreference } from "@/providers/ThemePreferenceProvider";
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -33,6 +36,14 @@ export const unstable_settings = {
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
+
+Text.defaultProps = Text.defaultProps || {};
+Text.defaultProps.allowFontScaling = false;
+Text.defaultProps.maxFontSizeMultiplier = 1;
+
+TextInput.defaultProps = TextInput.defaultProps || {};
+TextInput.defaultProps.allowFontScaling = false;
+TextInput.defaultProps.maxFontSizeMultiplier = 1;
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
@@ -80,12 +91,6 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (loaded && i18nReady && assetsReady) {
-      SplashScreen.hideAsync();
-    }
-  }, [assetsReady, i18nReady, loaded]);
-
-  useEffect(() => {
     if (!loaded || !i18nReady || !assetsReady) return;
     void initializeNotifications();
   }, [assetsReady, i18nReady, loaded]);
@@ -102,11 +107,34 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
+  const { initialized } = useAuth();
+  return (
+    <ThemePreferenceProvider>
+      <OnboardingProvider>
+        <BillingProvider>
+          <RootNavigationContent initialized={initialized} />
+        </BillingProvider>
+      </OnboardingProvider>
+    </ThemePreferenceProvider>
+  );
+}
+
+function RootNavigationContent({ initialized }: { initialized: boolean }) {
   const colorScheme = useColorScheme();
-  const { initialized, session } = useAuth();
+  const { ready: themeReady } = useThemePreference();
+  const { session } = useAuth();
+  const { ready: onboardingReady, completed: onboardingCompleted } = useOnboarding();
+  const { ready: billingReady, hasAccess } = useBilling();
   const segments = useSegments();
-  const router = useRouter();
   const [showSplash, setShowSplash] = useState(true);
+  const guardsReady = initialized && themeReady && onboardingReady && billingReady;
+  const splashVisible = !initialized || !themeReady || showSplash;
+
+  useEffect(() => {
+    if (!splashVisible) {
+      void SplashScreen.hideAsync();
+    }
+  }, [splashVisible]);
 
   useEffect(() => {
     if (!initialized) return;
@@ -120,42 +148,51 @@ function RootLayoutNav() {
     };
   }, [initialized]);
 
-  useEffect(() => {
-    if (!initialized) return;
-    if (showSplash) return;
-
+  if (!splashVisible && guardsReady) {
     const inAuthGroup = segments[0] === "(auth)";
+    const inOnboarding = segments[0] === "onboarding";
+    const inPaywall = segments[0] === "paywall";
+    const inPaywallPreview = segments[0] === "paywall-preview";
 
     if (!session && !inAuthGroup) {
-      router.replace("/(auth)/sign-in");
-    } else if (session && inAuthGroup) {
-      router.replace("/(tabs)");
+      return <Redirect href="/(auth)/sign-in" />;
     }
-  }, [initialized, router, segments, session, showSplash]);
 
-  if (!initialized) {
-    return <AppSplashScreen />;
+    if (session && !onboardingCompleted && !inOnboarding && !inPaywallPreview) {
+      return <Redirect href="/onboarding" />;
+    }
+
+    if (session && onboardingCompleted && !hasAccess && !inPaywall && !inPaywallPreview) {
+      return <Redirect href="/paywall" />;
+    }
+
+    if (session && onboardingCompleted && hasAccess && (inAuthGroup || inOnboarding || inPaywall)) {
+      return <Redirect href="/(tabs)" />;
+    }
+  }
+
+  if (splashVisible) {
+    return (
+      <View style={{ flex: 1, backgroundColor: "#1A4FE0" }}>
+        <AppSplashScreen />
+      </View>
+    );
   }
 
   return (
     <View style={{ flex: 1, backgroundColor: "#1A4FE0" }}>
-      <SplashVisibilityProvider showSplash={showSplash}>
+      <SplashVisibilityProvider showSplash={false}>
         <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
           <Stack>
             <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+            <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+            <Stack.Screen name="paywall" options={{ headerShown: false }} />
+            <Stack.Screen name="paywall-preview" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="modal" options={{ presentation: "modal" }} />
           </Stack>
         </ThemeProvider>
       </SplashVisibilityProvider>
-
-      {showSplash ? (
-        <View style={StyleSheet.absoluteFill}>
-          <View style={StyleSheet.absoluteFill}>
-            <AppSplashScreen />
-          </View>
-        </View>
-      ) : null}
     </View>
   );
 }

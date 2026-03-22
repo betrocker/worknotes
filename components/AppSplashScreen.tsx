@@ -1,12 +1,14 @@
 import React, { useEffect, useRef } from 'react';
 import { ActivityIndicator, Animated, Easing, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTranslation } from 'react-i18next';
 
 type AppSplashScreenProps = {
   hideMascot?: boolean;
 };
 
 export function AppSplashScreen({ hideMascot = false }: AppSplashScreenProps) {
+  const { t } = useTranslation();
   const titleAnim = useRef(new Animated.Value(0)).current;
   const mascotAnim = useRef(new Animated.Value(0)).current;
   const mascotFloat = useRef(new Animated.Value(0)).current;
@@ -115,7 +117,7 @@ export function AppSplashScreen({ hideMascot = false }: AppSplashScreenProps) {
 
         <View className="absolute bottom-12 items-center">
           <ActivityIndicator size="small" color="#FFFFFF" />
-          <Text className="mt-3 text-base text-white/95">Pripremamo Vas tefter...</Text>
+          <Text className="mt-3 text-base text-white/95">{t('splash.preparing')}</Text>
         </View>
       </View>
     </LinearGradient>

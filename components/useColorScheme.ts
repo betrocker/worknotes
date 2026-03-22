@@ -1,13 +1,13 @@
-import { useColorScheme as useNativewindColorScheme } from 'nativewind';
+import { useThemePreference } from '@/providers/ThemePreferenceProvider';
 
 export function useColorScheme() {
-  return useNativewindColorScheme().colorScheme;
+  return useThemePreference().colorScheme;
 }
 
 export function useSetColorScheme() {
-  return useNativewindColorScheme().setColorScheme;
+  return useThemePreference().setColorScheme;
 }
 
 export function useToggleColorScheme() {
-  return useNativewindColorScheme().toggleColorScheme;
+  return useThemePreference().toggleColorScheme;
 }

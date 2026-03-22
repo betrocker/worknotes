@@ -40,6 +40,7 @@ export default function TabLayout() {
       <Tabs.Screen name="posao/[id]/payment/[paymentId]/edit" options={{ href: null }} />
       <Tabs.Screen name="posao/[id]/expense/new" options={{ href: null }} />
       <Tabs.Screen name="posao/[id]/expense/[expenseId]/edit" options={{ href: null }} />
+      <Tabs.Screen name="legal/[slug]" options={{ href: null }} />
     </Tabs>
   );
 }

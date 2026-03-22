@@ -1,7 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { BlurView } from 'expo-blur';
 import React from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Colors from '@/constants/Colors';
@@ -29,28 +28,15 @@ export function StickyFormHeader({
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
-  const overlayBackgroundColor = colorScheme === 'dark' ? 'rgba(28,28,30,0.28)' : 'rgba(255,255,255,0.28)';
 
   return (
-    <View style={{ position: 'relative', zIndex: 20 }}>
-      {Platform.OS === 'ios' ? (
-        <BlurView
-          intensity={35}
-          tint={colorScheme === 'dark' ? 'dark' : 'light'}
-          style={StyleSheet.absoluteFill}
-        />
-      ) : (
-        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: overlayBackgroundColor }]} />
-      )}
-
-      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: overlayBackgroundColor }]} />
-
+    <View style={{ position: 'relative', zIndex: 20, backgroundColor: colors.background }}>
       <View style={{ paddingTop: insets.top + 12, paddingHorizontal: 24, paddingBottom: 16 }}>
         <View className="flex-row items-center justify-between">
           <Pressable
             accessibilityRole="button"
             onPress={onBack}
-            className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
+            className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
             <Ionicons name="chevron-back" size={20} color={colors.text} />
           </Pressable>
 

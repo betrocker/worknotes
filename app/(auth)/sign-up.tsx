@@ -39,6 +39,7 @@ export default function SignUpScreen() {
   const [keyboardInset, setKeyboardInset] = useState(0);
   const placeholderTextColor = usePlaceholderTextColor(submitting);
   const sheetMinHeight = Math.max(540, height - (insets.top + 220));
+  const isAndroid = Platform.OS === 'android';
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -108,8 +109,15 @@ export default function SignUpScreen() {
       style={{ flex: 1 }}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ flexGrow: 1, justifyContent: 'space-between' }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          showsVerticalScrollIndicator={false}
+          scrollEnabled={isAndroid}>
         <View style={{ flex: 1, justifyContent: 'space-between' }}>
           <View style={{ minHeight: 250, paddingTop: insets.top + 18, paddingHorizontal: 24 }}>
             <Text className="text-[32px] font-extrabold leading-[38px] text-white">
@@ -164,11 +172,16 @@ export default function SignUpScreen() {
                 elevation: 12,
               }}>
               <ScrollView
+                style={{ flex: 1 }}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
                 automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
-                contentContainerStyle={{ paddingBottom: keyboardInset + 20 }}>
+                scrollEnabled={!isAndroid}
+                contentContainerStyle={{
+                  flexGrow: 1,
+                  paddingBottom: keyboardInset + insets.bottom + 24,
+                }}>
               <Pressable
                 disabled={submitting}
                 onPress={signUpWithGoogle}
@@ -282,6 +295,7 @@ export default function SignUpScreen() {
             </View>
           </View>
         </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </LinearGradient>
   );

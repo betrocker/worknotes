@@ -228,6 +228,108 @@ export type Database = {
           },
         ];
       };
+      invoices: {
+        Row: {
+          id: string;
+          user_id: string | null;
+          job_id: string | null;
+          invoice_number: string;
+          sequence_number: number;
+          year: number;
+          issued_at: string;
+          created_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id?: string | null;
+          job_id?: string | null;
+          invoice_number: string;
+          sequence_number: number;
+          year: number;
+          issued_at?: string;
+          created_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          user_id?: string | null;
+          job_id?: string | null;
+          invoice_number?: string;
+          sequence_number?: number;
+          year?: number;
+          issued_at?: string;
+          created_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'invoices_job_id_fkey';
+            columns: ['job_id'];
+            isOneToOne: false;
+            referencedRelation: 'jobs';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'invoices_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      job_invoice_items: {
+        Row: {
+          id: string;
+          job_id: string | null;
+          user_id: string | null;
+          title: string | null;
+          unit: string | null;
+          quantity: number | null;
+          unit_price: number | null;
+          total: number | null;
+          position: number | null;
+          created_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          job_id?: string | null;
+          user_id?: string | null;
+          title: string;
+          unit?: string | null;
+          quantity?: number | null;
+          unit_price?: number | null;
+          total?: number | null;
+          position?: number | null;
+          created_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          job_id?: string | null;
+          user_id?: string | null;
+          title?: string;
+          unit?: string | null;
+          quantity?: number | null;
+          unit_price?: number | null;
+          total?: number | null;
+          position?: number | null;
+          created_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'job_invoice_items_job_id_fkey';
+            columns: ['job_id'];
+            isOneToOne: false;
+            referencedRelation: 'jobs';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'job_invoice_items_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

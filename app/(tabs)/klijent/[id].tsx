@@ -221,21 +221,21 @@ export default function ClientDetailScreen() {
               accessibilityRole="button"
               accessibilityLabel={t('common.back')}
               onPress={onBack}
-              className="mr-2 h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
+              className="mr-2 h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
               <Ionicons name="chevron-back" size={18} color={colors.text} />
             </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t('clients.edit')}
               onPress={onEdit}
-              className="mr-2 h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
+              className="mr-2 h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
               <Ionicons name="create-outline" size={18} color={colors.text} />
             </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t('clients.delete')}
               onPress={onDelete}
-              className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
+              className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
               <Ionicons name="trash-outline" size={18} color="#FF3B30" />
             </Pressable>
           </View>

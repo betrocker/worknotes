@@ -1,5 +1,6 @@
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
+import i18n from '@/lib/i18n';
 
 import { supabase } from '@/lib/supabase';
 
@@ -68,6 +69,5 @@ export async function startGoogleOAuth() {
     return { ok: true as const, redirectTo };
   }
 
-  return { ok: false as const, error: 'OAuth callback nije vratio code/token.', redirectTo };
+  return { ok: false as const, error: i18n.t('authCallback.missingToken'), redirectTo };
 }
-
