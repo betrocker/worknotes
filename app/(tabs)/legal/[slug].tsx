@@ -58,16 +58,20 @@ export default function LegalDocumentScreen() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-[#F2F2F7] dark:bg-black" contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView
+      className="flex-1 bg-[#F2F2F7] dark:bg-black"
+      stickyHeaderIndices={[0]}
+      contentContainerStyle={{ paddingBottom: 40 }}>
       <View
         style={{
           paddingTop: insets.top + 12,
           paddingHorizontal: 24,
           paddingBottom: 24,
+          backgroundColor: isDark ? '#000000' : '#F2F2F7',
         }}>
         <View className="flex-row items-center justify-between">
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => router.replace('/(tabs)/podesavanja')}
             className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
             <Ionicons name="chevron-back" size={20} color={colors.text} />
           </Pressable>

@@ -37,6 +37,10 @@ export async function startGoogleOAuth() {
     options: {
       redirectTo,
       skipBrowserRedirect: true,
+      queryParams: {
+        prompt: 'select_account',
+        access_type: 'offline',
+      },
     },
   });
 

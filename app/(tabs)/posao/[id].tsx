@@ -1089,22 +1089,22 @@ export default function JobDetailScreen() {
           <View className="flex-row items-center">
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={t('jobs.delete')}
-              onPress={onDelete}
+              accessibilityLabel={t('jobs.edit')}
+              onPress={onEdit}
               className="mr-3 h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
-              <Ionicons name="trash" size={18} color="#FF3B30" />
+              <Ionicons name="create-outline" size={18} color={colors.text} />
             </Pressable>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={t('jobs.edit')}
-              onPress={onEdit}
+              accessibilityLabel={t('jobs.delete')}
+              onPress={onDelete}
               className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
-              <Ionicons name="create-outline" size={18} color={colors.text} />
+              <Ionicons name="trash" size={18} color="#FF3B30" />
             </Pressable>
           </View>
         </View>
 
-          <Text className="mt-4 font-semibold text-[30px] leading-[36px] tracking-tight text-black dark:text-white">
+          <Text className="mt-4 font-bold text-[34px] leading-[40px] tracking-tight text-black dark:text-white">
             {job?.title || t('jobs.untitled')}
           </Text>
           <View className="mt-1 flex-row items-center">

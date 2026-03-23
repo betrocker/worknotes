@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -35,6 +35,7 @@ import { deleteProfileAsset, uploadCompanyLogo } from '@/lib/profile-assets';
 import { supabase } from '@/lib/supabase';
 import { getUserDisplayName } from '@/lib/user';
 import { useAuth } from '@/providers/AuthProvider';
+import { useBilling } from '@/providers/BillingProvider';
 
 const DEFAULT_AVATAR = require('../../assets/avatars/avatar.png');
 const AVATAR_OPTIONS = [
@@ -89,10 +90,15 @@ export default function PodesavanjaScreen() {
   const { session } = useAuth();
   const router = useRouter();
   const colors = Colors[colorScheme];
+  const { hasSubscription, hasTrialAccess, trialDaysRemaining, trialEndsAt } = useBilling();
 
   const isDark = colorScheme === 'dark';
   const isEnglish = (i18n.resolvedLanguage ?? i18n.language).toLowerCase().startsWith('en');
+  const [themeSwitchValue, setThemeSwitchValue] = useState(isDark);
+  const [themeSwitchPending, setThemeSwitchPending] = useState(false);
+  const [pendingThemeTarget, setPendingThemeTarget] = useState<boolean | null>(null);
   const [notificationsEnabled, setNotificationsEnabledState] = useState<boolean | null>(null);
+  const [notificationsSaving, setNotificationsSaving] = useState(false);
   const [defaultReminder, setDefaultReminder] = useState<JobReminderOption>('same_day');
   const [username, setUsername] = useState('');
   const [usernameDraft, setUsernameDraft] = useState('');
@@ -126,6 +132,7 @@ export default function PodesavanjaScreen() {
   const [companyMessage, setCompanyMessage] = useState<string | null>(null);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [infoModalKey, setInfoModalKey] = useState<'support' | 'version' | null>(null);
+  const themeToggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const user = session?.user ?? null;
   const email = user?.email ?? '—';
   const displayName = useMemo(() => getUserDisplayName(user, email), [email, user]);
@@ -178,6 +185,13 @@ export default function PodesavanjaScreen() {
     () => infoItems.find((item) => item.key === infoModalKey) ?? null,
     [infoItems, infoModalKey]
   );
+  const trialEndsLabel = useMemo(() => {
+    if (!trialEndsAt) return null;
+    return new Date(trialEndsAt).toLocaleDateString(
+      i18n.language === 'sr' ? 'sr-Latn-RS' : i18n.language,
+      { day: '2-digit', month: '2-digit', year: 'numeric' }
+    );
+  }, [i18n.language, trialEndsAt]);
 
   const reminderOptions = useMemo(
     () => [
@@ -187,6 +201,16 @@ export default function PodesavanjaScreen() {
     ],
     [t]
   );
+
+  const switchTrackColor = useMemo(
+    () => ({
+      false: isDark ? '#3A3A3C' : '#D7DCE7',
+      true: isDark ? '#3A7BFF' : '#2F68ED',
+    }),
+    [isDark]
+  );
+  const switchThumbColor = isDark ? '#FFFFFF' : '#FFFFFF';
+  const switchBgColor = isDark ? '#2C2C2E' : '#D7DCE7';
 
   useEffect(() => {
     let mounted = true;
@@ -202,6 +226,26 @@ export default function PodesavanjaScreen() {
     })();
     return () => {
       mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (themeSwitchPending) {
+      if (pendingThemeTarget != null && isDark === pendingThemeTarget) {
+        setThemeSwitchValue(isDark);
+        setThemeSwitchPending(false);
+        setPendingThemeTarget(null);
+      }
+      return;
+    }
+    setThemeSwitchValue(isDark);
+  }, [isDark, pendingThemeTarget, themeSwitchPending]);
+
+  useEffect(() => {
+    return () => {
+      if (themeToggleTimerRef.current) {
+        clearTimeout(themeToggleTimerRef.current);
+      }
     };
   }, []);
 
@@ -517,6 +561,29 @@ export default function PodesavanjaScreen() {
           ) : null}
         </View>
 
+        {hasTrialAccess && !hasSubscription ? (
+          <View className="mt-4 overflow-hidden rounded-3xl border border-[#D7E6FF] bg-[#F4F8FF] p-4 dark:border-[#30415E] dark:bg-[#162033]">
+            <View className="flex-row items-center">
+              <View className="h-11 w-11 items-center justify-center rounded-[16px] bg-[#E8F0FF] dark:bg-[#243047]">
+                <Ionicons name="time-outline" size={20} color={isDark ? '#8FB2FF' : '#2F68ED'} />
+              </View>
+              <View className="ml-3 flex-1">
+                <Text className="text-[17px] font-extrabold text-[#1C2745] dark:text-white">
+                  {t('settings.freeTrialTitle')}
+                </Text>
+                <Text className="mt-1 text-sm text-black/60 dark:text-white/70">
+                  {t('settings.freeTrialBody', { count: trialDaysRemaining })}
+                </Text>
+                {trialEndsLabel ? (
+                  <Text className="mt-1 text-sm text-black/55 dark:text-white/65">
+                    {t('settings.freeTrialEndsAt', { date: trialEndsLabel })}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          </View>
+        ) : null}
+
         <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/80 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/80">
           <View className="flex-row items-center justify-between">
             <Text className="text-[18px] font-extrabold text-[#1C2745] dark:text-white">
@@ -630,7 +697,25 @@ export default function PodesavanjaScreen() {
                 </View>
               </View>
             </View>
-            <Switch value={isDark} onValueChange={(next) => setColorScheme(next ? 'dark' : 'light')} />
+            <Switch
+              value={themeSwitchValue}
+              disabled={themeSwitchPending}
+              onValueChange={(next) => {
+                setThemeSwitchValue(next);
+                setThemeSwitchPending(true);
+                setPendingThemeTarget(next);
+                if (themeToggleTimerRef.current) {
+                  clearTimeout(themeToggleTimerRef.current);
+                }
+                themeToggleTimerRef.current = setTimeout(() => {
+                  setColorScheme(next ? 'dark' : 'light');
+                  themeToggleTimerRef.current = null;
+                }, 90);
+              }}
+              trackColor={switchTrackColor}
+              thumbColor={switchThumbColor}
+              ios_backgroundColor={switchBgColor}
+            />
           </View>
         </View>
 
@@ -653,11 +738,24 @@ export default function PodesavanjaScreen() {
             </View>
             <Switch
               value={notificationsEnabled ?? false}
-              disabled={notificationsEnabled == null}
+              disabled={notificationsEnabled == null || notificationsSaving}
               onValueChange={(next) => {
+                const previous = notificationsEnabled ?? false;
                 setNotificationsEnabledState(next);
-                void setNotificationsEnabled(next);
+                setNotificationsSaving(true);
+                void (async () => {
+                  try {
+                    await setNotificationsEnabled(next);
+                  } catch {
+                    setNotificationsEnabledState(previous);
+                  } finally {
+                    setNotificationsSaving(false);
+                  }
+                })();
               }}
+              trackColor={switchTrackColor}
+              thumbColor={switchThumbColor}
+              ios_backgroundColor={switchBgColor}
             />
           </View>
 
@@ -791,25 +889,6 @@ export default function PodesavanjaScreen() {
               </View>
             ))}
           </View>
-        </View>
-
-        <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/80 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/80">
-          <Pressable
-            onPress={() => router.push('/paywall-preview')}
-            className="flex-row items-center">
-            <View className="h-11 w-11 items-center justify-center rounded-[16px] bg-[#EEF3FF] dark:bg-[#243047]">
-              <Ionicons name="card-outline" size={20} color={isDark ? '#8FB2FF' : '#2F68ED'} />
-            </View>
-            <View className="ml-3 flex-1">
-              <Text className="text-[17px] font-extrabold text-[#1C2745] dark:text-white">
-                {t('settings.previewPaywall')}
-              </Text>
-              <Text className="mt-1 text-sm text-black/60 dark:text-white/70">
-                {t('settings.previewPaywallHelp')}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.secondaryText} />
-          </Pressable>
         </View>
 
         <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/80 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/80">

@@ -1,13 +1,12 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 
 import { StickyFormHeader } from '@/components/StickyFormHeader';
 import { usePlaceholderTextColor } from '@/components/usePlaceholderTextColor';
 import { AppTextInput } from '@/components/AppTextInput';
-import { deleteClient, getClientById, updateClient } from '@/lib/clients';
+import { getClientById, updateClient } from '@/lib/clients';
 import { useAuth } from '@/providers/AuthProvider';
 
 export default function EditClientScreen() {
@@ -85,25 +84,6 @@ export default function EditClientScreen() {
     router.replace({ pathname: '/(tabs)/klijent/[id]' as any, params: { id } });
   };
 
-  const onDelete = () => {
-    if (!userId || !id) return;
-    Alert.alert(t('clients.deleteConfirmTitle'), t('clients.deleteConfirmMessage'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('clients.delete'),
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteClient(userId, id);
-            router.replace({ pathname: '/(tabs)/klijenti' as any });
-          } catch (e: unknown) {
-            setError(e instanceof Error ? e.message : String(e));
-          }
-        },
-      },
-    ]);
-  };
-
   return (
     <ScrollView
       stickyHeaderIndices={[0]}
@@ -115,17 +95,6 @@ export default function EditClientScreen() {
         onSave={onSave}
         saveLabel={t('common.save')}
         submitting={submitting}
-        right={
-          <View className="mr-3">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('clients.delete')}
-              onPress={onDelete}
-              className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
-              <Ionicons name="trash" size={18} color="#FF3B30" />
-            </Pressable>
-          </View>
-        }
       />
 
       <View className="px-6">

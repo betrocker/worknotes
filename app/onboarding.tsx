@@ -70,14 +70,14 @@ export default function OnboardingScreen() {
   const mutedText = isDark ? 'rgba(255,255,255,0.72)' : 'rgba(28,39,69,0.72)';
   const heroSubtext = isDark ? 'rgba(255,255,255,0.78)' : 'rgba(255,255,255,0.88)';
   const isCompact = height < 760;
-  const imageSize = Math.min(isCompact ? 188 : 252, Math.max(170, height * (isCompact ? 0.18 : 0.23)));
+  const imageSize = Math.min(isCompact ? 226 : 302, Math.max(204, height * (isCompact ? 0.216 : 0.276)));
   const heroTopPadding = insets.top + 18;
   const heroTitleMarginTop = isCompact ? 18 : 36;
   const heroMinHeight = isCompact ? 270 : 350;
-  const titleFontSize = isCompact ? 28 : 34;
-  const titleLineHeight = isCompact ? 34 : 40;
-  const bodyFontSize = isCompact ? 13 : 15;
-  const bodyLineHeight = isCompact ? 19 : 22;
+  const titleFontSize = isCompact ? 29 : 35;
+  const titleLineHeight = isCompact ? 35 : 41;
+  const bodyFontSize = isCompact ? 14 : 16;
+  const bodyLineHeight = isCompact ? 20 : 23;
 
   useEffect(() => {
     Animated.timing(progressAnim, {
@@ -240,7 +240,7 @@ export default function OnboardingScreen() {
                     <Ionicons name={pointIndex === 0 ? 'checkmark' : 'sparkles-outline'} size={14} color={isDark ? '#DCE7FF' : '#1D4ED8'} />
                   </View>
                   <Text
-                    style={{ color: mutedText, fontSize: isCompact ? 13 : 15, lineHeight: isCompact ? 18 : 21 }}
+                    style={{ color: mutedText, fontSize: isCompact ? 14 : 16, lineHeight: isCompact ? 19 : 22 }}
                     className="ml-3 flex-1">
                     {point}
                   </Text>

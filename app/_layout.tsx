@@ -14,7 +14,6 @@ import { Text, TextInput, View } from "react-native";
 import "../global.css";
 
 import { AuthProvider, useAuth } from "@/providers/AuthProvider";
-import { AppSplashScreen } from "@/components/AppSplashScreen";
 import { SplashVisibilityProvider } from "@/components/SplashVisibilityContext";
 import { useColorScheme } from "@/components/useColorScheme";
 import i18n from "@/lib/i18n";
@@ -126,9 +125,8 @@ function RootNavigationContent({ initialized }: { initialized: boolean }) {
   const { ready: onboardingReady, completed: onboardingCompleted } = useOnboarding();
   const { ready: billingReady, hasAccess } = useBilling();
   const segments = useSegments();
-  const [showSplash, setShowSplash] = useState(true);
   const guardsReady = initialized && themeReady && onboardingReady && billingReady;
-  const splashVisible = !initialized || !themeReady || showSplash;
+  const splashVisible = !initialized || !themeReady;
 
   useEffect(() => {
     if (!splashVisible) {
@@ -136,33 +134,20 @@ function RootNavigationContent({ initialized }: { initialized: boolean }) {
     }
   }, [splashVisible]);
 
-  useEffect(() => {
-    if (!initialized) return;
-
-    const timer = setTimeout(() => {
-      setShowSplash(false);
-    }, 5000);
-
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [initialized]);
-
   if (!splashVisible && guardsReady) {
     const inAuthGroup = segments[0] === "(auth)";
     const inOnboarding = segments[0] === "onboarding";
     const inPaywall = segments[0] === "paywall";
-    const inPaywallPreview = segments[0] === "paywall-preview";
 
     if (!session && !inAuthGroup) {
       return <Redirect href="/(auth)/sign-in" />;
     }
 
-    if (session && !onboardingCompleted && !inOnboarding && !inPaywallPreview) {
+    if (session && !onboardingCompleted && !inOnboarding) {
       return <Redirect href="/onboarding" />;
     }
 
-    if (session && onboardingCompleted && !hasAccess && !inPaywall && !inPaywallPreview) {
+    if (session && onboardingCompleted && !hasAccess && !inPaywall) {
       return <Redirect href="/paywall" />;
     }
 
@@ -171,13 +156,7 @@ function RootNavigationContent({ initialized }: { initialized: boolean }) {
     }
   }
 
-  if (splashVisible) {
-    return (
-      <View style={{ flex: 1, backgroundColor: "#1A4FE0" }}>
-        <AppSplashScreen />
-      </View>
-    );
-  }
+  if (splashVisible) return null;
 
   return (
     <View style={{ flex: 1, backgroundColor: "#1A4FE0" }}>
@@ -187,9 +166,7 @@ function RootNavigationContent({ initialized }: { initialized: boolean }) {
             <Stack.Screen name="(auth)" options={{ headerShown: false }} />
             <Stack.Screen name="onboarding" options={{ headerShown: false }} />
             <Stack.Screen name="paywall" options={{ headerShown: false }} />
-            <Stack.Screen name="paywall-preview" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="modal" options={{ presentation: "modal" }} />
           </Stack>
         </ThemeProvider>
       </SplashVisibilityProvider>

@@ -4,9 +4,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Colors from '@/constants/Colors';
-import { LargeHeader } from '@/components/LargeHeader';
 import { MascotEmptyState } from '@/components/MascotEmptyState';
 import { useColorScheme } from '@/components/useColorScheme';
 import { parseDateInput } from '@/lib/date';
@@ -30,6 +30,7 @@ export default function ClientDetailScreen() {
   const { session } = useAuth();
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
+  const insets = useSafeAreaInsets();
 
   const userId = session?.user?.id ?? null;
   const id = typeof params.id === 'string' ? params.id : null;
@@ -211,38 +212,82 @@ export default function ClientDetailScreen() {
     router.push({ pathname: '/(tabs)/klijent/[id]/edit' as any, params: { id } });
   };
 
+  const clientMeta = useMemo(() => {
+    if (client?.phone && client?.address) {
+      return {
+        icon: 'call-outline' as const,
+        text: `${client.phone} • ${client.address}`,
+      };
+    }
+    if (client?.phone) {
+      return {
+        icon: 'call-outline' as const,
+        text: client.phone,
+      };
+    }
+    if (client?.address) {
+      return {
+        icon: 'location-outline' as const,
+        text: client.address,
+      };
+    }
+    return {
+      icon: 'person-outline' as const,
+      text: t('clients.contact'),
+    };
+  }, [client?.address, client?.phone, t]);
+
   return (
-    <View className="flex-1 bg-[#F2F2F7] dark:bg-black">
-      <LargeHeader
-        title={client?.name || '-'}
-        right={
-          <View className="flex-row items-center">
+    <ScrollView
+      stickyHeaderIndices={[0]}
+      className="flex-1 bg-[#F2F2F7] dark:bg-black"
+      contentContainerClassName="pb-32">
+      <View style={{ position: 'relative', zIndex: 20, backgroundColor: colors.background }}>
+        <View className="px-6 pb-6" style={{ paddingTop: insets.top + 12 }}>
+          <View className="flex-row items-center justify-between">
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t('common.back')}
               onPress={onBack}
-              className="mr-2 h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
-              <Ionicons name="chevron-back" size={18} color={colors.text} />
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('clients.edit')}
-              onPress={onEdit}
-              className="mr-2 h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
-              <Ionicons name="create-outline" size={18} color={colors.text} />
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('clients.delete')}
-              onPress={onDelete}
               className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
-              <Ionicons name="trash-outline" size={18} color="#FF3B30" />
+              <Ionicons name="chevron-back" size={20} color={colors.text} />
             </Pressable>
-          </View>
-        }
-      />
 
-      <ScrollView className="flex-1" contentContainerClassName="px-6 pb-32 pt-3">
+            <View className="flex-row items-center">
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('clients.edit')}
+                onPress={onEdit}
+                className="mr-3 h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
+                <Ionicons name="create-outline" size={18} color={colors.text} />
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('clients.delete')}
+                onPress={onDelete}
+                className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
+                <Ionicons name="trash" size={18} color="#FF3B30" />
+              </Pressable>
+            </View>
+          </View>
+
+          <Text className="mt-4 font-bold text-[34px] leading-[40px] tracking-tight text-black dark:text-white">
+            {client?.name || '-'}
+          </Text>
+          <View className="mt-1 flex-row items-center">
+            <Ionicons
+              name={clientMeta.icon}
+              size={16}
+              color={colors.secondaryText}
+            />
+            <Text className="ml-2 text-base text-black/60 dark:text-white/70">
+              {clientMeta.text}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      <View className="px-6 pt-4">
         {error ? <Text className="mb-3 text-sm text-red-600">{error}</Text> : null}
 
         {loading ? (
@@ -381,7 +426,7 @@ export default function ClientDetailScreen() {
             </View>
           </>
         )}
-      </ScrollView>
-    </View>
+      </View>
+    </ScrollView>
   );
 }

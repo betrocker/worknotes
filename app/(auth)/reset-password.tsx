@@ -33,9 +33,9 @@ export default function ResetPasswordScreen() {
   const [info, setInfo] = useState<string | null>(null);
   const [keyboardInset, setKeyboardInset] = useState(0);
   const placeholderTextColor = usePlaceholderTextColor(submitting);
+  const keyboardOpen = keyboardInset > 0;
+  const heroMinHeight = keyboardOpen ? 132 : 250;
   const sheetMinHeight = Math.max(540, height - (insets.top + 220));
-  const isAndroid = Platform.OS === 'android';
-
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
@@ -58,7 +58,7 @@ export default function ResetPasswordScreen() {
     setInfo(null);
 
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: 'expotailwindrouter://reset-password',
+      redirectTo: 'tefter://reset-password',
     });
 
     setSubmitting(false);
@@ -77,15 +77,8 @@ export default function ResetPasswordScreen() {
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}>
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={{ flexGrow: 1, justifyContent: 'space-between' }}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-          showsVerticalScrollIndicator={false}
-          scrollEnabled={isAndroid}>
         <View style={{ flex: 1, justifyContent: 'space-between' }}>
-          <View style={{ minHeight: 250, paddingTop: insets.top + 18, paddingHorizontal: 24 }}>
+          <View style={{ minHeight: heroMinHeight, paddingTop: insets.top + 18, paddingHorizontal: 24 }}>
             <Text className="text-[32px] font-extrabold leading-[38px] text-white">
               {t('auth.resetPassword.title')}
             </Text>
@@ -100,15 +93,16 @@ export default function ResetPasswordScreen() {
                 position: 'absolute',
                 right: -2,
                 top: insets.top + 10,
-                width: 212,
-                height: 212,
+                width: keyboardOpen ? 120 : 212,
+                height: keyboardOpen ? 120 : 212,
               }}
             />
           </View>
 
           <View
             style={{
-              minHeight: sheetMinHeight,
+              flex: keyboardOpen ? 1 : undefined,
+              minHeight: keyboardOpen ? 0 : sheetMinHeight,
               borderTopLeftRadius: 34,
               borderTopRightRadius: 34,
               backgroundColor: isDark ? 'rgba(18,21,30,0.98)' : 'rgba(247,249,255,0.97)',
@@ -116,38 +110,23 @@ export default function ResetPasswordScreen() {
               borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.84)',
               paddingHorizontal: 18,
               paddingTop: 18,
-              paddingBottom: 28,
+              paddingBottom: 40,
               shadowColor: '#000000',
               shadowOpacity: isDark ? 0.32 : 0.16,
               shadowRadius: 16,
               shadowOffset: { width: 0, height: -4 },
               elevation: 18,
             }}>
-            <View
-              style={{
-                flex: 1,
-                borderRadius: 28,
-                backgroundColor: isDark ? 'rgba(28,32,44,0.92)' : 'rgba(255,255,255,0.86)',
-                borderWidth: 1,
-                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(235,240,255,0.96)',
-                padding: 16,
-                shadowColor: '#000000',
-                shadowOpacity: isDark ? 0.26 : 0.18,
-                shadowRadius: 10,
-                shadowOffset: { width: 2, height: 6 },
-                elevation: 12,
+            <ScrollView
+              style={{ flex: 1 }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+              automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+              contentContainerStyle={{
+                flexGrow: 1,
+                paddingBottom: keyboardInset + insets.bottom + 24,
               }}>
-              <ScrollView
-                style={{ flex: 1 }}
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-                keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-                automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
-                scrollEnabled={!isAndroid}
-                contentContainerStyle={{
-                  flexGrow: 1,
-                  paddingBottom: keyboardInset + insets.bottom + 24,
-                }}>
               <Text className="text-[13px] font-semibold uppercase tracking-[0.3px] text-black/55 dark:text-white/60">
                 {t('common.email')}
               </Text>
@@ -185,11 +164,9 @@ export default function ResetPasswordScreen() {
                   </Text>
                 </Pressable>
               </Link>
-              </ScrollView>
-            </View>
+            </ScrollView>
           </View>
         </View>
-        </ScrollView>
       </KeyboardAvoidingView>
     </LinearGradient>
   );

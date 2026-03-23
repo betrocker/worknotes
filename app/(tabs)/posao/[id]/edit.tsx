@@ -9,14 +9,12 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
 
 import Colors from '@/constants/Colors';
+import { StickyFormHeader } from '@/components/StickyFormHeader';
 import { useColorScheme } from '@/components/useColorScheme';
 import { usePlaceholderTextColor } from '@/components/usePlaceholderTextColor';
 import { AppTextInput } from '@/components/AppTextInput';
@@ -41,7 +39,6 @@ export default function EditJobScreen() {
   const { session } = useAuth();
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
-  const insets = useSafeAreaInsets();
 
   const userId = session?.user?.id ?? null;
   const id = typeof params.id === 'string' ? params.id : null;
@@ -259,62 +256,13 @@ export default function EditJobScreen() {
         className="flex-1"
         contentContainerClassName="pb-32"
         keyboardShouldPersistTaps="handled">
-        <View style={{ position: 'relative', zIndex: 20 }}>
-          {Platform.OS === 'ios' ? (
-            <BlurView
-              intensity={35}
-              tint={colorScheme === 'dark' ? 'dark' : 'light'}
-              style={StyleSheet.absoluteFill}
-            />
-          ) : (
-            <View
-              pointerEvents="none"
-              style={[
-                StyleSheet.absoluteFill,
-                {
-                  backgroundColor: colorScheme === 'dark' ? 'rgba(28,28,30,0.28)' : 'rgba(255,255,255,0.28)',
-                },
-              ]}
-            />
-          )}
-
-          <View
-            pointerEvents="none"
-            style={[
-              StyleSheet.absoluteFill,
-              {
-                backgroundColor: colorScheme === 'dark' ? 'rgba(28,28,30,0.28)' : 'rgba(255,255,255,0.28)',
-              },
-            ]}
-          />
-
-          <View className="px-6 pb-6" style={{ paddingTop: insets.top + 12 }}>
-            <View className="flex-row items-center justify-between">
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('common.back')}
-                onPress={onBack}
-                className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
-                <Ionicons name="chevron-back" size={20} color={colors.text} />
-              </Pressable>
-
-              <Pressable
-                disabled={submitting}
-                onPress={onSave}
-                className="h-10 items-center justify-center rounded-3xl bg-[#007AFF] px-5 disabled:opacity-60 dark:bg-[#0A84FF]">
-                {submitting ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <Text className="text-base font-semibold text-white">{t('common.save')}</Text>
-                )}
-              </Pressable>
-            </View>
-
-            <Text className="mt-4 font-semibold text-[34px] leading-[40px] tracking-tight text-black dark:text-white">
-              {t('jobs.edit')}
-            </Text>
-          </View>
-        </View>
+        <StickyFormHeader
+          title={t('jobs.edit')}
+          onBack={onBack}
+          onSave={onSave}
+          saveLabel={t('common.save')}
+          submitting={submitting}
+        />
 
         <View className="px-6 pt-4">
           <View className="overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">

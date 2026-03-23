@@ -10,6 +10,8 @@ export type Database = {
           name: string | null;
           phone: string | null;
           created_at: string | null;
+          trial_started_at: string | null;
+          trial_ends_at: string | null;
         };
         Insert: {
           id?: string;
@@ -17,6 +19,8 @@ export type Database = {
           name?: string | null;
           phone?: string | null;
           created_at?: string | null;
+          trial_started_at?: string | null;
+          trial_ends_at?: string | null;
         };
         Update: {
           id?: string;
@@ -24,6 +28,8 @@ export type Database = {
           name?: string | null;
           phone?: string | null;
           created_at?: string | null;
+          trial_started_at?: string | null;
+          trial_ends_at?: string | null;
         };
         Relationships: [];
       };

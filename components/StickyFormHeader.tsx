@@ -51,7 +51,7 @@ export function StickyFormHeader({
           </View>
         </View>
 
-        <Text className="mt-4 font-semibold text-[34px] leading-[40px] tracking-tight text-black dark:text-white">{title}</Text>
+        <Text className="mt-4 font-bold text-[34px] leading-[40px] tracking-tight text-black dark:text-white">{title}</Text>
         {subtitle ? <Text className="mt-1 text-base text-black/60 dark:text-white/70">{subtitle}</Text> : null}
       </View>
     </View>

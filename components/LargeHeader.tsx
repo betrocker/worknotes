@@ -33,7 +33,7 @@ export function LargeHeader({
         },
         containerStyle,
       ]}>
-      <View style={{ paddingTop: insets.top + 12, paddingHorizontal: 24, paddingBottom: 24 }}>
+      <View style={{ paddingTop: insets.top + 20, paddingHorizontal: 24, paddingBottom: 24 }}>
         <View className="flex-row items-center justify-between">
           <View className="flex-1 pr-4">
             <Text className="font-bold text-[34px] leading-[40px] tracking-tight text-black dark:text-white">

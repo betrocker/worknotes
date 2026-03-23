@@ -14,5 +14,6 @@ export function getRevenueCatApiKey() {
 
 export function hasActiveEntitlement(customerInfo: CustomerInfo | null, entitlementId = RC_ENTITLEMENT_ID) {
   if (!customerInfo) return false;
-  return Boolean(customerInfo.entitlements.active[entitlementId]);
+  if (customerInfo.entitlements.active[entitlementId]) return true;
+  return Object.keys(customerInfo.entitlements.active).length > 0;
 }

@@ -114,7 +114,8 @@ const en = {
     eyebrow: 'Subscription',
     title: 'Unlock the full Tefter.',
     subtitle:
-      'Keep clients, jobs, invoices, and collection in one place with full app access.',
+      'Your free access period has ended. Choose a plan to keep using the app without interruption.',
+    planHint: 'Choose a monthly or yearly subscription to continue using the app.',
     features: {
       one: 'Manage unlimited jobs, clients, and debts without restrictions.',
       two: 'Use invoices, before/after photos, payments, and expenses in one workflow.',
@@ -132,9 +133,12 @@ const en = {
     mockMonthlyPrice: 'RSD 499',
     mockYearlyDescription: 'Full app access with a yearly subscription.',
     mockYearlyPrice: 'RSD 3.990',
-    cta: 'View offer',
+    cta: 'Activate plan',
+    ctaMonthly: 'Activate monthly plan',
+    ctaYearly: 'Activate yearly plan',
     restore: 'Restore purchases',
     signOut: 'Sign out',
+    close: 'Close',
     error: 'The paywall is currently unavailable. Check your RevenueCat setup.',
   },
   splash: {
@@ -458,8 +462,6 @@ const en = {
     companySaved: 'Company details saved.',
     companyEmpty: 'Enter company details.',
     logoPermission: 'Allow gallery access to add a company logo.',
-    previewPaywall: 'Subscription preview',
-    previewPaywallHelp: 'Open the paywall screen and review the package layout.',
     deleteAccount: 'Delete account',
     deleteAccountHelp: 'Permanently remove the account and all related data from the app.',
     deleteAccountTitle: 'Delete account',
@@ -469,10 +471,14 @@ const en = {
     deleteAccountFailedBody: 'Please try again a bit later.',
     signOut: 'Sign out',
     signOutHelp: 'Sign out this account from this device.',
+    freeTrialTitle: 'Free access',
+    freeTrialBody_one: '{{count}} day of free access remaining.',
+    freeTrialBody_other: '{{count}} days of free access remaining.',
+    freeTrialEndsAt: 'Access ends on {{date}}.',
     infoSection: 'Information',
     appVersion: 'App version',
     support: 'Support',
-    supportHelp: 'If you notice an issue in the app, note the steps and report it so we can fix it precisely.',
+    supportHelp: 'If you notice an issue in the app, note the steps and report it so we can fix it precisely.\n\nContact: podrska@tefter.app',
     termsTitle: 'Terms of use',
     termsBody:
       'Tefter is intended for managing jobs, clients, payments, and internal records. The user is responsible for the accuracy of entered data and how it is used in business operations.',
@@ -589,11 +595,10 @@ const en = {
         {
           title: '11. Contact',
           boxTitle: 'Tefter support',
-          boxLines: ['Email: unesi-svoj-email@domen.com'],
+          boxLines: ['Email: podrska@tefter.app'],
         },
       ],
-      footer:
-        'If you later create a public website or landing page, you can supplement this text with real contact details, company name, and links to the Terms of Use.',
+      footer: '',
     },
     terms: {
       title: 'Terms of use',
@@ -692,11 +697,10 @@ const en = {
         {
           title: '11. Contact',
           boxTitle: 'Tefter support',
-          boxLines: ['Email: unesi-svoj-email@domen.com'],
+          boxLines: ['Email: podrska@tefter.app'],
         },
       ],
-      footer:
-        'Before publishing, replace the contact email with a real contact and, if needed, add the legal entity name, address, and additional business details.',
+      footer: '',
     },
   },
   notifications: {
@@ -758,15 +762,6 @@ const en = {
     title: 'Oops!',
     message: "This screen doesn't exist.",
     goHome: 'Go to home screen!',
-  },
-  modal: {
-    title: 'Modal',
-  },
-  editScreenInfo: {
-    openCode: 'Open up the code for this screen:',
-    changeText: 'Change any of the text, save the file, and your app will automatically update.',
-    tapHere:
-      "Tap here if your app doesn't automatically update after making changes",
   },
 };
 

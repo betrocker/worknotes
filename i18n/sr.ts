@@ -114,7 +114,8 @@ const sr = {
     eyebrow: 'Pretplata',
     title: 'Otključaj ceo Tefter.',
     subtitle:
-      'Klijenti, poslovi, računi i naplata ostaju na jednom mestu uz pun pristup aplikaciji.',
+      'Besplatan period je istekao. Izaberi plan da nastaviš da koristiš aplikaciju bez prekida.',
+    planHint: 'Izaberi mesečnu ili godišnju pretplatu za nastavak korišćenja aplikacije.',
     features: {
       one: 'Vodi neograničene poslove, klijente i dugovanja bez ograničenja.',
       two: 'Koristi račune, pre/posle slike, uplate i troškove u jednom toku rada.',
@@ -132,9 +133,12 @@ const sr = {
     mockMonthlyPrice: 'RSD 499',
     mockYearlyDescription: 'Pun pristup aplikaciji uz godišnju pretplatu.',
     mockYearlyPrice: 'RSD 3.990',
-    cta: 'Pogledaj ponudu',
+    cta: 'Aktiviraj plan',
+    ctaMonthly: 'Aktiviraj mesečni plan',
+    ctaYearly: 'Aktiviraj godišnji plan',
     restore: 'Obnovi kupovine',
     signOut: 'Odjavi se',
+    close: 'Zatvori',
     error: 'Paywall trenutno nije dostupan. Proveri RevenueCat podešavanja.',
   },
   splash: {
@@ -458,8 +462,6 @@ const sr = {
     companySaved: 'Podaci firme su sačuvani.',
     companyEmpty: 'Unesite podatke firme.',
     logoPermission: 'Dozvoli pristup galeriji da bi dodao logo firme.',
-    previewPaywall: 'Pregled pretplate',
-    previewPaywallHelp: 'Otvori paywall ekran i proveri izgled paketa.',
     deleteAccount: 'Obriši nalog',
     deleteAccountHelp: 'Trajno ukloni nalog i sve povezane podatke iz aplikacije.',
     deleteAccountTitle: 'Brisanje naloga',
@@ -469,10 +471,15 @@ const sr = {
     deleteAccountFailedBody: 'Pokušaj ponovo malo kasnije.',
     signOut: 'Odjavi se',
     signOutHelp: 'Odjavi nalog sa ovog uređaja.',
+    freeTrialTitle: 'Besplatni pristup',
+    freeTrialBody_one: 'Preostao je još {{count}} dan besplatnog korišćenja.',
+    freeTrialBody_few: 'Preostala su još {{count}} dana besplatnog korišćenja.',
+    freeTrialBody_other: 'Preostalo je još {{count}} dana besplatnog korišćenja.',
+    freeTrialEndsAt: 'Pristup ističe {{date}}.',
     infoSection: 'Informacije',
     appVersion: 'Verzija aplikacije',
     support: 'Podrška',
-    supportHelp: 'Ako primetiš problem u radu aplikacije, zapiši korake i javi da to rešimo precizno.',
+    supportHelp: 'Ako primetiš problem u radu aplikacije, zapiši korake i javi da to rešimo precizno.\n\nKontakt: podrska@tefter.app',
     termsTitle: 'Uslovi korišćenja',
     termsBody:
       'Tefter služi za vođenje poslova, klijenata, uplata i interne evidencije. Korisnik je odgovoran za tačnost unetih podataka i način na koji ih koristi u poslovanju.',
@@ -591,11 +598,10 @@ const sr = {
         {
           title: '11. Kontakt',
           boxTitle: 'Tefter podrška',
-          boxLines: ['Email: unesi-svoj-email@domen.com'],
+          boxLines: ['Email: podrska@tefter.app'],
         },
       ],
-      footer:
-        'Ako budeš pravio javnu verziju sajta ili landing page, ovaj tekst možeš kasnije dopuniti stvarnim kontakt podacima, nazivom pravnog lica i eventualnim linkovima ka Uslovima korišćenja.',
+      footer: '',
     },
     terms: {
       title: 'Uslovi korišćenja',
@@ -694,11 +700,10 @@ const sr = {
         {
           title: '11. Kontakt',
           boxTitle: 'Tefter podrška',
-          boxLines: ['Email: unesi-svoj-email@domen.com'],
+          boxLines: ['Email: podrska@tefter.app'],
         },
       ],
-      footer:
-        'Pre objave zameni kontakt email stvarnim kontaktom i po potrebi dopuni naziv pravnog lica, adresu i dodatne poslovne podatke.',
+      footer: '',
     },
   },
   notifications: {
@@ -760,14 +765,6 @@ const sr = {
     title: 'Ups!',
     message: 'Ovaj ekran ne postoji.',
     goHome: 'Nazad na početnu!',
-  },
-  modal: {
-    title: 'Modal',
-  },
-  editScreenInfo: {
-    openCode: 'Otvori kod za ovaj ekran:',
-    changeText: 'Promeni tekst, sačuvaj fajl i aplikacija će se automatski osvežiti.',
-    tapHere: 'Tapni ovde ako se aplikacija ne osveži automatski posle izmene',
   },
 };
 

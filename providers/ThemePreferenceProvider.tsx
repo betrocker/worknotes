@@ -24,6 +24,8 @@ export function ThemePreferenceProvider({ children }: { children: React.ReactNod
         const stored = await getStoredThemePreference();
         if (stored) {
           setColorScheme(stored);
+        } else {
+          setColorScheme('light');
         }
       } finally {
         if (active) {

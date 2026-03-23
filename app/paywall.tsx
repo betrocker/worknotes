@@ -26,7 +26,7 @@ export default function PaywallScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
   const isExpoGo = Constants.executionEnvironment === 'storeClient';
-  const { enabled, hasAccess, restorePurchases } = useBilling();
+  const { enabled, hasSubscription, restorePurchases, refreshCustomerInfo } = useBilling();
   const [submitting, setSubmitting] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [loadingPackages, setLoadingPackages] = useState(false);
@@ -140,6 +140,7 @@ export default function PaywallScreen() {
     setError(null);
     try {
       await Purchases.purchasePackage(selectedPackage);
+      await refreshCustomerInfo();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -152,6 +153,7 @@ export default function PaywallScreen() {
     setError(null);
     try {
       await restorePurchases();
+      await refreshCustomerInfo();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -164,6 +166,10 @@ export default function PaywallScreen() {
     router.replace('/(auth)/sign-in');
   };
 
+  const onClose = async () => {
+    await onSignOut();
+  };
+
   return (
     <LinearGradient
       colors={isDark ? ['#081225', '#12305C', '#10213E', '#0B111C'] : ['#1A4FE0', '#3B73F0', '#7FA8FF', '#EEF3FF']}
@@ -171,15 +177,35 @@ export default function PaywallScreen() {
       start={{ x: 0.5, y: 0 }}
       end={{ x: 0.5, y: 1 }}
       style={{ flex: 1 }}>
-      <View style={{ flex: 1, justifyContent: 'space-between' }}>
-        <View style={{ minHeight: 330, paddingTop: insets.top + 18, paddingHorizontal: 24 }}>
-          <Text className="text-[15px] font-semibold tracking-[0.3px] text-white/84">
+      <View style={{ flex: 1 }}>
+        <View style={{ minHeight: 292, paddingTop: insets.top + 18, paddingHorizontal: 24, paddingBottom: 24 }}>
+          <View style={{ alignItems: 'flex-end', zIndex: 20, elevation: 20 }}>
+            <Pressable
+              onPress={() => {
+                void onClose();
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={t('paywall.close')}
+              style={{
+                height: 40,
+                width: 40,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 999,
+                backgroundColor: 'rgba(255,255,255,0.14)',
+                borderWidth: 1,
+                borderColor: 'rgba(255,255,255,0.16)',
+              }}>
+              <Ionicons name="close" size={18} color="#FFFFFF" />
+            </Pressable>
+          </View>
+          <Text style={{ fontSize: 15, fontWeight: '600', letterSpacing: 0.3, color: 'rgba(255,255,255,0.84)' }}>
             {t('paywall.eyebrow')}
           </Text>
-          <Text className="mt-5 max-w-[220px] text-[34px] font-extrabold leading-[40px] text-white">
+          <Text style={{ marginTop: 18, maxWidth: 220, fontSize: 34, fontWeight: '800', lineHeight: 40, color: '#FFFFFF' }}>
             {t('paywall.title')}
           </Text>
-          <Text className="mt-3 max-w-[220px] text-[15px] leading-[22px] text-white/88">
+          <Text style={{ marginTop: 12, maxWidth: 220, fontSize: 15, lineHeight: 22, color: 'rgba(255,255,255,0.88)' }}>
             {t('paywall.subtitle')}
           </Text>
 
@@ -189,15 +215,19 @@ export default function PaywallScreen() {
             style={{
               position: 'absolute',
               right: -8,
-              top: insets.top + 20,
-              width: 230,
-              height: 230,
+              top: insets.top + 24,
+              width: 210,
+              height: 210,
             }}
+            pointerEvents="none"
           />
         </View>
 
         <View
           style={{
+            flex: 1,
+            minHeight: 0,
+            marginTop: -18,
             borderTopLeftRadius: 34,
             borderTopRightRadius: 34,
             backgroundColor: isDark ? 'rgba(18,21,30,0.98)' : 'rgba(247,249,255,0.97)',
@@ -205,56 +235,60 @@ export default function PaywallScreen() {
             borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.84)',
             paddingHorizontal: 18,
             paddingTop: 18,
-            paddingBottom: insets.bottom + 20,
             shadowColor: '#000000',
             shadowOpacity: isDark ? 0.32 : 0.16,
             shadowRadius: 16,
             shadowOffset: { width: 0, height: -4 },
             elevation: 18,
+            overflow: 'hidden',
           }}>
-          <View
-            style={{
-              borderRadius: 28,
-              backgroundColor: isDark ? 'rgba(28,32,44,0.92)' : 'rgba(255,255,255,0.86)',
-              borderWidth: 1,
-              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(235,240,255,0.96)',
-              padding: 18,
-              shadowColor: '#000000',
-              shadowOpacity: isDark ? 0.26 : 0.18,
-              shadowRadius: 10,
-              shadowOffset: { width: 2, height: 6 },
-              elevation: 12,
-            }}>
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 18, paddingBottom: insets.bottom + 20 }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled">
               {[
                 t('paywall.features.one'),
                 t('paywall.features.two'),
                 t('paywall.features.three'),
               ].map((feature, index) => (
-                <View key={feature} className={index === 0 ? 'flex-row items-start' : 'mt-3 flex-row items-start'}>
-                  <View className="mt-0.5 h-8 w-8 items-center justify-center rounded-full bg-[#E8F0FF] dark:bg-[#1E2A44]">
+                <View key={feature} style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: index === 0 ? 0 : 12 }}>
+                  <View
+                    style={{
+                      marginTop: 2,
+                      height: 32,
+                      width: 32,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: 999,
+                      backgroundColor: isDark ? '#1E2A44' : '#E8F0FF',
+                    }}>
                     <Ionicons
                       name={index === 0 ? 'briefcase-outline' : index === 1 ? 'document-text-outline' : 'notifications-outline'}
                       size={16}
                       color={isDark ? '#DCE7FF' : '#1D4ED8'}
                     />
                   </View>
-                  <Text className="ml-3 flex-1 text-[15px] leading-[21px] text-black/72 dark:text-white/78">
+                  <Text style={{ marginLeft: 12, flex: 1, fontSize: 15, lineHeight: 21, color: isDark ? 'rgba(255,255,255,0.82)' : 'rgba(0,0,0,0.72)' }}>
                     {feature}
                   </Text>
                 </View>
               ))}
 
-              <Text className="mt-6 text-[13px] font-semibold uppercase tracking-[0.3px] text-black/52 dark:text-white/54">
+              <Text style={{ marginTop: 20, fontSize: 13, fontWeight: '700', letterSpacing: 0.3, textTransform: 'uppercase', color: isDark ? 'rgba(255,255,255,0.60)' : 'rgba(0,0,0,0.52)' }}>
                 {t('paywall.choosePlan')}
               </Text>
 
+              <Text style={{ marginTop: 6, fontSize: 13, lineHeight: 18, color: isDark ? 'rgba(255,255,255,0.70)' : 'rgba(0,0,0,0.58)' }}>
+                {t('paywall.planHint')}
+              </Text>
+
               {loadingPackages ? (
-                <View className="mt-4 items-center rounded-[22px] border border-black/8 bg-black/4 px-4 py-5 dark:border-white/10 dark:bg-white/5">
+                <View style={{ marginTop: 16, alignItems: 'center', borderRadius: 22, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', paddingHorizontal: 16, paddingVertical: 20 }}>
                   <ActivityIndicator color={isDark ? '#FFFFFF' : '#1D4ED8'} />
                 </View>
               ) : packages.length > 0 ? (
-                <View className="mt-3 gap-3">
+                <View style={{ marginTop: 12, gap: 12 }}>
                   {packages.map((item) => {
                     const active = selectedPackageId === item.identifier;
                     const product = item.product;
@@ -265,7 +299,6 @@ export default function PaywallScreen() {
                         : item.packageType === PACKAGE_TYPE.ANNUAL
                           ? t('paywall.planYearly')
                           : product.title;
-
                     return (
                       <Pressable
                         key={item.identifier}
@@ -278,21 +311,21 @@ export default function PaywallScreen() {
                           paddingHorizontal: 16,
                           paddingVertical: 14,
                         }}>
-                        <View className="flex-row items-center justify-between">
-                          <View className="flex-1 pr-3">
-                            <Text className="text-[16px] font-extrabold text-black dark:text-white">
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <View style={{ flex: 1, paddingRight: 12 }}>
+                            <Text style={{ fontSize: 16, fontWeight: '800', color: isDark ? '#FFFFFF' : '#000000' }}>
                               {title}
                             </Text>
-                            <Text className="mt-1 text-[13px] leading-[18px] text-black/54 dark:text-white/60">
+                            <Text style={{ marginTop: 4, fontSize: 13, lineHeight: 18, color: isDark ? 'rgba(255,255,255,0.68)' : 'rgba(0,0,0,0.54)' }}>
                               {product.description || product.title}
                             </Text>
                           </View>
 
-                          <View className="items-end">
-                            <Text className="text-[18px] font-extrabold text-black dark:text-white">
+                          <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={{ fontSize: 18, fontWeight: '800', color: isDark ? '#FFFFFF' : '#000000' }}>
                               {product.priceString}
                             </Text>
-                            <Text className="mt-1 text-[12px] font-medium text-black/46 dark:text-white/54">
+                            <Text style={{ marginTop: 4, fontSize: 12, fontWeight: '500', color: isDark ? 'rgba(255,255,255,0.58)' : 'rgba(0,0,0,0.46)' }}>
                               {item.packageType === PACKAGE_TYPE.MONTHLY
                                 ? t('paywall.periodMonthly')
                                 : item.packageType === PACKAGE_TYPE.ANNUAL
@@ -306,32 +339,44 @@ export default function PaywallScreen() {
                   })}
                 </View>
               ) : (
-                <View className="mt-3 rounded-[22px] border border-black/8 bg-black/4 px-4 py-4 dark:border-white/10 dark:bg-white/5">
-                  <Text className="text-[14px] leading-[20px] text-black/62 dark:text-white/66">
+                <View style={{ marginTop: 12, borderRadius: 22, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', paddingHorizontal: 16, paddingVertical: 16 }}>
+                  <Text style={{ fontSize: 14, lineHeight: 20, color: isDark ? 'rgba(255,255,255,0.70)' : 'rgba(0,0,0,0.62)' }}>
                     {t('paywall.noPackages')}
                   </Text>
                 </View>
               )}
 
               {isExpoGo ? (
-                <Text className="mt-4 text-sm text-amber-600 dark:text-amber-300">
+                <Text style={{ marginTop: 16, fontSize: 14, color: isDark ? '#FACC15' : '#B45309' }}>
                   {t('paywall.mockBanner')}
                 </Text>
               ) : null}
 
-              {error ? <Text className="mt-4 text-sm text-red-500">{error}</Text> : null}
+              {error ? <Text style={{ marginTop: 16, fontSize: 14, color: '#EF4444' }}>{error}</Text> : null}
 
               <Pressable
                 onPress={() => {
                   void openPaywall();
                 }}
-                disabled={submitting || hasAccess || !enabled || !selectedPackage || loadingPackages}
-                className="mt-6 flex-row items-center justify-center rounded-[24px] bg-[#1D4ED8] px-4 py-4 disabled:opacity-60">
+                disabled={submitting || hasSubscription || !enabled || !selectedPackage || loadingPackages}
+                style={{
+                  marginTop: 20,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 24,
+                  backgroundColor: '#1D4ED8',
+                  paddingHorizontal: 16,
+                  paddingVertical: 15,
+                  opacity: submitting || hasSubscription || !enabled || !selectedPackage || loadingPackages ? 0.6 : 1,
+                }}>
                 {submitting ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
                   <>
-                    <Text className="text-base font-semibold text-white">{t('paywall.cta')}</Text>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#FFFFFF' }}>
+                      {selectedPackage?.packageType === PACKAGE_TYPE.MONTHLY ? t('paywall.ctaMonthly') : t('paywall.ctaYearly')}
+                    </Text>
                     <Ionicons name="arrow-forward" size={18} color="#FFFFFF" style={{ marginLeft: 8 }} />
                   </>
                 )}
@@ -342,23 +387,31 @@ export default function PaywallScreen() {
                   void onRestore();
                 }}
                 disabled={restoring}
-                className="mt-3 items-center rounded-[22px] border border-black/8 bg-black/5 px-4 py-3 dark:border-white/10 dark:bg-white/6">
+                style={{
+                  marginTop: 12,
+                  alignItems: 'center',
+                  borderRadius: 22,
+                  borderWidth: 1,
+                  borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)',
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+                  paddingHorizontal: 16,
+                  paddingVertical: 12,
+                }}>
                 {restoring ? (
                   <ActivityIndicator color={isDark ? '#FFFFFF' : '#1C2745'} />
                 ) : (
-                  <Text className="text-[15px] font-semibold text-black dark:text-white">
+                  <Text style={{ fontSize: 15, fontWeight: '600', color: isDark ? '#FFFFFF' : '#000000' }}>
                     {t('paywall.restore')}
                   </Text>
                 )}
               </Pressable>
 
-              <Pressable onPress={() => void onSignOut()} className="mt-4 items-center">
-                <Text className="text-[14px] font-medium text-black/48 dark:text-white/52">
+              <Pressable onPress={() => void onSignOut()} style={{ marginTop: 16, alignItems: 'center' }}>
+                <Text style={{ fontSize: 14, fontWeight: '500', color: isDark ? 'rgba(255,255,255,0.56)' : 'rgba(0,0,0,0.48)' }}>
                   {t('paywall.signOut')}
                 </Text>
               </Pressable>
             </ScrollView>
-          </View>
         </View>
       </View>
     </LinearGradient>

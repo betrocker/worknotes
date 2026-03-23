@@ -130,7 +130,7 @@ export default function EditExpenseScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={t('jobs.deleteExpense')}
                 onPress={onDelete}
-                className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
+                className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
                 <Ionicons name="trash" size={18} color="#FF3B30" />
               </Pressable>
             </View>

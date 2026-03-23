@@ -592,7 +592,6 @@ export default function TabOneScreen() {
             borderTopLeftRadius: 38,
             borderTopRightRadius: 38,
             borderWidth: 1,
-            borderTopWidth: isDark ? 0 : 1.5,
             borderColor: theme.sheetBorder,
             overflow: 'hidden',
             backgroundColor: theme.sheetBackground,
@@ -603,36 +602,6 @@ export default function TabOneScreen() {
             start={{ x: 0.5, y: 0 }}
             end={{ x: 0.5, y: 1 }}
             style={{ flex: 1 }}>
-        <LinearGradient
-          colors={theme.sheetHighlight}
-          locations={theme.sheetHighlightLocations}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 52,
-            borderTopLeftRadius: 38,
-            borderTopRightRadius: 38,
-            opacity: isDark ? 0 : 1,
-          }}
-        />
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: 1,
-            left: 16,
-            right: 16,
-            height: 2,
-            backgroundColor: theme.sheetTopLine,
-            borderRadius: 999,
-            opacity: isDark ? 0 : 1,
-          }}
-        />
         <ScrollView
           style={{ flex: 1 }}
           nestedScrollEnabled
