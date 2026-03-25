@@ -28,14 +28,20 @@ export default function PosloviScreen() {
   const userId = session?.user?.id ?? null;
 
   const [items, setItems] = useState<JobListItem[]>([]);
-  const [filter, setFilter] = useState<'all' | 'active' | 'done' | 'scheduled'>('all');
+  const [filter, setFilter] = useState<'all' | 'active' | 'done' | 'scheduled' | 'archived'>('all');
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const nextFilter = params.filter;
-    if (nextFilter === 'all' || nextFilter === 'active' || nextFilter === 'done' || nextFilter === 'scheduled') {
+    if (
+      nextFilter === 'all' ||
+      nextFilter === 'active' ||
+      nextFilter === 'done' ||
+      nextFilter === 'scheduled' ||
+      nextFilter === 'archived'
+    ) {
       setFilter(nextFilter);
     }
   }, [params.filter]);
@@ -46,17 +52,12 @@ export default function PosloviScreen() {
     [locale]
   );
 
-  const priceFormatter = useMemo(
-    () => new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }),
-    [locale]
-  );
-
   const load = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await listJobs(userId);
+      const data = await listJobs(userId, { includeArchived: true });
       setItems(data);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -74,6 +75,11 @@ export default function PosloviScreen() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const result = items.filter((job) => {
+      if (filter === 'archived') {
+        if (!job.archived_at) return false;
+      } else if (job.archived_at) {
+        return false;
+      }
       if (filter === 'active' && job.status !== 'in_progress') return false;
       if (filter === 'done' && job.status !== 'done') return false;
       if (filter === 'scheduled' && job.status !== 'scheduled') return false;
@@ -86,14 +92,6 @@ export default function PosloviScreen() {
     });
     return result;
   }, [items, query, filter]);
-
-  const counts = useMemo(() => {
-    const all = items.length;
-    const active = items.filter((job) => job.status === 'in_progress').length;
-    const done = items.filter((job) => job.status === 'done').length;
-    const scheduled = items.filter((job) => job.status === 'scheduled').length;
-    return { all, active, done, scheduled };
-  }, [items]);
 
   const formatDate = useCallback(
     (value: string | null) => {
@@ -202,6 +200,25 @@ export default function PosloviScreen() {
           <View className="flex-row items-center">
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel={t('jobs.filters.archived')}
+              onPress={() => setFilter('archived')}
+              className={[
+                'mr-3 h-10 w-10 items-center justify-center rounded-3xl border',
+                filter === 'archived'
+                  ? 'border-[#007AFF] bg-[#E8F0FF] dark:border-[#0A84FF] dark:bg-[#1E2A44]'
+                  : 'border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70',
+              ].join(' ')}>
+              <Ionicons name="archive-outline" size={18} color={filter === 'archived' ? '#007AFF' : colors.text} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('jobs.calendarTitle')}
+              onPress={() => router.push('/(tabs)/posao/kalendar')}
+              className="mr-3 h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
+              <Ionicons name="calendar-outline" size={18} color={colors.text} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
               accessibilityLabel={t('jobs.add')}
               onPress={onAdd}
               className="mr-3 h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
@@ -233,7 +250,7 @@ export default function PosloviScreen() {
               filter === 'all' ? 'bg-[#007AFF] dark:bg-[#0A84FF]' : 'bg-black/5 dark:bg-white/10',
             ].join(' ')}>
             <Text className={filter === 'all' ? 'text-sm font-semibold text-white' : 'text-sm text-black dark:text-white'}>
-              {t('jobs.filters.all')} {counts.all}
+              {t('jobs.filters.all')}
             </Text>
           </Pressable>
           <Pressable
@@ -244,7 +261,7 @@ export default function PosloviScreen() {
             ].join(' ')}>
             <Text
               className={filter === 'active' ? 'text-sm font-semibold text-white' : 'text-sm text-black dark:text-white'}>
-              {t('jobs.filters.active')} {counts.active}
+              {t('jobs.filters.active')}
             </Text>
           </Pressable>
           <Pressable
@@ -254,7 +271,7 @@ export default function PosloviScreen() {
               filter === 'done' ? 'bg-[#007AFF] dark:bg-[#0A84FF]' : 'bg-black/5 dark:bg-white/10',
             ].join(' ')}>
             <Text className={filter === 'done' ? 'text-sm font-semibold text-white' : 'text-sm text-black dark:text-white'}>
-              {t('jobs.filters.done')} {counts.done}
+              {t('jobs.filters.done')}
             </Text>
           </Pressable>
           <Pressable
@@ -267,7 +284,7 @@ export default function PosloviScreen() {
               className={
                 filter === 'scheduled' ? 'text-sm font-semibold text-white' : 'text-sm text-black dark:text-white'
               }>
-              {t('jobs.filters.scheduled')} {counts.scheduled}
+              {t('jobs.filters.scheduled')}
             </Text>
           </Pressable>
         </View>
@@ -288,33 +305,48 @@ export default function PosloviScreen() {
               contentContainerStyle={{ paddingBottom: 128 }}
               ItemSeparatorComponent={() => <View className="h-3" />}
               ListEmptyComponent={() => (
-                <MascotEmptyState title={t('jobs.emptyTitle')} body={t('jobs.emptyBody')} imageSize={164} compact />
+                <MascotEmptyState
+                  title={filter === 'archived' ? t('jobs.emptyArchivedTitle') : t('jobs.emptyTitle')}
+                  body={filter === 'archived' ? t('jobs.emptyArchivedBody') : t('jobs.emptyBody')}
+                  imageSize={164}
+                  compact
+                />
               )}
               renderItem={({ item }) => {
                 const price = formatPrice(item.price);
+                const isArchived = Boolean(item.archived_at);
                 return (
                   <Pressable
                     onPress={() => router.push({ pathname: '/(tabs)/posao/[id]' as any, params: { id: item.id } })}
                     className="overflow-hidden rounded-3xl border border-black/10 bg-white/80 px-4 py-4 dark:border-white/10 dark:bg-[#1C1C1E]/80">
                     <View className="flex-row items-center justify-between">
-                      <Text className="flex-1 pr-3 text-[18px] font-extrabold text-[#1C2745] dark:text-white" numberOfLines={1}>
-                        {item.title || t('jobs.untitled')}
-                      </Text>
+                      <View className="flex-1 flex-row items-center pr-3">
+                        {isArchived ? (
+                          <View className="mr-2 h-7 w-7 items-center justify-center rounded-full bg-[#F1F4FB] dark:bg-white/10">
+                            <Ionicons name="archive-outline" size={14} color={colors.secondaryText} />
+                          </View>
+                        ) : null}
+                        <Text className="flex-1 text-[18px] font-extrabold text-[#1C2745] dark:text-white" numberOfLines={1}>
+                          {item.title || t('jobs.untitled')}
+                        </Text>
+                      </View>
                       <Pressable
                         onPress={(event) => {
                           event.stopPropagation();
+                          if (isArchived) return;
                           void onToggleStatus(item);
                         }}
+                        disabled={isArchived}
                         className={[
                           'rounded-full px-3 py-1',
-                          getStatusChipStyle(item.status).bg,
+                          isArchived ? 'bg-[#F1F4FB] dark:bg-white/10' : getStatusChipStyle(item.status).bg,
                         ].join(' ')}>
                         <Text
                           className={[
                             'text-xs font-semibold',
-                            getStatusChipStyle(item.status).text,
+                            isArchived ? 'text-[#6C789A] dark:text-white/70' : getStatusChipStyle(item.status).text,
                           ].join(' ')}>
-                          {formatStatus(item.status)}
+                          {isArchived ? t('jobs.archived') : formatStatus(item.status)}
                         </Text>
                       </Pressable>
                     </View>

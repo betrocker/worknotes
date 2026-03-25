@@ -16,6 +16,7 @@ export type JobListItem = {
   status: string | null;
   scheduled_date: string | null;
   completed_at: string | null;
+  archived_at: string | null;
   client: { name: string | null } | null;
 };
 
@@ -58,14 +59,20 @@ async function resolveCompletedAt(
   return getLocalToday();
 }
 
-export async function listJobs(userId: string): Promise<JobListItem[]> {
-  const { data, error } = await supabase
+export async function listJobs(userId: string, options: ListJobsOptions = {}): Promise<JobListItem[]> {
+  let query = supabase
     .from('jobs')
-    .select('id,title,description,price,status,scheduled_date,completed_at,client:clients(name)')
+    .select('id,title,description,price,status,scheduled_date,completed_at,archived_at,client:clients(name)')
     .eq('user_id', userId)
     .order('scheduled_date', { ascending: true })
     .order('created_at', { ascending: false })
     .overrideTypes<JobListItem[], { merge: false }>();
+
+  if (!options.includeArchived) {
+    query = query.is('archived_at', null);
+  }
+
+  const { data, error } = await query;
 
   if (error) throw new Error(error.message);
   return data ?? [];
@@ -102,14 +109,19 @@ export type JobDetail = {
   status: string | null;
   scheduled_date: string | null;
   completed_at: string | null;
+  archived_at: string | null;
   client_id: string | null;
   client: { name: string | null; phone: string | null; address: string | null } | null;
+};
+
+type ListJobsOptions = {
+  includeArchived?: boolean;
 };
 
 export async function getJobById(userId: string, id: string): Promise<JobDetail | null> {
   const { data, error } = await supabase
     .from('jobs')
-    .select('id,title,description,price,status,scheduled_date,completed_at,client_id,client:clients(name,phone,address)')
+    .select('id,title,description,price,status,scheduled_date,completed_at,archived_at,client_id,client:clients(name,phone,address)')
     .eq('user_id', userId)
     .eq('id', id)
     .maybeSingle()
@@ -148,5 +160,24 @@ export async function updateJobStatus(userId: string, id: string, status: string
 
 export async function deleteJob(userId: string, id: string): Promise<void> {
   const { error } = await supabase.from('jobs').delete().eq('user_id', userId).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+export async function archiveJob(userId: string, id: string): Promise<void> {
+  const { error } = await supabase
+    .from('jobs')
+    .update({ archived_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .eq('id', id)
+    .is('archived_at', null);
+  if (error) throw new Error(error.message);
+}
+
+export async function unarchiveJob(userId: string, id: string): Promise<void> {
+  const { error } = await supabase
+    .from('jobs')
+    .update({ archived_at: null })
+    .eq('user_id', userId)
+    .eq('id', id);
   if (error) throw new Error(error.message);
 }

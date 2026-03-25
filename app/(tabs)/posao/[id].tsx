@@ -43,7 +43,7 @@ import {
   type JobInvoiceItemRow,
 } from '@/lib/job-invoice-items';
 import { deleteJobImage, listJobImages, type JobImageKind, type JobImageRow, uploadJobImage } from '@/lib/job-images';
-import { deleteJob, getJobById, type JobDetail } from '@/lib/jobs';
+import { archiveJob, deleteJob, getJobById, unarchiveJob, type JobDetail } from '@/lib/jobs';
 import { listExpenses, listPayments, type ExpenseRow, type PaymentRow } from '@/lib/job-finance';
 import {
   cancelJobReminder,
@@ -183,6 +183,45 @@ export default function JobDetailScreen() {
     ]);
   };
 
+  const onToggleArchive = useCallback(() => {
+    if (!userId || !id || !job) return;
+
+    if (job.archived_at) {
+      Alert.alert(t('jobs.unarchiveTitle'), t('jobs.unarchiveMessage'), [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('jobs.unarchive'),
+          onPress: async () => {
+            try {
+              setError(null);
+              await unarchiveJob(userId, id);
+              await load();
+            } catch (e: unknown) {
+              setError(e instanceof Error ? e.message : String(e));
+            }
+          },
+        },
+      ]);
+      return;
+    }
+
+    Alert.alert(t('jobs.archiveTitle'), t('jobs.archiveMessage'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('jobs.archive'),
+        onPress: async () => {
+          try {
+            setError(null);
+            await archiveJob(userId, id);
+            await load();
+          } catch (e: unknown) {
+            setError(e instanceof Error ? e.message : String(e));
+          }
+        },
+      },
+    ]);
+  }, [id, job, load, t, userId]);
+
   const formatDate = useCallback(
     (value: string | null) => {
       if (!value) return t('jobs.unscheduled');
@@ -198,6 +237,16 @@ export default function JobDetailScreen() {
       if (!value) return null;
       const parsed = parseDateInput(value);
       if (!parsed) return value;
+      return dateFormatter.format(parsed);
+    },
+    [dateFormatter]
+  );
+
+  const formatArchiveDate = useCallback(
+    (value: string | null) => {
+      if (!value) return null;
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) return value;
       return dateFormatter.format(parsed);
     },
     [dateFormatter]
@@ -1113,6 +1162,13 @@ export default function JobDetailScreen() {
               {job?.client?.name || t('jobs.noClient')}
             </Text>
           </View>
+          {job?.archived_at ? (
+            <View className="mt-3 self-start rounded-full bg-[#F1F4FB] px-3 py-1.5 dark:bg-white/10">
+              <Text className="text-[12px] font-bold text-[#6C789A] dark:text-white/80">
+                {t('jobs.archived')}
+              </Text>
+            </View>
+          ) : null}
         </View>
       </View>
 
@@ -1133,7 +1189,9 @@ export default function JobDetailScreen() {
               <View className="flex-row items-center justify-between">
                 <Text className="text-sm font-medium text-black/60 dark:text-white/70">{t('jobs.statusLabel')}</Text>
                 <View className="flex-row items-center">
-                  <Text className="text-base text-black dark:text-white">{formatStatus(job.status)}</Text>
+                  <Text className="text-base text-black dark:text-white">
+                    {job.archived_at ? t('jobs.archived') : formatStatus(job.status)}
+                  </Text>
                   {job.completed_at ? (
                     <>
                       <Text className="mx-2 text-sm text-black/30 dark:text-white/30">•</Text>
@@ -1160,6 +1218,38 @@ export default function JobDetailScreen() {
                 {formatPrice(job.price)}
                 </Text>
               </View>
+
+              {(job.archived_at || job.status === 'done') ? (
+                <>
+                  <View className="my-4 h-px bg-black/10 dark:bg-white/10" />
+                  <View className="flex-row items-center justify-between">
+                    <View className="mr-4 flex-1">
+                      <Text className="text-sm font-medium text-black/60 dark:text-white/70">
+                        {job.archived_at ? t('jobs.archivedLabel') : t('jobs.archiveReadyLabel')}
+                      </Text>
+                      <Text className="mt-1 text-base text-black dark:text-white">
+                        {job.archived_at
+                          ? formatArchiveDate(job.archived_at) || t('jobs.archived')
+                          : t('jobs.archiveReadyBody')}
+                      </Text>
+                    </View>
+                    <Pressable
+                      onPress={onToggleArchive}
+                      className={[
+                        'rounded-full px-4 py-2.5',
+                        job.archived_at ? 'bg-[#E8F0FF] dark:bg-[#1E2A44]' : 'bg-[#F1F4FB] dark:bg-white/10',
+                      ].join(' ')}>
+                      <Text
+                        className={[
+                          'text-[13px] font-bold',
+                          job.archived_at ? 'text-[#3C69D9] dark:text-[#8FB2FF]' : 'text-black dark:text-white',
+                        ].join(' ')}>
+                        {job.archived_at ? t('jobs.unarchive') : t('jobs.archive')}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </>
+              ) : null}
 
               {job.description ? (
                 <>

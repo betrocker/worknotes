@@ -7,6 +7,7 @@ type HomeJobRow = {
   status: string | null;
   scheduled_date: string | null;
   completed_at: string | null;
+  archived_at: string | null;
   created_at: string | null;
   price: number | null;
   client: { name: string | null } | null;
@@ -43,7 +44,7 @@ export async function getHomeFeed(userId: string): Promise<HomeFeed> {
   const { data, error } = await supabase
     .from('jobs')
     .select(
-      'id,title,status,scheduled_date,completed_at,created_at,price,client:clients(name),payments(id,amount,payment_date,note),expenses(id,amount,title,created_at)'
+      'id,title,status,scheduled_date,completed_at,archived_at,created_at,price,client:clients(name),payments(id,amount,payment_date,note),expenses(id,amount,title,created_at)'
     )
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
@@ -54,7 +55,7 @@ export async function getHomeFeed(userId: string): Promise<HomeFeed> {
   const jobs = data ?? [];
 
   const activeJobs = [...jobs]
-    .filter((job) => (job.status ?? '').toLowerCase() === 'in_progress')
+    .filter((job) => !job.archived_at && (job.status ?? '').toLowerCase() === 'in_progress')
     .sort((a, b) => {
       const aTs = parseDateInput(a.scheduled_date ?? a.created_at)?.getTime() ?? 0;
       const bTs = parseDateInput(b.scheduled_date ?? b.created_at)?.getTime() ?? 0;

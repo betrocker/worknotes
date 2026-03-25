@@ -14,6 +14,7 @@ import { Text, TextInput, View } from "react-native";
 import "../global.css";
 
 import { AuthProvider, useAuth } from "@/providers/AuthProvider";
+import { AppSplashScreen } from "@/components/AppSplashScreen";
 import { SplashVisibilityProvider } from "@/components/SplashVisibilityContext";
 import { useColorScheme } from "@/components/useColorScheme";
 import i18n from "@/lib/i18n";
@@ -129,6 +130,10 @@ function RootNavigationContent({ initialized }: { initialized: boolean }) {
   const splashVisible = !initialized || !themeReady;
 
   useEffect(() => {
+    if (splashVisible) {
+      void SplashScreen.hideAsync();
+      return;
+    }
     if (!splashVisible) {
       void SplashScreen.hideAsync();
     }
@@ -156,7 +161,9 @@ function RootNavigationContent({ initialized }: { initialized: boolean }) {
     }
   }
 
-  if (splashVisible) return null;
+  if (splashVisible) {
+    return <AppSplashScreen />;
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: "#1A4FE0" }}>

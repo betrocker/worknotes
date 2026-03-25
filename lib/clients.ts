@@ -28,6 +28,7 @@ type ClientDebtRow = {
   created_at: string | null;
   jobs: Array<{
     id: string;
+    title: string | null;
     price: number | null;
     status: string | null;
     scheduled_date: string | null;
@@ -49,6 +50,7 @@ export type ClientWithDebt = {
   debt: number;
   latest_active_job_id: string | null;
   latest_activity_at: string | null;
+  top_debt_job_title: string | null;
 };
 
 type ClientDetailRow = {
@@ -126,7 +128,7 @@ export function getOpenDebtJobsFromDetail(client: ClientDetail | null): ClientOp
 export async function listClientsWithDebt(userId: string): Promise<ClientWithDebt[]> {
   const { data, error } = await supabase
     .from('clients')
-    .select('id,name,phone,address,note,created_at,jobs:jobs(id,price,status,scheduled_date,completed_at,created_at,payments(amount))')
+    .select('id,name,phone,address,note,created_at,jobs:jobs(id,title,price,status,scheduled_date,completed_at,created_at,payments(amount))')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .overrideTypes<ClientDebtRow[], { merge: false }>();
@@ -150,6 +152,23 @@ export async function listClientsWithDebt(userId: string): Promise<ClientWithDeb
       const bDate = new Date(b.scheduled_date ?? b.created_at ?? 0).getTime();
       return bDate - aDate;
     })[0];
+    const topDebtJob = [...client.jobs]
+      .map((job) => {
+        const paid = (job.payments ?? []).reduce((sum, p) => sum + (p.amount ?? 0), 0);
+        return {
+          title: job.title,
+          debt: Math.max(0, (job.price ?? 0) - paid),
+          scheduled_date: job.scheduled_date,
+          created_at: job.created_at,
+        };
+      })
+      .filter((job) => job.debt > 0)
+      .sort((a, b) => {
+        if (b.debt !== a.debt) return b.debt - a.debt;
+        const aDate = new Date(a.scheduled_date ?? a.created_at ?? 0).getTime();
+        const bDate = new Date(b.scheduled_date ?? b.created_at ?? 0).getTime();
+        return bDate - aDate;
+      })[0];
     const latestActivityAt = [...client.jobs]
       .map((job) => job.completed_at ?? job.scheduled_date ?? job.created_at)
       .filter((value): value is string => Boolean(value))
@@ -166,6 +185,7 @@ export async function listClientsWithDebt(userId: string): Promise<ClientWithDeb
       debt,
       latest_active_job_id: latestActiveJob?.id ?? null,
       latest_activity_at: latestActivityAt,
+      top_debt_job_title: topDebtJob?.title ?? null,
     };
   });
 }

@@ -82,6 +82,7 @@ export type Database = {
           status: string | null;
           scheduled_date: string | null;
           completed_at: string | null;
+          archived_at: string | null;
           created_at: string | null;
         };
         Insert: {
@@ -94,6 +95,7 @@ export type Database = {
           status?: string | null;
           scheduled_date?: string | null;
           completed_at?: string | null;
+          archived_at?: string | null;
           created_at?: string | null;
         };
         Update: {
@@ -106,6 +108,7 @@ export type Database = {
           status?: string | null;
           scheduled_date?: string | null;
           completed_at?: string | null;
+          archived_at?: string | null;
           created_at?: string | null;
         };
         Relationships: [

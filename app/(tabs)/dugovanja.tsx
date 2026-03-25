@@ -15,8 +15,6 @@ import { usePlaceholderTextColor } from '@/components/usePlaceholderTextColor';
 import { listClientOpenDebtJobs, listClientsWithDebt, type ClientOpenDebtJob, type ClientWithDebt } from '@/lib/clients';
 import { useAuth } from '@/providers/AuthProvider';
 
-type DebtFilter = 'all' | 'activeJob' | 'noActiveJob';
-
 export default function DugovanjaScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
@@ -28,11 +26,11 @@ export default function DugovanjaScreen() {
 
   const [items, setItems] = useState<ClientWithDebt[]>([]);
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<DebtFilter>('all');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [contactClient, setContactClient] = useState<ClientWithDebt | null>(null);
   const [paymentPicker, setPaymentPicker] = useState<{ clientName: string | null; jobs: ClientOpenDebtJob[] } | null>(null);
+  const [debtJobsPicker, setDebtJobsPicker] = useState<{ clientName: string | null; jobs: ClientOpenDebtJob[] } | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -69,8 +67,6 @@ export default function DugovanjaScreen() {
     const q = query.trim().toLowerCase();
     return items
       .filter((item) => {
-        if (filter === 'activeJob' && !item.latest_active_job_id) return false;
-        if (filter === 'noActiveJob' && item.latest_active_job_id) return false;
         if (!q) return true;
         const haystack = [item.name ?? '', item.phone ?? '', item.address ?? '', item.note ?? '']
           .join(' ')
@@ -83,7 +79,7 @@ export default function DugovanjaScreen() {
         const bTime = new Date(b.latest_activity_at ?? b.created_at ?? 0).getTime();
         return bTime - aTime;
       });
-  }, [filter, items, query]);
+  }, [items, query]);
 
   const totalDebt = useMemo(() => items.reduce((sum, item) => sum + item.debt, 0), [items]);
   const activeDebtCount = items.length;
@@ -130,12 +126,29 @@ export default function DugovanjaScreen() {
   );
 
   const openDetails = useCallback(
-    (item: ClientWithDebt) => {
-      router.push(
-        item.latest_active_job_id ? `/(tabs)/posao/${item.latest_active_job_id}` : `/(tabs)/klijent/${item.id}`
-      );
+    async (item: ClientWithDebt) => {
+      if (!userId) return;
+
+      try {
+        const jobs = await listClientOpenDebtJobs(userId, item.id);
+        if (jobs.length === 0) {
+          if (item.latest_active_job_id) {
+            router.push(`/(tabs)/posao/${item.latest_active_job_id}`);
+            return;
+          }
+          router.push(`/(tabs)/klijent/${item.id}`);
+          return;
+        }
+        if (jobs.length === 1) {
+          router.push(`/(tabs)/posao/${jobs[0].id}`);
+          return;
+        }
+        setDebtJobsPicker({ clientName: item.name, jobs });
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     },
-    [router]
+    [router, userId]
   );
 
   const addPayment = useCallback(
@@ -179,11 +192,9 @@ export default function DugovanjaScreen() {
     setPaymentPicker(null);
   }, []);
 
-  const chips: Array<{ key: DebtFilter; label: string }> = [
-    { key: 'all', label: t('debts.filters.all') },
-    { key: 'activeJob', label: t('debts.filters.activeJob') },
-    { key: 'noActiveJob', label: t('debts.filters.noActiveJob') },
-  ];
+  const onCloseDebtJobsPicker = useCallback(() => {
+    setDebtJobsPicker(null);
+  }, []);
 
   return (
     <View className="flex-1 bg-[#F2F2F7] dark:bg-black">
@@ -220,30 +231,6 @@ export default function DugovanjaScreen() {
           <View style={{ position: 'absolute', right: 16, top: '50%', marginTop: -10 }}>
             <Ionicons name="search" size={20} color={colors.secondaryText} />
           </View>
-        </View>
-
-        <View className="mt-3 flex-row">
-          {chips.map((chip) => {
-            const selected = filter === chip.key;
-            return (
-              <Pressable
-                key={chip.key}
-                onPress={() => setFilter(chip.key)}
-                className={[
-                  'mr-2 rounded-3xl px-5 py-2',
-                  selected
-                    ? 'bg-[#2F7BF6]'
-                    : 'border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70',
-                ].join(' ')}>
-                <Text
-                  className={
-                    selected ? 'text-base font-semibold text-white' : 'text-base text-black/70 dark:text-white/80'
-                  }>
-                  {chip.label}
-                </Text>
-              </Pressable>
-            );
-          })}
         </View>
 
         {error ? <Text className="mt-3 text-sm text-red-600">{error}</Text> : null}
@@ -311,6 +298,16 @@ export default function DugovanjaScreen() {
                         </Text>
                       </View>
                     </View>
+
+                    {!item.latest_active_job_id ? (
+                      <View className="mt-2">
+                        {item.top_debt_job_title ? (
+                          <Text className="text-sm font-semibold text-black/75 dark:text-white/80" numberOfLines={1}>
+                            {t('debts.debtJobPreview')}: {item.top_debt_job_title}
+                          </Text>
+                        ) : null}
+                      </View>
+                    ) : null}
 
                     <View className="mt-3 flex-row">
                       <Pressable
@@ -413,6 +410,17 @@ export default function DugovanjaScreen() {
             pathname: '/(tabs)/posao/[id]/payment/new' as any,
             params: { id: jobId, returnTo: 'debts' },
           });
+        }}
+      />
+
+      <PaymentJobPickerModal
+        visible={Boolean(debtJobsPicker)}
+        clientName={debtJobsPicker?.clientName ?? null}
+        jobs={debtJobsPicker?.jobs ?? []}
+        onClose={onCloseDebtJobsPicker}
+        onSelect={(jobId) => {
+          onCloseDebtJobsPicker();
+          router.push(`/(tabs)/posao/${jobId}`);
         }}
       />
     </View>

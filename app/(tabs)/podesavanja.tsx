@@ -37,52 +37,6 @@ import { getUserDisplayName } from '@/lib/user';
 import { useAuth } from '@/providers/AuthProvider';
 import { useBilling } from '@/providers/BillingProvider';
 
-const DEFAULT_AVATAR = require('../../assets/avatars/avatar.png');
-const AVATAR_OPTIONS = [
-  { key: 'default', source: DEFAULT_AVATAR, labelKey: 'settings.avatarLabels.default' },
-  { key: 'avatar1', source: require('../../assets/avatars/avatar1.png'), labelKey: 'settings.avatarLabels.electrician' },
-  { key: 'avatar2', source: require('../../assets/avatars/avatar2.png'), labelKey: 'settings.avatarLabels.plumber' },
-  { key: 'avatar3', source: require('../../assets/avatars/avatar3.png'), labelKey: 'settings.avatarLabels.builder' },
-  { key: 'avatar4', source: require('../../assets/avatars/avatar4.png'), labelKey: 'settings.avatarLabels.hvac' },
-  { key: 'avatar5', source: require('../../assets/avatars/avatar5.png'), labelKey: 'settings.avatarLabels.service' },
-] as const;
-type AvatarKey = (typeof AVATAR_OPTIONS)[number]['key'];
-
-function AvatarPreview({
-  avatarKey,
-  size,
-  withBackground = false,
-  isDark = false,
-}: {
-  avatarKey: string | null;
-  size: number;
-  withBackground?: boolean;
-  isDark?: boolean;
-}) {
-  const avatar = AVATAR_OPTIONS.find((item) => item.key === avatarKey);
-  const image = (
-    <Image
-      source={avatar?.source ?? DEFAULT_AVATAR}
-      style={{ width: size, height: size, borderRadius: Math.round(size * 0.32) }}
-      resizeMode="cover"
-    />
-  );
-
-  if (!withBackground) return image;
-
-  return (
-    <View
-      className="items-center justify-center rounded-full"
-      style={{
-        width: size + 16,
-        height: size + 16,
-        backgroundColor: isDark ? '#263245' : '#DCE6F7',
-      }}>
-      {image}
-    </View>
-  );
-}
-
 export default function PodesavanjaScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const setColorScheme = useSetColorScheme();
@@ -102,8 +56,6 @@ export default function PodesavanjaScreen() {
   const [defaultReminder, setDefaultReminder] = useState<JobReminderOption>('same_day');
   const [username, setUsername] = useState('');
   const [usernameDraft, setUsernameDraft] = useState('');
-  const [avatarKey, setAvatarKey] = useState<AvatarKey>('default');
-  const [avatarKeyDraft, setAvatarKeyDraft] = useState<AvatarKey>('default');
   const [usernameModalOpen, setUsernameModalOpen] = useState(false);
   const [usernameSubmitting, setUsernameSubmitting] = useState(false);
   const [usernameMessage, setUsernameMessage] = useState<string | null>(null);
@@ -152,6 +104,17 @@ export default function PodesavanjaScreen() {
       null;
     return configVersion || '1.0.0';
   }, []);
+  const profileInitials = useMemo(() => {
+    const source = (username || displayName || email || '').trim();
+    if (!source) return 'T';
+    const parts = source
+      .split(/\s+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (parts.length === 0) return 'T';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase();
+  }, [displayName, email, username]);
   const infoItems = useMemo(
     () => [
       {
@@ -273,11 +236,6 @@ export default function PodesavanjaScreen() {
 
   useEffect(() => {
     const meta = user?.user_metadata as Record<string, unknown> | undefined;
-    const storedAvatarKey =
-      typeof meta?.avatar_key === 'string' &&
-      AVATAR_OPTIONS.some((item) => item.key === meta.avatar_key)
-        ? (meta.avatar_key as AvatarKey)
-        : 'default';
     const storedCompanyName = typeof meta?.company_name === 'string' ? meta.company_name : '';
     const storedCompanyPhone = typeof meta?.company_phone === 'string' ? meta.company_phone : '';
     const storedCompanyAddress = typeof meta?.company_address === 'string' ? meta.company_address : '';
@@ -288,8 +246,6 @@ export default function PodesavanjaScreen() {
       typeof meta?.company_account_number === 'string' ? meta.company_account_number : '';
     const storedCompanyLogoPath = typeof meta?.company_logo_path === 'string' ? meta.company_logo_path : null;
     const storedCompanyLogoUrl = typeof meta?.company_logo_url === 'string' ? meta.company_logo_url : null;
-    setAvatarKey(storedAvatarKey);
-    setAvatarKeyDraft(storedAvatarKey);
     setCompanyName(storedCompanyName);
     setCompanyNameDraft(storedCompanyName);
     setCompanyPhone(storedCompanyPhone);
@@ -311,7 +267,6 @@ export default function PodesavanjaScreen() {
 
   const openUsernameModal = () => {
     setUsernameDraft(username);
-    setAvatarKeyDraft(avatarKey);
     setUsernameError(null);
     setUsernameMessage(null);
     setUsernameModalOpen(true);
@@ -359,7 +314,6 @@ export default function PodesavanjaScreen() {
       data: {
         username: trimmed,
         name: trimmed,
-        avatar_key: avatarKeyDraft,
       },
     });
     setUsernameSubmitting(false);
@@ -370,7 +324,6 @@ export default function PodesavanjaScreen() {
     }
 
     setUsername(trimmed);
-    setAvatarKey(avatarKeyDraft);
     setUsernameMessage(t('settings.usernameSaved'));
     setUsernameModalOpen(false);
   };
@@ -533,11 +486,21 @@ export default function PodesavanjaScreen() {
       <View className="px-6 pt-3">
         <View className="overflow-hidden rounded-3xl border border-black/10 bg-white/80 p-5 dark:border-white/10 dark:bg-[#1C1C1E]/80">
           <View className="flex-row items-center">
-            <AvatarPreview avatarKey={avatarKey} size={64} withBackground isDark={isDark} />
+            <View
+              className="items-center justify-center rounded-full"
+              style={{
+                width: 80,
+                height: 80,
+                backgroundColor: isDark ? '#263245' : '#DCE6F7',
+              }}>
+              <Text style={{ fontSize: 28, fontWeight: '800', color: isDark ? '#8FB2FF' : '#2F68ED' }}>
+                {profileInitials}
+              </Text>
+            </View>
 
             <View className="ml-4 flex-1">
               <View className="flex-row items-center justify-between">
-                <Text className="mr-3 flex-1 text-[18px] font-extrabold text-[#1C2745] dark:text-white" numberOfLines={1}>
+                <Text className="mr-3 flex-1 text-[22px] font-extrabold text-[#1C2745] dark:text-white" numberOfLines={1}>
                   {displayName}
                 </Text>
                 <Pressable
@@ -956,69 +919,7 @@ export default function PodesavanjaScreen() {
               </Pressable>
             </View>
 
-            <View className="items-center">
-              <View className="mt-4">
-                <AvatarPreview
-                  avatarKey={avatarKeyDraft}
-                  size={110}
-                  withBackground
-                  isDark={isDark}
-                />
-              </View>
-              <Text className="mt-4 text-[16px] font-bold text-[#1C2745] dark:text-white">
-                {t('settings.chooseAvatar')}
-              </Text>
-            </View>
-
-            <View className="mt-3 flex-row flex-wrap justify-between">
-                {AVATAR_OPTIONS.map((avatar) => {
-                  const selected = avatarKeyDraft === avatar.key;
-                  return (
-                    <Pressable
-                      key={avatar.key}
-                      onPress={() => setAvatarKeyDraft(avatar.key)}
-                      className="mt-3 items-center"
-                      style={{
-                        width: '31%',
-                      }}>
-                      <View
-                        className="items-center justify-center rounded-full"
-                        style={{
-                          width: 84,
-                          height: 84,
-                          borderWidth: selected ? 3 : 1,
-                          borderColor: selected
-                            ? isDark
-                              ? '#8FB2FF'
-                              : '#2F68ED'
-                            : isDark
-                              ? 'rgba(255,255,255,0.08)'
-                              : 'rgba(28,39,69,0.08)',
-                          backgroundColor: isDark ? '#263245' : '#DCE6F7',
-                          overflow: 'visible',
-                        }}>
-                        <Image
-                          source={avatar.source}
-                          style={{ width: 78, height: 78 }}
-                          resizeMode="contain"
-                        />
-                      </View>
-                      <Text
-                        className="mt-2 text-center text-xs font-semibold"
-                        style={{ color: isDark ? 'rgba(255,255,255,0.86)' : '#1C2745' }}>
-                        {t(avatar.labelKey)}
-                      </Text>
-                      {selected ? (
-                        <View className="absolute right-2 top-2 h-6 w-6 items-center justify-center rounded-full bg-[#2F68ED]">
-                          <Ionicons name="checkmark" size={15} color="#FFFFFF" />
-                        </View>
-                      ) : null}
-                    </Pressable>
-                  );
-                })}
-            </View>
-
-            <Text className="mt-5 text-[16px] font-bold text-[#1C2745] dark:text-white">
+            <Text className="mt-4 text-[16px] font-bold text-[#1C2745] dark:text-white">
               {t('settings.changeUsername')}
             </Text>
             <AppTextInput

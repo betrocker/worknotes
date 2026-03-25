@@ -184,6 +184,29 @@ export default function ClientDetailScreen() {
     return groups;
   }, [filteredTimeline, monthFormatter]);
 
+  const openDebtJobs = useMemo(
+    () =>
+      [...(client?.jobs ?? [])]
+        .filter((job) => job.debt > 0)
+        .sort((a, b) => {
+          if (b.debt !== a.debt) return b.debt - a.debt;
+          const aTime = parseDateInput(a.scheduled_date ?? a.created_at)?.getTime() ?? 0;
+          const bTime = parseDateInput(b.scheduled_date ?? b.created_at)?.getTime() ?? 0;
+          return bTime - aTime;
+        }),
+    [client?.jobs]
+  );
+
+  const sortedJobs = useMemo(
+    () =>
+      [...(client?.jobs ?? [])].sort((a, b) => {
+        const aTime = parseDateInput(a.scheduled_date ?? a.created_at)?.getTime() ?? 0;
+        const bTime = parseDateInput(b.scheduled_date ?? b.created_at)?.getTime() ?? 0;
+        return bTime - aTime;
+      }),
+    [client?.jobs]
+  );
+
   const onBack = () => {
     router.replace({ pathname: '/(tabs)/klijenti' as any });
   };
@@ -212,29 +235,11 @@ export default function ClientDetailScreen() {
     router.push({ pathname: '/(tabs)/klijent/[id]/edit' as any, params: { id } });
   };
 
-  const clientMeta = useMemo(() => {
-    if (client?.phone && client?.address) {
-      return {
-        icon: 'call-outline' as const,
-        text: `${client.phone} • ${client.address}`,
-      };
-    }
-    if (client?.phone) {
-      return {
-        icon: 'call-outline' as const,
-        text: client.phone,
-      };
-    }
-    if (client?.address) {
-      return {
-        icon: 'location-outline' as const,
-        text: client.address,
-      };
-    }
-    return {
-      icon: 'person-outline' as const,
-      text: t('clients.contact'),
-    };
+  const clientMetaText = useMemo(() => {
+    if (client?.phone && client?.address) return `${client.phone} • ${client.address}`;
+    if (client?.phone) return client.phone;
+    if (client?.address) return client.address;
+    return t('clients.contact');
   }, [client?.address, client?.phone, t]);
 
   return (
@@ -275,13 +280,8 @@ export default function ClientDetailScreen() {
             {client?.name || '-'}
           </Text>
           <View className="mt-1 flex-row items-center">
-            <Ionicons
-              name={clientMeta.icon}
-              size={16}
-              color={colors.secondaryText}
-            />
-            <Text className="ml-2 text-base text-black/60 dark:text-white/70">
-              {clientMeta.text}
+            <Text className="text-base text-black/60 dark:text-white/70">
+              {clientMetaText}
             </Text>
           </View>
         </View>
@@ -331,6 +331,107 @@ export default function ClientDetailScreen() {
                 <Text className="mt-2 text-base text-black/80 dark:text-white/85">{client.note.trim()}</Text>
               </View>
             ) : null}
+
+            {client.total_debt > 0 ? (
+              <>
+                <Text className="mt-5 text-[18px] font-extrabold text-[#1C2745] dark:text-white">
+                  {t('clients.debtsHistory')}
+                </Text>
+                <View className="mt-2 overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
+                  {openDebtJobs.length === 0 ? (
+                    <MascotEmptyState title={t('clients.noOpenDebtTitle')} body={t('clients.noOpenDebtBody')} compact />
+                  ) : (
+                    openDebtJobs.map((job, index) => (
+                      <Pressable
+                        key={job.id}
+                        onPress={() => router.push({ pathname: '/(tabs)/posao/[id]' as any, params: { id: job.id } })}
+                        className={index > 0 ? 'border-t border-black/10 pt-4 dark:border-white/10' : ''}>
+                        <View className={index > 0 ? 'mt-4' : ''}>
+                          <View className="flex-row items-start justify-between">
+                            <View className="mr-3 flex-1">
+                              <Text className="text-[16px] font-extrabold text-[#1C2745] dark:text-white" numberOfLines={1}>
+                                {job.title || t('jobs.untitled')}
+                              </Text>
+                              <View className="mt-1 flex-row items-center">
+                                <Ionicons name="calendar-outline" size={14} color={colors.secondaryText} />
+                                <Text className="ml-2 text-sm text-black/60 dark:text-white/70">
+                                  {formatDate(job.scheduled_date)}
+                                </Text>
+                                <Text className="mx-2 text-sm text-black/30 dark:text-white/30">•</Text>
+                                <Text className="text-sm text-black/60 dark:text-white/70">
+                                  {job.status === 'done' ? t('jobs.statuses.done') : job.status === 'in_progress' ? t('jobs.statuses.inProgress') : t('jobs.statuses.scheduled')}
+                                </Text>
+                              </View>
+                            </View>
+                            <View className="items-end">
+                              <Text className="text-[16px] font-extrabold text-[#C84D4D]">
+                                {moneyFormatter.format(job.debt)}
+                              </Text>
+                              <Text className="mt-1 text-xs text-black/45 dark:text-white/55">
+                                {t('clients.debt')}
+                              </Text>
+                            </View>
+                          </View>
+
+                          <View className="mt-3 flex-row items-center justify-between">
+                            <Text className="text-sm text-black/55 dark:text-white/65">
+                              {t('jobs.priceLabel')}: <Text className="font-semibold text-black dark:text-white">{moneyFormatter.format(job.price ?? 0)}</Text>
+                            </Text>
+                            <Text className="text-sm text-black/55 dark:text-white/65">
+                              {t('jobs.totalPaid')}: <Text className="font-semibold text-black dark:text-white">{moneyFormatter.format(job.paid)}</Text>
+                            </Text>
+                          </View>
+                        </View>
+                      </Pressable>
+                    ))
+                  )}
+                </View>
+              </>
+            ) : null}
+
+            <Text className="mt-5 text-[18px] font-extrabold text-[#1C2745] dark:text-white">
+              {t('clients.jobsCount')}
+            </Text>
+            <View className="mt-2 overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
+              {sortedJobs.length === 0 ? (
+                <MascotEmptyState title={t('clients.noActiveJobs')} compact />
+              ) : (
+                sortedJobs.map((job, index) => (
+                  <Pressable
+                    key={job.id}
+                    onPress={() => router.push({ pathname: '/(tabs)/posao/[id]' as any, params: { id: job.id } })}
+                    className={index > 0 ? 'border-t border-black/10 pt-4 dark:border-white/10' : ''}>
+                    <View className={index > 0 ? 'mt-4' : ''}>
+                      <View className="flex-row items-start justify-between">
+                        <View className="mr-3 flex-1">
+                          <Text className="text-[16px] font-extrabold text-[#1C2745] dark:text-white" numberOfLines={1}>
+                            {job.title || t('jobs.untitled')}
+                          </Text>
+                          <View className="mt-1 flex-row items-center">
+                            <Text className="text-sm text-black/60 dark:text-white/70">
+                              {formatDate(job.scheduled_date)}
+                            </Text>
+                            <Text className="mx-2 text-sm text-black/30 dark:text-white/30">•</Text>
+                            <Text className="text-sm text-black/60 dark:text-white/70">
+                              {job.status === 'done'
+                                ? t('jobs.statuses.done')
+                                : job.status === 'in_progress'
+                                  ? t('jobs.statuses.inProgress')
+                                  : t('jobs.statuses.scheduled')}
+                            </Text>
+                          </View>
+                        </View>
+                        <View className="items-end">
+                          <Text className="text-[15px] font-semibold text-black dark:text-white">
+                            {moneyFormatter.format(job.price ?? 0)}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  </Pressable>
+                ))
+              )}
+            </View>
 
             <Text className="mt-5 text-[18px] font-extrabold text-[#1C2745] dark:text-white">{t('clients.timelineTitle')}</Text>
             <View className="mt-2 flex-row">

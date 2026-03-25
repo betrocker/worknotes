@@ -33,7 +33,7 @@ type ClientOption = { id: string; name: string | null };
 
 export default function NewJobScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ clientId?: string }>();
+  const params = useLocalSearchParams<{ clientId?: string; scheduledDate?: string }>();
   const { t, i18n } = useTranslation();
   const { session } = useAuth();
   const colorScheme = useColorScheme() ?? 'light';
@@ -41,6 +41,7 @@ export default function NewJobScreen() {
 
   const userId = session?.user?.id ?? null;
   const preselectedClientId = typeof params.clientId === 'string' ? params.clientId : null;
+  const prefilledScheduledDate = typeof params.scheduledDate === 'string' ? params.scheduledDate : null;
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -199,7 +200,13 @@ export default function NewJobScreen() {
     const dd = String(date.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
   }, []);
-  const [scheduledDate, setScheduledDate] = useState(() => formatDate(new Date()));
+  const [scheduledDate, setScheduledDate] = useState(() => {
+    if (prefilledScheduledDate) {
+      const parsed = parseDateInput(prefilledScheduledDate);
+      if (parsed) return prefilledScheduledDate;
+    }
+    return formatDate(new Date());
+  });
 
   const locale = i18n.language === 'sr' ? 'sr-Latn-RS' : i18n.language;
   const dateFormatter = useMemo(
