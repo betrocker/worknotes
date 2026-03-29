@@ -192,23 +192,23 @@ export default function JobsCalendarScreen() {
               onPress={onScheduleForSelectedDay}
               disabled={!canScheduleSelectedDate}
               className="h-10 items-center justify-center rounded-3xl bg-[#007AFF] px-5 dark:bg-[#0A84FF]">
-              <Text className={canScheduleSelectedDate ? 'text-base font-semibold text-white' : 'text-base font-semibold text-white/60'}>
+              <Text className={canScheduleSelectedDate ? 'text-app-body font-semibold text-white' : 'text-app-body font-semibold text-white/60'}>
                 {t('jobs.calendarScheduleCta')}
               </Text>
             </Pressable>
           </View>
 
-          <Text className="mt-4 font-bold text-[34px] leading-[40px] tracking-tight text-black dark:text-white">
+          <Text className="mt-4 font-bold text-app-display tracking-tight text-black dark:text-white">
             {t('jobs.calendarTitle')}
           </Text>
-          <Text className="mt-1 text-base text-black/60 dark:text-white/70">
+          <Text className="mt-1 text-app-subtitle text-black/60 dark:text-white/70">
             {t('jobs.calendarSubtitle')}
           </Text>
         </View>
       </View>
 
       <View className="px-6 pt-4">
-        {error ? <Text className="mb-3 text-sm text-red-600">{error}</Text> : null}
+        {error ? <Text className="mb-3 text-app-meta text-red-600">{error}</Text> : null}
 
         <View className="overflow-hidden rounded-3xl border border-black/10 bg-white/90 px-4 pt-4 pb-2 dark:border-white/10 dark:bg-[#1C1C1E]/90">
           <View className="flex-row items-center justify-between">
@@ -217,7 +217,7 @@ export default function JobsCalendarScreen() {
               className="h-10 w-10 items-center justify-center rounded-full bg-black/5 dark:bg-white/10">
               <Ionicons name="chevron-back" size={18} color={colors.text} />
             </Pressable>
-            <Text className="text-[18px] font-extrabold capitalize text-[#1C2745] dark:text-white">
+            <Text className="text-app-section font-extrabold capitalize text-[#1C2745] dark:text-white">
               {monthLabel}
             </Text>
             <Pressable
@@ -230,7 +230,7 @@ export default function JobsCalendarScreen() {
           <View className="mt-4 flex-row justify-between">
             {weekdayLabels.map((label) => (
               <View key={label} className="w-[13.5%] items-center">
-                <Text className="text-xs font-semibold uppercase text-black/45 dark:text-white/50">{label}</Text>
+                <Text className="text-app-meta font-semibold uppercase text-black/45 dark:text-white/50">{label}</Text>
               </View>
             ))}
           </View>
@@ -288,7 +288,7 @@ export default function JobsCalendarScreen() {
           </View>
         </View>
 
-        <Text className="mt-5 text-[18px] font-extrabold text-[#1C2745] dark:text-white">
+        <Text className="mt-5 text-app-section font-extrabold text-[#1C2745] dark:text-white">
           {t('jobs.calendarDaySection', { date: selectedDateLabel })}
         </Text>
         <View className="mt-2 overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
@@ -297,7 +297,9 @@ export default function JobsCalendarScreen() {
               <ActivityIndicator />
             </View>
           ) : selectedDayJobs.length === 0 ? (
-            <MascotEmptyState title={t('jobs.calendarEmptyDayTitle')} body={t('jobs.calendarEmptyDayBody')} compact />
+            <View className="py-4">
+              <MascotEmptyState title={t('jobs.calendarEmptyDayTitle')} body={t('jobs.calendarEmptyDayBody')} compact imageSize={112} />
+            </View>
           ) : (
             selectedDayJobs.map((job, index) => {
               const statusLabel =
@@ -315,16 +317,16 @@ export default function JobsCalendarScreen() {
                   <View className={index > 0 ? 'mt-4' : ''}>
                     <View className="flex-row items-start justify-between">
                       <View className="mr-3 flex-1">
-                        <Text className="text-[16px] font-extrabold text-[#1C2745] dark:text-white" numberOfLines={1}>
+                        <Text className="text-app-row font-extrabold text-[#1C2745] dark:text-white" numberOfLines={1}>
                           {job.title || t('jobs.untitled')}
                         </Text>
                         <View className="mt-1 flex-row items-center">
                           <Ionicons name="person-outline" size={14} color={colors.secondaryText} />
-                          <Text className="ml-2 text-sm text-black/60 dark:text-white/70">
+                          <Text className="ml-2 text-app-meta-lg text-black/60 dark:text-white/70">
                             {job.client?.name || t('jobs.noClient')}
                           </Text>
-                          <Text className="mx-2 text-sm text-black/30 dark:text-white/30">•</Text>
-                          <Text className="text-sm text-black/60 dark:text-white/70">{statusLabel}</Text>
+                          <Text className="mx-2 text-app-meta-lg text-black/30 dark:text-white/30">•</Text>
+                          <Text className="text-app-meta-lg text-black/60 dark:text-white/70">{statusLabel}</Text>
                         </View>
                       </View>
                       <Ionicons name="chevron-forward" size={16} color={colors.secondaryText} />
@@ -344,7 +346,7 @@ export default function JobsCalendarScreen() {
             ].join(' ')}>
             <Ionicons name="add-circle-outline" size={18} color={canScheduleSelectedDate ? '#3C69D9' : colors.secondaryText} />
             <Text
-              className="ml-2 text-sm font-semibold"
+              className="ml-2 text-app-meta-lg font-semibold"
               style={{ color: canScheduleSelectedDate ? (colorScheme === 'dark' ? '#8FB2FF' : '#3C69D9') : colors.secondaryText }}>
               {t('jobs.calendarScheduleForDate', { date: selectedDateLabel })}
             </Text>

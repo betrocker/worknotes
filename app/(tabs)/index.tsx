@@ -6,6 +6,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { PaymentJobPickerModal } from '@/components/PaymentJobPickerModal';
+import { MascotEmptyState } from '@/components/MascotEmptyState';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { listClientOpenDebtJobs, listClientsWithDebt, type ClientOpenDebtJob, type ClientWithDebt } from '@/lib/clients';
@@ -65,6 +66,7 @@ export default function TabOneScreen() {
   }, []);
   const upcomingCutoff = useMemo(() => {
     const date = new Date();
+    date.setHours(0, 0, 0, 0);
     date.setDate(date.getDate() + 7);
     return date;
   }, []);
@@ -98,54 +100,18 @@ export default function TabOneScreen() {
   );
   const renderHomeEmptyState = useCallback(
     (title: string, body?: string, actionLabel?: string, onAction?: () => void) => (
-      <View
-        style={{
-          borderRadius: 20,
-          borderWidth: 1,
-          borderColor: colors.separator,
-          backgroundColor: colors.background,
-          paddingHorizontal: 16,
-          paddingVertical: 16,
-        }}>
-        <Text
-          style={{
-            color: colors.text,
-            fontSize: 15,
-            fontWeight: '800',
-            textAlign: 'center',
-          }}>
-          {title}
-        </Text>
-        {body ? (
-          <Text
-            style={{
-              color: colors.secondaryText,
-              marginTop: 6,
-              fontSize: 13,
-              lineHeight: 18,
-              textAlign: 'center',
-            }}>
-            {body}
-          </Text>
-        ) : null}
-        {actionLabel && onAction ? (
-          <View style={{ alignItems: 'center' }}>
-            <Pressable
-              onPress={onAction}
-              style={{
-                marginTop: 14,
-                borderRadius: 999,
-                backgroundColor: isDark ? '#1E2A44' : '#E8F0FF',
-                paddingHorizontal: 16,
-                paddingVertical: 10,
-              }}>
-              <Text style={{ color: '#3C69D9', fontSize: 13, fontWeight: '700' }}>{actionLabel}</Text>
-            </Pressable>
-          </View>
-        ) : null}
-      </View>
+      <MascotEmptyState
+        title={title}
+        body={body}
+        actionLabel={actionLabel}
+        onAction={onAction}
+        compact
+        stacked
+        centeredAction
+        imageSize={112}
+      />
     ),
-    [colors.background, colors.secondaryText, colors.separator, colors.text, isDark]
+    []
   );
   const onClosePaymentPicker = useCallback(() => {
     setPaymentPicker(null);
@@ -189,10 +155,29 @@ export default function TabOneScreen() {
       if (!parsed) return '';
       return parsed.toLocaleDateString(i18n.language === 'sr' ? 'sr-Latn-RS' : i18n.language, {
         day: '2-digit',
-        month: 'short',
+        month: '2-digit',
+        year: 'numeric',
       });
     },
     [i18n.language]
+  );
+  const getDebtSummaryLine = useCallback(
+    (client: ClientWithDebt) => {
+      if (client.debt_jobs_count > 1) {
+        const count = client.debt_jobs_count;
+        if (i18n.language === 'sr') {
+          const mod10 = count % 10;
+          const mod100 = count % 100;
+          const form = mod10 === 1 && mod100 !== 11 ? 'one' : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? 'few' : 'other';
+          return `${count} ${t(`debts.debtJobsForms.${form}`)}`;
+        }
+        return `${count} ${count === 1 ? t('debts.debtJobsForms.one') : t('debts.debtJobsForms.other')}`;
+      }
+      if (client.top_debt_job_title) return client.top_debt_job_title;
+      if (client.active_jobs_count > 0) return t('debts.activeJobAvailable');
+      return t('home.jobsCountShort', { count: client.jobs_count });
+    },
+    [i18n.language, t]
   );
   const getActivityMeta = useCallback(
     (type: HomeActivityItem['type']) => {
@@ -252,7 +237,10 @@ export default function TabOneScreen() {
               if ((job.status ?? '').toLowerCase() !== 'scheduled') return false;
               const scheduled = parseDateInput(job.scheduled_date);
               if (!scheduled) return false;
-              return scheduled > new Date() && scheduled <= upcomingCutoff;
+              scheduled.setHours(0, 0, 0, 0);
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              return scheduled >= today && scheduled <= upcomingCutoff;
             }).length
           );
         } catch {
@@ -278,7 +266,7 @@ export default function TabOneScreen() {
     backgroundColor: colors.surface,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: colors.separator,
+    borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(60,60,67,0.12)',
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 10,
@@ -287,35 +275,38 @@ export default function TabOneScreen() {
   const metricCards = [
     {
       key: 'clients',
-      label: t('tabs.clients'),
+      label: t('home.totalClients'),
       value: clientsCount ?? '—',
       icon: 'person-outline' as const,
-      bg: isDark ? '#1C2A43' : '#EAF1FF',
-      iconBadgeBg: isDark ? '#2A4168' : '#D7E8FF',
+      bg: isDark ? '#1A2333' : '#F4F8FF',
+      iconBadgeBg: isDark ? '#24354F' : '#E3EDFF',
       iconColor: '#4A7BE7',
       valueColor: isDark ? '#A8C0FF' : '#375A9E',
+      hint: t('home.totalClientsHint'),
       onPress: () => router.push('/(tabs)/klijenti'),
     },
     {
       key: 'jobs',
-      label: t('tabs.jobs'),
+      label: t('home.totalJobs'),
       value: jobsCount ?? '—',
       icon: 'clipboard-outline' as const,
-      bg: isDark ? '#35251D' : '#FFF0E3',
-      iconBadgeBg: isDark ? '#4A3127' : '#FFDABD',
+      bg: isDark ? '#2D241F' : '#FFF7F1',
+      iconBadgeBg: isDark ? '#433028' : '#FFE6D1',
       iconColor: '#E58A48',
       valueColor: isDark ? '#FFC196' : '#B66023',
+      hint: t('home.totalJobsHint'),
       onPress: () => router.push('/(tabs)/poslovi'),
     },
     {
       key: 'debts',
-      label: t('tabs.debts'),
+      label: t('home.totalDebts'),
       value: totalDebtLabel,
       icon: 'cash-outline' as const,
-      bg: isDark ? '#382E1B' : '#FFF4DB',
-      iconBadgeBg: isDark ? '#4D3E1F' : '#FFE7A9',
+      bg: isDark ? '#302A1D' : '#FFF9EC',
+      iconBadgeBg: isDark ? '#463A22' : '#FFF0C6',
       iconColor: '#C08A16',
       valueColor: isDark ? '#FFD16A' : '#8C6613',
+      hint: t('home.totalDebtsHint'),
       onPress: () => router.push('/(tabs)/dugovanja'),
     },
     {
@@ -323,10 +314,11 @@ export default function TabOneScreen() {
       label: t('home.upcomingScheduled'),
       value: upcomingJobsCount ?? '—',
       icon: 'calendar-outline' as const,
-      bg: isDark ? '#1E322E' : '#E8F6F2',
-      iconBadgeBg: isDark ? '#29473F' : '#CDECE2',
+      bg: isDark ? '#1C2C2A' : '#F2FBF8',
+      iconBadgeBg: isDark ? '#28413A' : '#DBF2EA',
       iconColor: '#2B8F76',
       valueColor: isDark ? '#8EE0C4' : '#236B59',
+      hint: t('home.upcomingScheduledHint'),
       onPress: () => router.push({ pathname: '/(tabs)/poslovi', params: { filter: 'scheduled' } }),
     },
   ];
@@ -387,47 +379,52 @@ export default function TabOneScreen() {
 
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 140 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 168 }}
         showsVerticalScrollIndicator={false}>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-          {metricCards.map((card) => (
+        <View style={[sectionCardStyle, { paddingBottom: 6 }]}>
+          <View style={{ marginBottom: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '800' }}>{t('home.summaryTitle')}</Text>
+          </View>
+          {metricCards.map((card, index) => (
             <Pressable
               key={card.key}
               onPress={card.onPress}
               style={{
-                width: '48.5%',
-                marginBottom: 10,
-                borderRadius: 22,
-                borderWidth: 1,
-                borderColor: colors.separator,
-                backgroundColor: card.bg,
-                padding: 14,
-                shadowColor: '#000000',
-                shadowOpacity: isDark ? 0.24 : 0.12,
-                shadowRadius: 8,
-                shadowOffset: { width: 0, height: 5 },
-                elevation: isDark ? 8 : 5,
+                paddingVertical: 12,
               }}>
-              <View
-                style={{
-                  height: 38,
-                  width: 38,
-                  borderRadius: 14,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: card.iconBadgeBg,
-                }}>
-                <Ionicons name={card.icon} size={18} color={card.iconColor} />
+              <View>
+                {index > 0 ? (
+                  <View
+                    style={{
+                      position: 'absolute',
+                      top: -12,
+                      left: 0,
+                      right: 0,
+                      height: 1,
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(60,60,67,0.08)',
+                    }}
+                  />
+                ) : null}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <View style={{ marginRight: 12, flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons name={card.icon} size={17} color={card.iconColor} />
+                    <View style={{ marginLeft: 10, flex: 1 }}>
+                      <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>{card.label}</Text>
+                      <Text style={{ marginTop: 4, color: colors.secondaryText, fontSize: 13 }} numberOfLines={1}>
+                        {card.hint}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={{ marginLeft: 12, color: card.valueColor, fontSize: 17, fontWeight: '800' }}>
+                    {card.value}
+                  </Text>
+                </View>
               </View>
-              <Text style={{ marginTop: 12, color: colors.text, fontSize: 14, fontWeight: '800' }}>{card.label}</Text>
-              <Text style={{ marginTop: 4, color: card.valueColor, fontSize: 21, fontWeight: '800', lineHeight: 24 }}>
-                {card.value}
-              </Text>
             </Pressable>
           ))}
         </View>
 
-        <View style={[sectionCardStyle, { marginTop: 6 }]}> 
+        <View style={[sectionCardStyle, { marginTop: 12 }]}> 
           <View style={{ marginBottom: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <Text style={{ color: colors.text, fontSize: 18, fontWeight: '800' }}>{t('home.todayJobs')}</Text>
             <Pressable onPress={() => router.push('/(tabs)/poslovi')}>
@@ -445,66 +442,41 @@ export default function TabOneScreen() {
                   style={{
                     paddingVertical: 12,
                     borderTopWidth: index === 0 ? 0 : 1,
-                    borderTopColor: colors.separator,
+                    borderTopColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(60,60,67,0.08)',
                   }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                    <View style={{ marginRight: 12, flex: 1, flexDirection: 'row' }}>
-                      <View
-                        style={{
-                          marginRight: 12,
-                          height: 44,
-                          width: 44,
-                          borderRadius: 14,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          backgroundColor: isDark ? '#223252' : '#EAF1FF',
-                        }}>
-                        <Ionicons name="briefcase-outline" size={18} color="#3C69D9" />
-                      </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <View style={{ marginRight: 12, flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+                      <Ionicons style={{ marginRight: 12 }} name="calendar-outline" size={17} color={colors.secondaryText} />
                       <View style={{ flex: 1 }}>
-                        <Text style={{ color: colors.text, fontSize: 15, fontWeight: '700' }}>{job.title || t('jobs.untitled')}</Text>
+                        <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>{job.title || t('jobs.untitled')}</Text>
                         <View style={{ marginTop: 4, flexDirection: 'row', alignItems: 'center' }}>
-                          <Ionicons name="person-outline" size={14} color={colors.secondaryText} />
-                          <Text style={{ marginLeft: 6, color: colors.secondaryText, fontSize: 13 }}>
+                          <Text style={{ color: colors.secondaryText, fontSize: 13 }}>
                             {job.client?.name || t('jobs.noClient')}
                           </Text>
-                        </View>
-                        <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center' }}>
-                          <View
-                            style={{
-                              marginRight: 8,
-                              flexDirection: 'row',
-                              alignItems: 'center',
-                              borderRadius: 999,
-                              backgroundColor: isDark ? '#2C2C2E' : '#F1F4FB',
-                              paddingHorizontal: 10,
-                              paddingVertical: 4,
-                            }}>
-                            <Ionicons name="calendar-outline" size={12} color={colors.secondaryText} />
-                            <Text style={{ marginLeft: 4, color: colors.secondaryText, fontSize: 11, fontWeight: '600' }}>
-                              {formatJobDate(job.scheduled_date)}
-                            </Text>
-                          </View>
-                          <Text style={{ color: colors.text, fontSize: 15, fontWeight: '800' }}>{formatCurrency(job.price)}</Text>
+                          <Text style={{ marginHorizontal: 6, color: colors.secondaryText, fontSize: 13 }}>•</Text>
+                          <Text style={{ color: colors.secondaryText, fontSize: 13 }}>
+                            {formatJobDate(job.scheduled_date)}
+                          </Text>
+                          <Text style={{ marginHorizontal: 6, color: colors.secondaryText, fontSize: 13 }}>•</Text>
+                          <Text style={{ color: colors.secondaryText, fontSize: 13, fontWeight: '600' }}>
+                            {formatCurrency(job.price)}
+                          </Text>
                         </View>
                       </View>
                     </View>
 
                     <View style={{ alignItems: 'flex-end' }}>
-                      <View style={{ borderRadius: 999, backgroundColor: statusColors.bg, paddingHorizontal: 12, paddingVertical: 5 }}>
-                        <Text style={{ color: statusColors.text, fontSize: 11, fontWeight: '700' }}>{getStatusLabel(job.status)}</Text>
-                      </View>
                       <View
                         style={{
-                          marginTop: 20,
-                          height: 32,
-                          width: 32,
                           borderRadius: 999,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          backgroundColor: isDark ? '#2C2C2E' : '#F1F4FB',
+                          borderWidth: 1,
+                          borderColor: statusColors.text,
+                          paddingHorizontal: 12,
+                          paddingVertical: 5,
                         }}>
-                        <Ionicons name="chevron-forward" size={16} color={colors.secondaryText} />
+                        <Text style={{ color: statusColors.text, fontSize: 11, fontWeight: '700' }}>
+                          {getStatusLabel(job.status)}
+                        </Text>
                       </View>
                     </View>
                   </View>
@@ -528,48 +500,22 @@ export default function TabOneScreen() {
 
           {urgentDebtClients.length ? (
             urgentDebtClients.map((client, index) => (
-              <Pressable
+              <View
                 key={client.id}
-                onPress={() =>
-                  router.push(
-                    client.latest_active_job_id ? `/(tabs)/posao/${client.latest_active_job_id}` : `/(tabs)/klijent/${client.id}`
-                  )
-                }
                 style={{
                   paddingVertical: 12,
                   borderTopWidth: index === 0 ? 0 : 1,
-                  borderTopColor: colors.separator,
+                  borderTopColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(60,60,67,0.08)',
                 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <View style={{ marginRight: 12, flex: 1, flexDirection: 'row' }}>
-                    <View
-                      style={{
-                        marginRight: 12,
-                        height: 44,
-                        width: 44,
-                        borderRadius: 14,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: isDark ? '#223252' : '#F3F6FF',
-                      }}>
-                      <Ionicons name="cash-outline" size={18} color="#5C6AC4" />
-                    </View>
+                  <View style={{ marginRight: 12, flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons style={{ marginRight: 12 }} name="cash-outline" size={17} color="#C84D4D" />
                     <View style={{ flex: 1 }}>
-                      <Text style={{ color: colors.text, fontSize: 15, fontWeight: '700' }}>{client.name || t('common.unnamed')}</Text>
-                      <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center' }}>
-                        <View
-                          style={{
-                            borderRadius: 999,
-                            backgroundColor: isDark ? '#2C2C2E' : '#F1F4FB',
-                            paddingHorizontal: 10,
-                            paddingVertical: 4,
-                          }}>
-                          <Text style={{ color: '#5C6AC4', fontSize: 11, fontWeight: '700' }}>
-                            {client.active_jobs_count > 0
-                              ? t('home.activeJobsCountShort', { count: client.active_jobs_count })
-                              : t('home.jobsCountShort', { count: client.jobs_count })}
-                          </Text>
-                        </View>
+                      <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>{client.name || t('common.unnamed')}</Text>
+                      <View style={{ marginTop: 4, flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={{ color: colors.secondaryText, fontSize: 13 }} numberOfLines={1}>
+                          {getDebtSummaryLine(client)}
+                        </Text>
                       </View>
                     </View>
                   </View>
@@ -583,15 +529,15 @@ export default function TabOneScreen() {
                       style={{
                         marginTop: 10,
                         borderRadius: 999,
-                        backgroundColor: isDark ? '#452525' : '#FDEEEE',
+                        backgroundColor: isDark ? '#243149' : '#EAF1FF',
                         paddingHorizontal: 14,
                         paddingVertical: 8,
                       }}>
-                      <Text style={{ color: '#C84D4D', fontSize: 13, fontWeight: '700' }}>{t('jobs.payment')}</Text>
+                      <Text style={{ color: '#2F68ED', fontSize: 13, fontWeight: '700' }}>{t('jobs.payment')}</Text>
                     </Pressable>
                   </View>
                 </View>
-              </Pressable>
+              </View>
             ))
           ) : (
             renderHomeEmptyState(t('home.noActiveDebts'))
@@ -614,45 +560,25 @@ export default function TabOneScreen() {
                 style={{
                   paddingVertical: 12,
                   borderTopWidth: index === 0 ? 0 : 1,
-                  borderTopColor: colors.separator,
+                  borderTopColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(60,60,67,0.08)',
                 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                  <View style={{ marginRight: 12, flex: 1, flexDirection: 'row' }}>
-                    <View
-                      style={{
-                        marginRight: 12,
-                        height: 44,
-                        width: 44,
-                        borderRadius: 14,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: isDark ? '#3A2A1F' : '#FFF0E1',
-                      }}>
-                      <Ionicons name="hammer-outline" size={18} color="#C26A1A" />
-                    </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <View style={{ marginRight: 12, flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons style={{ marginRight: 12 }} name="briefcase-outline" size={17} color="#C26A1A" />
                     <View style={{ flex: 1 }}>
-                      <Text style={{ color: colors.text, fontSize: 15, fontWeight: '700' }}>{job.title || t('jobs.untitled')}</Text>
+                      <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>{job.title || t('jobs.untitled')}</Text>
                       <View style={{ marginTop: 4, flexDirection: 'row', alignItems: 'center' }}>
-                        <Ionicons name="person-outline" size={14} color={colors.secondaryText} />
-                        <Text style={{ marginLeft: 6, color: colors.secondaryText, fontSize: 13 }}>
+                        <Text style={{ color: colors.secondaryText, fontSize: 13 }}>
                           {job.client?.name || t('jobs.noClient')}
                         </Text>
-                      </View>
-                      <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center' }}>
-                        <View
-                          style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            borderRadius: 999,
-                            backgroundColor: isDark ? '#2C2C2E' : '#F1F4FB',
-                            paddingHorizontal: 10,
-                            paddingVertical: 4,
-                          }}>
-                          <Ionicons name="calendar-outline" size={12} color={colors.secondaryText} />
-                          <Text style={{ marginLeft: 4, color: colors.secondaryText, fontSize: 11, fontWeight: '600' }}>
-                            {formatJobDate(job.scheduled_date)}
-                          </Text>
-                        </View>
+                        <Text style={{ marginHorizontal: 6, color: colors.secondaryText, fontSize: 13 }}>•</Text>
+                        <Text style={{ color: colors.secondaryText, fontSize: 13, fontWeight: '600' }}>
+                          {formatJobDate(job.scheduled_date)}
+                        </Text>
+                        <Text style={{ marginHorizontal: 6, color: colors.secondaryText, fontSize: 13 }}>•</Text>
+                        <Text style={{ color: colors.secondaryText, fontSize: 13, fontWeight: '600' }}>
+                          {formatCurrency(job.price)}
+                        </Text>
                       </View>
                     </View>
                   </View>
@@ -660,15 +586,13 @@ export default function TabOneScreen() {
                     <View
                       style={{
                         borderRadius: 999,
-                        backgroundColor: isDark ? '#3A2A1F' : '#FFF0E1',
+                        borderWidth: 1,
+                        borderColor: '#C26A1A',
                         paddingHorizontal: 12,
                         paddingVertical: 5,
                       }}>
                       <Text style={{ color: '#C26A1A', fontSize: 11, fontWeight: '700' }}>{t('jobs.statuses.inProgress')}</Text>
                     </View>
-                    <Text style={{ marginTop: 12, color: colors.text, fontSize: 15, fontWeight: '800' }}>
-                      {formatCurrency(job.price)}
-                    </Text>
                   </View>
                 </View>
               </Pressable>
@@ -693,44 +617,33 @@ export default function TabOneScreen() {
                   style={{
                     paddingVertical: 12,
                     borderTopWidth: index === 0 ? 0 : 1,
-                    borderTopColor: colors.separator,
+                    borderTopColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(60,60,67,0.08)',
                   }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <View style={{ marginRight: 12, flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-                      <View
-                        style={{
-                          marginRight: 12,
-                          height: 40,
-                          width: 40,
-                          borderRadius: 14,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          backgroundColor: meta.bg,
-                        }}>
-                        <Ionicons name={meta.icon} size={17} color={meta.color} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ color: colors.text, fontSize: 14, fontWeight: '800' }}>
-                          {meta.label}: {activity.title}
-                        </Text>
-                        <Text style={{ marginTop: 2, color: colors.secondaryText, fontSize: 12 }} numberOfLines={1}>
-                          {activity.subtitle || formatJobDate(activity.date)}
-                        </Text>
-                      </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <View style={{ marginRight: 12, flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons style={{ marginRight: 12 }} name={meta.icon} size={17} color={meta.color} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: colors.text, fontSize: 16, fontWeight: '800' }}>
+                        {meta.label}: {activity.title}
+                      </Text>
+                      <Text style={{ marginTop: 4, color: colors.secondaryText, fontSize: 13 }} numberOfLines={1}>
+                        {activity.subtitle || formatJobDate(activity.date)}
+                      </Text>
                     </View>
+                  </View>
                     <View style={{ alignItems: 'flex-end' }}>
                       {activity.amount != null ? (
                         <Text
                           style={{
                             color:
                               activity.type === 'expense' ? '#D86A4C' : activity.type === 'payment' ? '#2F8C57' : colors.text,
-                            fontSize: 14,
+                            fontSize: 16,
                             fontWeight: '700',
                           }}>
                           {formatCurrency(activity.amount)}
                         </Text>
                       ) : null}
-                      <Text style={{ marginTop: 2, color: colors.secondaryText, fontSize: 12 }}>{formatJobDate(activity.date)}</Text>
+                      <Text style={{ marginTop: 4, color: colors.secondaryText, fontSize: 13 }}>{formatJobDate(activity.date)}</Text>
                     </View>
                   </View>
                 </Pressable>
@@ -741,8 +654,7 @@ export default function TabOneScreen() {
           )}
         </View>
 
-        <View style={{ marginTop: 16 }}>
-          <Text style={{ marginBottom: 10, color: colors.text, fontSize: 18, fontWeight: '800' }}>{t('home.quickActions')}</Text>
+        <View style={{ marginTop: 12 }}>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
             {quickActions.map((action) => (
               <Pressable
@@ -750,46 +662,30 @@ export default function TabOneScreen() {
                 onPress={action.onPress}
                 style={{
                   width: '48.5%',
-                  marginBottom: 10,
-                  borderRadius: 24,
+                  marginBottom: 8,
+                  borderRadius: 18,
                   borderWidth: 1,
-                  borderColor: colors.separator,
-                  backgroundColor: action.bg,
-                  paddingHorizontal: 15,
-                  paddingVertical: 15,
-                  shadowColor: '#000000',
-                  shadowOpacity: isDark ? 0.24 : 0.12,
-                  shadowRadius: 8,
-                  shadowOffset: { width: 0, height: 5 },
-                  elevation: isDark ? 8 : 5,
+                  borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(60,60,67,0.12)',
+                  backgroundColor: colors.surface,
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
                 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <View
                     style={{
-                      height: 44,
-                      width: 44,
-                      borderRadius: 14,
+                      height: 34,
+                      width: 34,
+                      borderRadius: 10,
                       alignItems: 'center',
                       justifyContent: 'center',
                       backgroundColor: action.badgeBg,
                     }}>
-                    <Ionicons name={action.icon} size={19} color={action.iconColor} />
+                    <Ionicons name={action.icon} size={16} color={action.iconColor} />
                   </View>
-                  <View
-                    style={{
-                      height: 28,
-                      width: 28,
-                      borderRadius: 999,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
-                    }}>
-                    <Ionicons name="arrow-forward" size={14} color={action.iconColor} />
+                  <View style={{ marginLeft: 10, flex: 1 }}>
+                    <Text style={{ color: colors.text, fontSize: 16, fontWeight: '800' }}>{action.label}</Text>
+                    <Text style={{ marginTop: 1, color: colors.secondaryText, fontSize: 13, fontWeight: '500' }}>{action.sublabel}</Text>
                   </View>
-                </View>
-                <View style={{ marginTop: 18 }}>
-                  <Text style={{ color: colors.text, fontSize: 16, fontWeight: '800' }}>{action.label}</Text>
-                  <Text style={{ marginTop: 4, color: colors.secondaryText, fontSize: 12, fontWeight: '500' }}>{action.sublabel}</Text>
                 </View>
               </Pressable>
             ))}

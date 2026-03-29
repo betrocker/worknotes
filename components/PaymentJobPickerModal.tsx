@@ -49,20 +49,21 @@ export function PaymentJobPickerModal({ visible, clientName, jobs, onClose, onSe
       <View className="flex-1 items-center justify-center bg-black/35 px-6">
         <Pressable onPress={onClose} className="absolute inset-0" />
         <View className="w-full max-w-[360px] overflow-hidden rounded-3xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-[#1C1C1E]">
-          <View className="flex-row items-center justify-between">
-            <View className="mr-3 flex-1">
-              <Text className="text-lg font-semibold text-black dark:text-white" numberOfLines={1}>
+          <Pressable
+            onPress={onClose}
+            className="absolute right-4 top-4 z-10 h-8 w-8 items-center justify-center rounded-full bg-black/5 dark:bg-white/10">
+            <Ionicons name="close" size={18} color={colors.text} />
+          </Pressable>
+
+          <View className="flex-row items-start">
+            <View className="mr-12 flex-1">
+              <Text className="text-app-row-lg font-semibold text-black dark:text-white" numberOfLines={1}>
                 {clientName || t('clients.selectPaymentJob')}
               </Text>
-              <Text className="mt-1 text-sm text-black/55 dark:text-white/65">
+              <Text className="mt-1 text-app-meta-lg text-black/55 dark:text-white/65">
                 {t('clients.selectPaymentJob')}
               </Text>
             </View>
-            <Pressable
-              onPress={onClose}
-              className="h-8 w-8 items-center justify-center rounded-full bg-black/5 dark:bg-white/10">
-              <Ionicons name="close" size={18} color={colors.text} />
-            </Pressable>
           </View>
 
           <View className="mt-4">
@@ -70,24 +71,24 @@ export function PaymentJobPickerModal({ visible, clientName, jobs, onClose, onSe
               <Pressable
                 key={job.id}
                 onPress={() => onSelect(job.id)}
-                className={[
-                  'rounded-[22px] border border-black/10 bg-black/5 px-4 py-3 dark:border-white/10 dark:bg-white/5',
-                  index > 0 ? 'mt-2' : '',
-                ].join(' ')}>
+                className="py-3"
+                style={{
+                  borderTopWidth: index > 0 ? 1 : 0,
+                  borderTopColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(60,60,67,0.12)',
+                }}>
                 <View className="flex-row items-start justify-between">
                   <View className="mr-3 flex-1">
-                    <Text className="text-base font-semibold text-black dark:text-white" numberOfLines={1}>
+                    <Text className="text-app-row font-semibold text-black dark:text-white" numberOfLines={1}>
                       {job.title || t('jobs.untitled')}
                     </Text>
-                    <Text className="mt-1 text-sm text-black/55 dark:text-white/65">
+                    <Text className="mt-1 text-app-meta-lg text-black/55 dark:text-white/65">
                       {formatDate(job.scheduled_date)}
                     </Text>
                   </View>
                   <View className="items-end">
-                    <Text className="text-base font-extrabold text-[#C84D4D]">
+                    <Text className="text-app-row font-extrabold text-[#C84D4D]">
                       {moneyFormatter.format(job.debt)}
                     </Text>
-                    <Ionicons name="chevron-forward" size={16} color={colors.secondaryText} />
                   </View>
                 </View>
               </Pressable>

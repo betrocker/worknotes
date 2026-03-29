@@ -145,7 +145,7 @@ export default function EditExpenseScreen() {
               </View>
             ) : (
               <>
-                <Text className="text-sm font-medium text-black/60 dark:text-white/70">
+                <Text className="text-app-meta font-medium text-black/60 dark:text-white/70">
                   {t('jobs.expenseAmountLabel')}
                 </Text>
                 <AppTextInput
@@ -155,9 +155,9 @@ export default function EditExpenseScreen() {
                   placeholder={t('jobs.expenseAmountLabel')}
                   className="mt-2"
                 />
-                <Text className="mt-1 text-xs text-black/50 dark:text-white/60">{t('jobs.amountEurNote')}</Text>
+                <Text className="mt-1 text-app-meta text-black/50 dark:text-white/60">{t('jobs.amountEurNote')}</Text>
 
-                <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">
+                <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">
                   {t('jobs.expenseTitleLabel')}
                 </Text>
                 <AppTextInput
@@ -169,7 +169,7 @@ export default function EditExpenseScreen() {
               </>
             )}
 
-            {error ? <Text className="mt-3 text-sm text-red-600">{error}</Text> : null}
+            {error ? <Text className="mt-3 text-app-meta text-red-600">{error}</Text> : null}
           </View>
         </View>
       </ScrollView>

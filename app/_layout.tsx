@@ -6,8 +6,8 @@ import {
 } from "@react-navigation/native";
 import { useFonts } from "expo-font";
 import { Asset } from "expo-asset";
-import { Redirect, Stack } from "expo-router";
-import { useSegments } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { Redirect, Stack, useGlobalSearchParams, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useState } from "react";
 import { Text, TextInput, View } from "react-native";
@@ -126,6 +126,7 @@ function RootNavigationContent({ initialized }: { initialized: boolean }) {
   const { ready: onboardingReady, completed: onboardingCompleted } = useOnboarding();
   const { ready: billingReady, hasAccess } = useBilling();
   const segments = useSegments();
+  const params = useGlobalSearchParams<{ preview?: string }>();
   const guardsReady = initialized && themeReady && onboardingReady && billingReady;
   const splashVisible = !initialized || !themeReady;
 
@@ -143,6 +144,7 @@ function RootNavigationContent({ initialized }: { initialized: boolean }) {
     const inAuthGroup = segments[0] === "(auth)";
     const inOnboarding = segments[0] === "onboarding";
     const inPaywall = segments[0] === "paywall";
+    const paywallPreview = params.preview === "1";
 
     if (!session && !inAuthGroup) {
       return <Redirect href="/(auth)/sign-in" />;
@@ -156,17 +158,26 @@ function RootNavigationContent({ initialized }: { initialized: boolean }) {
       return <Redirect href="/paywall" />;
     }
 
-    if (session && onboardingCompleted && hasAccess && (inAuthGroup || inOnboarding || inPaywall)) {
+    if (session && onboardingCompleted && hasAccess && (inAuthGroup || inOnboarding || (inPaywall && !paywallPreview))) {
       return <Redirect href="/(tabs)" />;
     }
   }
 
   if (splashVisible) {
-    return <AppSplashScreen />;
+    return (
+      <>
+        <StatusBar style="light" backgroundColor="#1A4FE0" />
+        <AppSplashScreen />
+      </>
+    );
   }
 
   return (
     <View style={{ flex: 1, backgroundColor: "#1A4FE0" }}>
+      <StatusBar
+        style={colorScheme === "dark" ? "light" : "dark"}
+        backgroundColor={colorScheme === "dark" ? "#000000" : "#F2F2F7"}
+      />
       <SplashVisibilityProvider showSplash={false}>
         <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
           <Stack>

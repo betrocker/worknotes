@@ -60,10 +60,10 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     let active = true;
 
     const sync = async () => {
-      if (!enabled || !apiKey) {
+      if (!userId) {
         if (active) {
           setReady(true);
-          setHasAccess(true);
+          setHasAccess(!enabled);
           setHasSubscription(false);
           setHasTrialAccess(false);
           setTrialEndsAt(null);
@@ -72,14 +72,35 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      if (!userId) {
-        if (active) {
-          setReady(true);
-          setHasAccess(false);
-          setHasSubscription(false);
-          setHasTrialAccess(false);
-          setTrialEndsAt(null);
-          setCustomerInfo(null);
+      if (!enabled || !apiKey) {
+        try {
+          const { data: userRow } = await supabase
+            .from('users')
+            .select('trial_ends_at')
+            .eq('id', userId)
+            .maybeSingle();
+
+          const trialEndsAtValue = typeof userRow?.trial_ends_at === 'string' ? userRow.trial_ends_at : null;
+          const trialEndsAtMs = trialEndsAtValue ? new Date(trialEndsAtValue).getTime() : null;
+          const trialAccess = trialEndsAtMs != null && trialEndsAtMs > Date.now();
+
+          if (active) {
+            setReady(true);
+            setHasAccess(true);
+            setHasSubscription(false);
+            setHasTrialAccess(trialAccess);
+            setTrialEndsAt(trialEndsAtValue);
+            setCustomerInfo(null);
+          }
+        } catch {
+          if (active) {
+            setReady(true);
+            setHasAccess(true);
+            setHasSubscription(false);
+            setHasTrialAccess(false);
+            setTrialEndsAt(null);
+            setCustomerInfo(null);
+          }
         }
         return;
       }

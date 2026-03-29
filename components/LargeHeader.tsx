@@ -36,14 +36,14 @@ export function LargeHeader({
       <View style={{ paddingTop: insets.top + 20, paddingHorizontal: 24, paddingBottom: 24 }}>
         <View className="flex-row items-center justify-between">
           <View className="flex-1 pr-4">
-            <Text className="font-bold text-[34px] leading-[40px] tracking-tight text-black dark:text-white">
+            <Text className="font-bold text-app-display tracking-tight text-black dark:text-white">
               {title}
             </Text>
           </View>
           {right ? <View>{right}</View> : null}
         </View>
         {subtitle ? (
-          <Text className="mt-1 text-base text-black/60 dark:text-white/70">
+          <Text className="mt-1 text-app-subtitle text-black/60 dark:text-white/70">
             {subtitle}
           </Text>
         ) : null}

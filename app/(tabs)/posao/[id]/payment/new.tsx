@@ -154,7 +154,7 @@ export default function NewPaymentScreen() {
 
         <View className="px-6">
           <View className="overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
-            <Text className="text-sm font-medium text-black/60 dark:text-white/70">
+            <Text className="text-app-meta font-medium text-black/60 dark:text-white/70">
               {t('jobs.paymentAmountLabel')}
             </Text>
             <AppTextInput
@@ -164,15 +164,15 @@ export default function NewPaymentScreen() {
               placeholder={t('jobs.paymentAmountLabel')}
               className="mt-2"
             />
-            <Text className="mt-1 text-xs text-black/50 dark:text-white/60">{t('jobs.amountEurNote')}</Text>
+            <Text className="mt-1 text-app-meta text-black/50 dark:text-white/60">{t('jobs.amountEurNote')}</Text>
 
-            <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">
+            <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">
               {t('jobs.paymentDateLabel')}
             </Text>
             <Pressable
               onPress={() => setShowDatePicker(true)}
               className="mt-2 flex-row items-center justify-between rounded-3xl bg-black/5 px-4 py-3 dark:bg-white/10">
-              <Text className="text-base text-black dark:text-white">
+              <Text className="text-app-row text-black dark:text-white">
                 {displayDate || t('jobs.paymentDatePlaceholder')}
               </Text>
               <Ionicons name="calendar-outline" size={18} color={colors.text} />
@@ -180,7 +180,7 @@ export default function NewPaymentScreen() {
             {paymentDate ? (
               <Pressable onPress={() => setPaymentDate('')} className="mt-2 flex-row items-center">
                 <Ionicons name="close-circle" size={16} color={colors.secondaryText} />
-                <Text className="ml-2 text-sm text-black/60 dark:text-white/70">{t('jobs.clearDate')}</Text>
+                <Text className="ml-2 text-app-meta text-black/60 dark:text-white/70">{t('jobs.clearDate')}</Text>
               </Pressable>
             ) : null}
             {showDatePicker ? (
@@ -196,7 +196,7 @@ export default function NewPaymentScreen() {
               />
             ) : null}
 
-            <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">
+            <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">
               {t('jobs.paymentNoteLabel')}
             </Text>
             <AppTextInput
@@ -206,7 +206,7 @@ export default function NewPaymentScreen() {
               className="mt-2"
             />
 
-            {error ? <Text className="mt-3 text-sm text-red-600">{error}</Text> : null}
+            {error ? <Text className="mt-3 text-app-meta text-red-600">{error}</Text> : null}
           </View>
         </View>
       </ScrollView>

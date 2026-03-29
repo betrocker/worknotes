@@ -1,19 +1,30 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { LinearGradient } from 'expo-linear-gradient';
 import React, { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, FlatList, Linking, Modal, Pressable, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Colors from '@/constants/Colors';
-import { AppTextInput } from '@/components/AppTextInput';
+import { AppSearchInput } from '@/components/AppSearchInput';
 import { LargeHeader } from '@/components/LargeHeader';
 import { MascotEmptyState } from '@/components/MascotEmptyState';
 import { PaymentJobPickerModal } from '@/components/PaymentJobPickerModal';
 import { useColorScheme } from '@/components/useColorScheme';
-import { usePlaceholderTextColor } from '@/components/usePlaceholderTextColor';
 import { listClientOpenDebtJobs, listClientsWithDebt, type ClientOpenDebtJob, type ClientWithDebt } from '@/lib/clients';
 import { useAuth } from '@/providers/AuthProvider';
+
+function getSerbianPluralForm(count: number) {
+  const abs = Math.abs(count);
+  const mod10 = abs % 10;
+  const mod100 = abs % 100;
+
+  if (mod10 === 1 && mod100 !== 11) return 'one';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'few';
+  return 'other';
+}
 
 export default function DugovanjaScreen() {
   const router = useRouter();
@@ -21,7 +32,7 @@ export default function DugovanjaScreen() {
   const { session } = useAuth();
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
-  const placeholderTextColor = usePlaceholderTextColor();
+  const insets = useSafeAreaInsets();
   const userId = session?.user?.id ?? null;
 
   const [items, setItems] = useState<ClientWithDebt[]>([]);
@@ -31,6 +42,10 @@ export default function DugovanjaScreen() {
   const [contactClient, setContactClient] = useState<ClientWithDebt | null>(null);
   const [paymentPicker, setPaymentPicker] = useState<{ clientName: string | null; jobs: ClientOpenDebtJob[] } | null>(null);
   const [debtJobsPicker, setDebtJobsPicker] = useState<{ clientName: string | null; jobs: ClientOpenDebtJob[] } | null>(null);
+  const [listViewportHeight, setListViewportHeight] = useState(0);
+  const [listContentHeight, setListContentHeight] = useState(0);
+  const [listCanScroll, setListCanScroll] = useState(false);
+  const [showScrollHint, setShowScrollHint] = useState(false);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -82,10 +97,28 @@ export default function DugovanjaScreen() {
   }, [items, query]);
 
   const totalDebt = useMemo(() => items.reduce((sum, item) => sum + item.debt, 0), [items]);
-  const activeDebtCount = items.length;
-  const actionableCount = useMemo(
-    () => items.filter((item) => Boolean(item.latest_active_job_id)).length,
-    [items]
+  const debtorsCount = items.length;
+  const formatDebtorsShortLabel = useCallback(
+    (count: number) => {
+      if (i18n.language === 'sr') {
+        const form = getSerbianPluralForm(count);
+        return `${count} ${t(`debts.debtorsShortForms.${form}`)}`;
+      }
+      return `${count} ${count === 1 ? t('debts.debtorsShortForms.one') : t('debts.debtorsShortForms.other')}`;
+    },
+    [i18n.language, t]
+  );
+  const subtitle = `${t('debts.totalPrefix')}: ${formatMoney.format(totalDebt)} • ${formatDebtorsShortLabel(debtorsCount)}`;
+  const formatDebtJobsLabel = useCallback(
+    (count: number) => {
+      if (count <= 0) return '';
+      if (i18n.language === 'sr') {
+        const form = getSerbianPluralForm(count);
+        return `${count} ${t(`debts.debtJobsForms.${form}`)}`;
+      }
+      return `${count} ${count === 1 ? t('debts.debtJobsForms.one') : t('debts.debtJobsForms.other')}`;
+    },
+    [i18n.language, t]
   );
 
   const openUrl = useCallback(async (url: string) => {
@@ -123,32 +156,6 @@ export default function DugovanjaScreen() {
       void openUrl(`viber://chat?number=${encodeURIComponent(digits)}`);
     },
     [openUrl]
-  );
-
-  const openDetails = useCallback(
-    async (item: ClientWithDebt) => {
-      if (!userId) return;
-
-      try {
-        const jobs = await listClientOpenDebtJobs(userId, item.id);
-        if (jobs.length === 0) {
-          if (item.latest_active_job_id) {
-            router.push(`/(tabs)/posao/${item.latest_active_job_id}`);
-            return;
-          }
-          router.push(`/(tabs)/klijent/${item.id}`);
-          return;
-        }
-        if (jobs.length === 1) {
-          router.push(`/(tabs)/posao/${jobs[0].id}`);
-          return;
-        }
-        setDebtJobsPicker({ clientName: item.name, jobs });
-      } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : String(e));
-      }
-    },
-    [router, userId]
   );
 
   const addPayment = useCallback(
@@ -198,44 +205,23 @@ export default function DugovanjaScreen() {
 
   return (
     <View className="flex-1 bg-[#F2F2F7] dark:bg-black">
-      <LargeHeader title={t('tabs.debts')} />
+      <LargeHeader title={t('tabs.debts')} subtitle={subtitle} />
 
       <View className="flex-1 px-6 pt-3">
-        <View className="mb-4 flex-row">
-          <View className="mr-2 flex-1 items-center overflow-hidden rounded-3xl border border-black/10 bg-white/80 px-4 py-3 dark:border-white/10 dark:bg-[#1C1C1E]/80">
-            <Text className="text-center text-sm text-black/55 dark:text-white/65">{t('debts.totalDebt')}</Text>
-            <Text className="mt-2 text-center text-[22px] font-extrabold text-[#1C2745] dark:text-white">
-              {formatMoney.format(totalDebt)}
-            </Text>
-          </View>
+        <AppSearchInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder={t('debts.searchPlaceholder')}
+        />
 
-          <View className="ml-2 flex-1 items-center overflow-hidden rounded-3xl border border-black/10 bg-white/80 px-4 py-3 dark:border-white/10 dark:bg-[#1C1C1E]/80">
-            <Text className="text-center text-sm text-black/55 dark:text-white/65">{t('debts.activeCount')}</Text>
-            <Text className="mt-2 text-center text-[22px] font-extrabold text-[#1C2745] dark:text-white">
-              {activeDebtCount}
-            </Text>
-            <Text className="mt-1 text-center text-xs text-black/45 dark:text-white/50">
-              {t('debts.actionableCount')}: <Text className="font-semibold text-black dark:text-white">{actionableCount}</Text>
-            </Text>
-          </View>
-        </View>
+        {error ? <Text className="mt-3 text-app-meta text-red-600">{error}</Text> : null}
 
-        <View className="relative">
-          <AppTextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder={t('debts.searchPlaceholder')}
-            placeholderTextColor={placeholderTextColor}
-            className="pr-12"
-          />
-          <View style={{ position: 'absolute', right: 16, top: '50%', marginTop: -10 }}>
-            <Ionicons name="search" size={20} color={colors.secondaryText} />
-          </View>
-        </View>
-
-        {error ? <Text className="mt-3 text-sm text-red-600">{error}</Text> : null}
-
-        <View className="mt-4 flex-1">
+        <View
+          className="mt-4 flex-1 overflow-hidden rounded-[24px]"
+          style={{
+            backgroundColor: colorScheme === 'dark' ? '#1C1C1E' : '#FFFFFF',
+            marginBottom: Math.max(insets.bottom, 12) + 96,
+          }}>
           {loading ? (
             <View className="items-center py-6">
               <ActivityIndicator />
@@ -246,8 +232,28 @@ export default function DugovanjaScreen() {
               data={filtered}
               keyExtractor={(item) => item.id}
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 128 }}
-              ItemSeparatorComponent={() => <View className="h-3" />}
+              contentContainerStyle={{ paddingBottom: 80 }}
+              onLayout={(event) => {
+                const visibleHeight = event.nativeEvent.layout.height;
+                setListViewportHeight(visibleHeight);
+                const canScroll = listContentHeight > visibleHeight + 92;
+                setListCanScroll(canScroll);
+                setShowScrollHint(canScroll);
+              }}
+              onContentSizeChange={(_, contentHeight) => {
+                setListContentHeight(contentHeight);
+                const canScroll = contentHeight > listViewportHeight + 92;
+                setListCanScroll(canScroll);
+                setShowScrollHint(canScroll);
+              }}
+              onScroll={(event) => {
+                const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+                const remaining = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+                const canScroll = contentSize.height > layoutMeasurement.height + 92;
+                setListCanScroll(canScroll);
+                setShowScrollHint(canScroll && remaining > 92);
+              }}
+              scrollEventThrottle={16}
               ListEmptyComponent={() => (
                 <MascotEmptyState
                   title={t('debts.emptyTitle')}
@@ -257,88 +263,140 @@ export default function DugovanjaScreen() {
                   imageSize={164}
                 />
               )}
-              renderItem={({ item }) => (
-                <Pressable
-                  onPress={() => openDetails(item)}
-                  className="overflow-hidden rounded-3xl border border-black/10 bg-white/80 px-4 py-4 dark:border-white/10 dark:bg-[#1C1C1E]/80">
+              ListHeaderComponent={filtered.length > 0 ? <View className="h-3" /> : null}
+              ListFooterComponent={filtered.length > 0 ? <View className="h-3" /> : null}
+              renderItem={({ item, index }) => (
+                <View
+                  className="bg-white px-4 py-4 dark:bg-[#1C1C1E]"
+                  style={{
+                    borderTopWidth: index > 0 ? 1 : 0,
+                    borderTopColor: 'transparent',
+                  }}>
                   <View>
+                    {index > 0 ? (
+                      <View
+                        style={{
+                          position: 'absolute',
+                          top: -16,
+                          left: 4,
+                          right: 4,
+                          height: 1,
+                          backgroundColor:
+                            colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(60,60,67,0.08)',
+                        }}
+                      />
+                    ) : null}
+
                     <View className="flex-row items-start justify-between">
                       <View className="mr-3 flex-1">
-                        <Text className="text-[18px] font-extrabold text-[#1C2745] dark:text-white" numberOfLines={1}>
+                        <Text className="text-app-row-lg font-bold text-[#1C2745] dark:text-white" numberOfLines={1}>
                           {item.name || '-'}
                         </Text>
-
-                        <View className="mt-1.5 flex-row items-center">
-                          {item.phone ? (
-                            <>
-                              <Ionicons name="call-outline" size={16} color={colors.secondaryText} />
-                              <Text className="ml-2 text-base text-black/60 dark:text-white/70" numberOfLines={1}>
-                                {item.phone}
-                              </Text>
-                            </>
-                          ) : null}
-                        </View>
-
-                        {item.address ? (
-                          <View className="mt-1 flex-row items-center">
-                            <Ionicons name="location-outline" size={16} color={colors.secondaryText} />
-                            <Text className="ml-2 flex-1 text-base text-black/60 dark:text-white/70" numberOfLines={1}>
-                              {item.address}
-                            </Text>
-                          </View>
-                        ) : null}
                       </View>
 
-                      <View className="items-end">
-                        <View className="rounded-full bg-[#FDEEEE] px-3 py-1 dark:bg-[#3D2323]">
-                          <Text className="text-[15px] font-extrabold text-[#C84D4D]">{formatMoney.format(item.debt)}</Text>
-                        </View>
-                        <Text className="mt-2 text-xs text-black/45 dark:text-white/50">
-                          {item.latest_active_job_id ? t('debts.activeJobAvailable') : t('debts.noActiveJob')}
+                      <View
+                        className="ml-3 rounded-full px-2.5 py-1"
+                        style={{
+                          backgroundColor: colorScheme === 'dark' ? 'rgba(255,107,107,0.16)' : 'rgba(255,59,48,0.10)',
+                        }}>
+                        <Text className="text-app-meta-lg font-bold text-red-600 dark:text-red-400">
+                          {formatMoney.format(item.debt)}
                         </Text>
                       </View>
                     </View>
 
-                    {!item.latest_active_job_id ? (
-                      <View className="mt-2">
-                        {item.top_debt_job_title ? (
-                          <Text className="text-sm font-semibold text-black/75 dark:text-white/80" numberOfLines={1}>
-                            {t('debts.debtJobPreview')}: {item.top_debt_job_title}
+                    <View className="mt-0.5 flex-row items-center justify-between">
+                      <View className="mr-4 flex-1">
+                        {item.debt_jobs_count > 1 ? (
+                          <Text className="text-app-meta-lg text-black/60 dark:text-white/70" numberOfLines={1}>
+                            {formatDebtJobsLabel(item.debt_jobs_count)}
+                          </Text>
+                        ) : item.top_debt_job_title ? (
+                          <Text className="text-app-meta-lg text-black/60 dark:text-white/70" numberOfLines={1}>
+                            {item.top_debt_job_title}
+                          </Text>
+                        ) : item.latest_active_job_id ? (
+                          <Text className="text-app-meta-lg text-black/60 dark:text-white/70" numberOfLines={1}>
+                            {t('debts.activeJobAvailable')}
                           </Text>
                         ) : null}
                       </View>
-                    ) : null}
 
-                    <View className="mt-3 flex-row">
-                      <Pressable
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          addPayment(item);
-                        }}
-                        className="mr-2 flex-1 flex-row items-center justify-center rounded-2xl bg-[#FFF4E5] py-2.5 dark:bg-[#3A2D1E]">
-                        <Ionicons name="wallet-outline" size={16} color={colors.text} />
-                        <Text className="ml-2 text-sm font-semibold text-black/80 dark:text-white/85">
-                          {t('jobs.payment')}
-                        </Text>
-                      </Pressable>
+                      <View className="flex-row items-center">
+                        {item.phone ? (
+                          <Pressable
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              onContact(item);
+                            }}
+                            className="mr-2 flex-row items-center px-1 py-1">
+                            <Ionicons name="chatbubble-ellipses-outline" size={14} color={colors.secondaryText} />
+                            <Text className="ml-1.5 text-app-meta-lg font-medium text-black/75 dark:text-white/80">
+                              {t('clients.contact')}
+                            </Text>
+                          </Pressable>
+                        ) : null}
 
-                      <Pressable
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          onContact(item);
-                        }}
-                        className="flex-1 flex-row items-center justify-center rounded-2xl bg-[#E8F0FF] py-2.5 dark:bg-[#1E2A44]">
-                        <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.text} />
-                        <Text className="ml-2 text-sm font-semibold text-black/80 dark:text-white/85">
-                          {t('clients.contact')}
-                        </Text>
-                      </Pressable>
+                        <Pressable
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            addPayment(item);
+                          }}
+                          className="flex-row items-center rounded-full bg-[#EAF1FF] px-3 py-1.5 dark:bg-[#243149]">
+                          <Ionicons
+                            name="wallet-outline"
+                            size={14}
+                            color={colorScheme === 'dark' ? '#8FB2FF' : '#2F68ED'}
+                          />
+                          <Text
+                            className="ml-1.5 text-app-meta-lg font-medium"
+                            style={{ color: colorScheme === 'dark' ? '#8FB2FF' : '#2F68ED' }}>
+                            {t('jobs.payment')}
+                          </Text>
+                        </Pressable>
+                      </View>
                     </View>
                   </View>
-                </Pressable>
+                </View>
               )}
             />
           )}
+          {!loading && listCanScroll && showScrollHint ? (
+            <>
+              <LinearGradient
+                pointerEvents="none"
+                colors={
+                  colorScheme === 'dark'
+                    ? (['rgba(28,28,30,0)', 'rgba(28,28,30,0.78)', 'rgba(28,28,30,0.98)'] as const)
+                    : (['rgba(255,255,255,0)', 'rgba(255,255,255,0.78)', 'rgba(255,255,255,0.98)'] as const)
+                }
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: 46,
+                }}
+              />
+              <View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  bottom: 8,
+                  alignItems: 'center',
+                }}>
+                <View
+                  className="h-6 w-6 items-center justify-center rounded-full"
+                  style={{
+                    backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(60,60,67,0.08)',
+                  }}>
+                  <Ionicons name="chevron-down" size={14} color={colors.secondaryText} />
+                </View>
+              </View>
+            </>
+          ) : null}
         </View>
       </View>
 
@@ -347,7 +405,7 @@ export default function DugovanjaScreen() {
           <Pressable onPress={onCloseContactModal} className="absolute inset-0" />
           <View className="w-full max-w-[360px] overflow-hidden rounded-3xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-[#1C1C1E]">
             <View className="flex-row items-center justify-between">
-              <Text className="text-lg font-semibold text-black dark:text-white" numberOfLines={1}>
+              <Text className="text-app-row-lg font-semibold text-black dark:text-white" numberOfLines={1}>
                 {contactClient?.name || t('clients.contact')}
               </Text>
               <Pressable
@@ -358,7 +416,7 @@ export default function DugovanjaScreen() {
             </View>
 
             {contactClient?.phone ? (
-              <Text className="mt-1 text-sm text-black/55 dark:text-white/65">{contactClient.phone}</Text>
+              <Text className="mt-1 text-app-meta-lg text-black/55 dark:text-white/65">{contactClient.phone}</Text>
             ) : null}
 
             <View className="mt-4 flex-row">
@@ -368,9 +426,9 @@ export default function DugovanjaScreen() {
                   onCloseContactModal();
                   onCall(contactClient.phone);
                 }}
-                className="mr-2 flex-1 items-center rounded-2xl bg-[#E8F7EF] py-3 dark:bg-[#203326]">
-                <Ionicons name="call-outline" size={18} color={colors.text} />
-                <Text className="mt-1 text-sm font-semibold text-black/80 dark:text-white/85">{t('jobs.call')}</Text>
+                className="mr-2 flex-1 flex-row items-center justify-center rounded-2xl bg-black/[0.045] py-3 dark:bg-white/[0.08]">
+                <Ionicons name="call-outline" size={16} color={colors.text} />
+                <Text className="ml-2 text-app-meta-lg font-medium text-black/80 dark:text-white/85">{t('jobs.call')}</Text>
               </Pressable>
 
               <Pressable
@@ -379,9 +437,9 @@ export default function DugovanjaScreen() {
                   onCloseContactModal();
                   onSms(contactClient.phone);
                 }}
-                className="mr-2 flex-1 items-center rounded-2xl bg-[#E8F0FF] py-3 dark:bg-[#1E2A44]">
-                <Ionicons name="chatbubble-outline" size={18} color={colors.text} />
-                <Text className="mt-1 text-sm font-semibold text-black/80 dark:text-white/85">{t('jobs.sms')}</Text>
+                className="mr-2 flex-1 flex-row items-center justify-center rounded-2xl bg-black/[0.045] py-3 dark:bg-white/[0.08]">
+                <Ionicons name="chatbubble-outline" size={16} color={colors.text} />
+                <Text className="ml-2 text-app-meta-lg font-medium text-black/80 dark:text-white/85">{t('jobs.sms')}</Text>
               </Pressable>
 
               <Pressable
@@ -390,9 +448,9 @@ export default function DugovanjaScreen() {
                   onCloseContactModal();
                   onViber(contactClient.phone);
                 }}
-                className="flex-1 items-center rounded-2xl bg-[#EAF5F5] py-3 dark:bg-[#1D3437]">
-                <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.text} />
-                <Text className="mt-1 text-sm font-semibold text-black/80 dark:text-white/85">{t('jobs.viber')}</Text>
+                className="flex-1 flex-row items-center justify-center rounded-2xl bg-black/[0.045] py-3 dark:bg-white/[0.08]">
+                <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.text} />
+                <Text className="ml-2 text-app-meta-lg font-medium text-black/80 dark:text-white/85">{t('jobs.viber')}</Text>
               </Pressable>
             </View>
           </View>

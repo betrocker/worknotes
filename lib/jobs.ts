@@ -17,6 +17,7 @@ export type JobListItem = {
   scheduled_date: string | null;
   completed_at: string | null;
   archived_at: string | null;
+  created_at: string | null;
   client: { name: string | null } | null;
 };
 
@@ -62,9 +63,8 @@ async function resolveCompletedAt(
 export async function listJobs(userId: string, options: ListJobsOptions = {}): Promise<JobListItem[]> {
   let query = supabase
     .from('jobs')
-    .select('id,title,description,price,status,scheduled_date,completed_at,archived_at,client:clients(name)')
+    .select('id,title,description,price,status,scheduled_date,completed_at,archived_at,created_at,client:clients(name)')
     .eq('user_id', userId)
-    .order('scheduled_date', { ascending: true })
     .order('created_at', { ascending: false })
     .overrideTypes<JobListItem[], { merge: false }>();
 

@@ -80,7 +80,7 @@ export default function NewExpenseScreen() {
 
         <View className="px-6">
           <View className="overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
-            <Text className="text-sm font-medium text-black/60 dark:text-white/70">
+            <Text className="text-app-meta font-medium text-black/60 dark:text-white/70">
               {t('jobs.expenseAmountLabel')}
             </Text>
             <AppTextInput
@@ -90,9 +90,9 @@ export default function NewExpenseScreen() {
               placeholder={t('jobs.expenseAmountLabel')}
               className="mt-2"
             />
-            <Text className="mt-1 text-xs text-black/50 dark:text-white/60">{t('jobs.amountEurNote')}</Text>
+            <Text className="mt-1 text-app-meta text-black/50 dark:text-white/60">{t('jobs.amountEurNote')}</Text>
 
-            <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">
+            <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">
               {t('jobs.expenseTitleLabel')}
             </Text>
             <AppTextInput
@@ -102,7 +102,7 @@ export default function NewExpenseScreen() {
               className="mt-2"
             />
 
-            {error ? <Text className="mt-3 text-sm text-red-600">{error}</Text> : null}
+            {error ? <Text className="mt-3 text-app-meta text-red-600">{error}</Text> : null}
           </View>
         </View>
       </ScrollView>

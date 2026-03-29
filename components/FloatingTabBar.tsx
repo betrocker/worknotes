@@ -220,7 +220,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
                   ) : null}
                 </View>
                 <Text
-                  className={isFocused ? 'mt-1 text-[12px] font-semibold' : 'mt-1 text-[12px] font-medium'}
+                  className={isFocused ? 'mt-1 text-app-meta font-semibold' : 'mt-1 text-app-meta font-medium'}
                   style={{ color }}
                   numberOfLines={1}>
                   {String(label)}

@@ -30,7 +30,6 @@ export async function startGoogleOAuth() {
   // In Expo Go this becomes an exp://.../--/auth/callback URL.
   // In a standalone/dev build it becomes your scheme (e.g. expotailwindrouter://auth/callback).
   const redirectTo = Linking.createURL('auth/callback');
-  console.log('[oauth] redirectTo:', redirectTo);
 
   const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
     provider: 'google',

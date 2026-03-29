@@ -46,13 +46,13 @@ export function StickyFormHeader({
               disabled={submitting}
               onPress={onSave}
               className="h-10 items-center justify-center rounded-3xl bg-[#007AFF] px-5 disabled:opacity-60 dark:bg-[#0A84FF]">
-              {submitting ? <ActivityIndicator color="white" /> : <Text className="text-base font-semibold text-white">{saveLabel}</Text>}
+              {submitting ? <ActivityIndicator color="white" /> : <Text className="text-app-body font-semibold text-white">{saveLabel}</Text>}
             </Pressable>
           </View>
         </View>
 
-        <Text className="mt-4 font-bold text-[34px] leading-[40px] tracking-tight text-black dark:text-white">{title}</Text>
-        {subtitle ? <Text className="mt-1 text-base text-black/60 dark:text-white/70">{subtitle}</Text> : null}
+        <Text className="mt-4 font-bold text-app-display tracking-tight text-black dark:text-white">{title}</Text>
+        {subtitle ? <Text className="mt-1 text-app-subtitle text-black/60 dark:text-white/70">{subtitle}</Text> : null}
       </View>
     </View>
   );

@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
@@ -120,29 +121,37 @@ export default function PodesavanjaScreen() {
       {
         key: 'terms' as const,
         icon: 'document-text-outline' as const,
+        iconBg: isDark ? '#243047' : '#EEF3FF',
+        iconColor: isDark ? '#8FB2FF' : '#2F68ED',
         title: t('settings.termsTitle'),
         body: t('settings.termsBody'),
       },
       {
         key: 'privacy' as const,
         icon: 'shield-checkmark-outline' as const,
+        iconBg: isDark ? '#203126' : '#EEF8F1',
+        iconColor: isDark ? '#7AD69C' : '#2F8C57',
         title: t('settings.privacyTitle'),
         body: t('settings.privacyBody'),
       },
       {
         key: 'support' as const,
         icon: 'help-buoy-outline' as const,
+        iconBg: isDark ? '#2F2717' : '#FFF8EF',
+        iconColor: isDark ? '#F4C16A' : '#B76E0D',
         title: t('settings.support'),
         body: t('settings.supportHelp'),
       },
       {
         key: 'version' as const,
         icon: 'information-circle-outline' as const,
+        iconBg: isDark ? '#2D2540' : '#F2EEFF',
+        iconColor: isDark ? '#C0A7FF' : '#7359C8',
         title: t('settings.appVersion'),
         body: `Tefter ${appVersion}`,
       },
     ],
-    [appVersion, t]
+    [appVersion, isDark, t]
   );
   const activeInfoItem = useMemo(
     () => infoItems.find((item) => item.key === infoModalKey) ?? null,
@@ -478,7 +487,7 @@ export default function PodesavanjaScreen() {
     <ScrollView
       stickyHeaderIndices={[0]}
       className="flex-1 bg-[#F2F2F7] dark:bg-black"
-      contentContainerClassName="pb-32">
+      contentContainerStyle={{ paddingBottom: 168 }}>
       <LargeHeader
         title={t('tabs.profile')}
       />
@@ -489,75 +498,77 @@ export default function PodesavanjaScreen() {
             <View
               className="items-center justify-center rounded-full"
               style={{
-                width: 80,
-                height: 80,
+                width: 60,
+                height: 60,
                 backgroundColor: isDark ? '#263245' : '#DCE6F7',
               }}>
-              <Text style={{ fontSize: 28, fontWeight: '800', color: isDark ? '#8FB2FF' : '#2F68ED' }}>
+              <Text style={{ fontSize: 24, fontWeight: '800', color: isDark ? '#8FB2FF' : '#2F68ED' }}>
                 {profileInitials}
               </Text>
             </View>
 
             <View className="ml-4 flex-1">
               <View className="flex-row items-center justify-between">
-                <Text className="mr-3 flex-1 text-[22px] font-extrabold text-[#1C2745] dark:text-white" numberOfLines={1}>
+                <Text className="mr-3 flex-1 text-app-section font-extrabold text-[#1C2745] dark:text-white" numberOfLines={1}>
                   {displayName}
                 </Text>
                 <Pressable
                   onPress={openUsernameModal}
                   accessibilityRole="button"
                   accessibilityLabel={t('settings.editProfile')}
-                  className="h-10 w-10 items-center justify-center rounded-full bg-[#E8F0FF] dark:bg-[#243047]">
-                  <Ionicons name="create-outline" size={18} color={isDark ? '#8FB2FF' : '#2F68ED'} />
+                  className="h-10 w-10 items-center justify-center">
+                  <FontAwesome name="pencil" size={18} color={isDark ? '#8FB2FF' : '#2F68ED'} />
                 </Pressable>
               </View>
-              <Text className="mt-1 text-sm text-black/60 dark:text-white/70" numberOfLines={1}>
+              <Text className="mt-1 text-app-meta-lg text-black/60 dark:text-white/70" numberOfLines={1}>
                 {email}
               </Text>
+              {hasSubscription ? (
+                <View className="mt-3 self-start rounded-full bg-[#EEF8F1] px-3 py-1.5 dark:bg-[#203126]">
+                  <Text className="text-app-meta-lg font-semibold text-[#2F8C57] dark:text-[#7AD69C]">
+                    {t('settings.premiumActive')}
+                  </Text>
+                </View>
+              ) : hasTrialAccess ? (
+                <View className="mt-3">
+                  <Pressable
+                    onPress={() => router.push({ pathname: '/paywall', params: { preview: '1' } })}
+                    className="self-start rounded-full bg-[#2F68ED] px-4 py-2 dark:bg-[#3A7BFF]">
+                    <Text className="text-app-meta-lg font-semibold text-white">
+                      {t('settings.buyPremium')}
+                    </Text>
+                  </Pressable>
+                  <Text className="mt-2 text-app-meta-lg text-black/60 dark:text-white/70">
+                    {t('settings.freeTrialBody', { count: trialDaysRemaining })}
+                  </Text>
+                  {trialEndsLabel ? (
+                    <Text className="mt-1 text-app-meta-lg text-black/55 dark:text-white/65">
+                      {t('settings.freeTrialEndsAt', { date: trialEndsLabel })}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
             </View>
           </View>
 
           {usernameMessage ? (
             <View className="mt-4 rounded-[20px] bg-black/5 px-4 py-3 dark:bg-white/5">
-              <Text className="text-sm text-[#2F8C57] dark:text-[#7AD69C]">{usernameMessage}</Text>
+              <Text className="text-app-meta-lg text-[#2F8C57] dark:text-[#7AD69C]">{usernameMessage}</Text>
             </View>
           ) : null}
         </View>
 
-        {hasTrialAccess && !hasSubscription ? (
-          <View className="mt-4 overflow-hidden rounded-3xl border border-[#D7E6FF] bg-[#F4F8FF] p-4 dark:border-[#30415E] dark:bg-[#162033]">
-            <View className="flex-row items-center">
-              <View className="h-11 w-11 items-center justify-center rounded-[16px] bg-[#E8F0FF] dark:bg-[#243047]">
-                <Ionicons name="time-outline" size={20} color={isDark ? '#8FB2FF' : '#2F68ED'} />
-              </View>
-              <View className="ml-3 flex-1">
-                <Text className="text-[17px] font-extrabold text-[#1C2745] dark:text-white">
-                  {t('settings.freeTrialTitle')}
-                </Text>
-                <Text className="mt-1 text-sm text-black/60 dark:text-white/70">
-                  {t('settings.freeTrialBody', { count: trialDaysRemaining })}
-                </Text>
-                {trialEndsLabel ? (
-                  <Text className="mt-1 text-sm text-black/55 dark:text-white/65">
-                    {t('settings.freeTrialEndsAt', { date: trialEndsLabel })}
-                  </Text>
-                ) : null}
-              </View>
-            </View>
-          </View>
-        ) : null}
-
         <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/80 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/80">
           <View className="flex-row items-center justify-between">
-            <Text className="text-[18px] font-extrabold text-[#1C2745] dark:text-white">
+            <Text className="text-app-section font-extrabold text-[#1C2745] dark:text-white">
               {t('settings.companySection')}
             </Text>
             <Pressable
               onPress={openCompanyModal}
               accessibilityRole="button"
               accessibilityLabel={t('settings.editProfile')}
-              className="h-10 w-10 items-center justify-center rounded-full bg-[#E8F0FF] dark:bg-[#243047]">
-              <Ionicons name="create-outline" size={18} color={isDark ? '#8FB2FF' : '#2F68ED'} />
+              className="h-10 w-10 items-center justify-center">
+              <FontAwesome name="pencil" size={18} color={isDark ? '#8FB2FF' : '#2F68ED'} />
             </Pressable>
           </View>
 
@@ -566,263 +577,269 @@ export default function PodesavanjaScreen() {
             <>
               <View className="mt-4 flex-row items-start">
                 <View
-                  className="items-center justify-center rounded-[18px] border border-black/5 dark:border-white/10"
+                  className="items-center justify-center rounded-[16px] border border-black/5 dark:border-white/10"
                   style={{
-                    width: 84,
-                    height: 84,
+                    width: 68,
+                    height: 68,
                     backgroundColor: isDark ? '#2A2A2D' : '#F5F7FB',
                   }}>
                   {companyLogoUrl ? (
                     <Image
                       source={{ uri: companyLogoUrl }}
-                      style={{ width: 68, height: 68, borderRadius: 14 }}
+                      style={{ width: 52, height: 52, borderRadius: 12 }}
                       resizeMode="contain"
                     />
                   ) : (
-                    <Ionicons name="business-outline" size={28} color={colors.secondaryText} />
+                    <Ionicons name="business-outline" size={24} color={colors.secondaryText} />
                   )}
                 </View>
 
                 <View className="ml-4 flex-1">
-                  <Text className="text-[16px] font-bold text-[#1C2745] dark:text-white">
+                  <Text className="text-app-row-lg font-bold text-[#1C2745] dark:text-white">
                     {companyName || t('settings.companyNamePlaceholder')}
                   </Text>
                   {companyAddress || companyPhone ? (
                     <View className="mt-1 flex-row items-center flex-wrap">
                       {companyAddress ? (
-                        <Text className="text-sm text-black/60 dark:text-white/70">
+                        <Text className="text-app-meta-lg text-black/60 dark:text-white/70">
                           {companyAddress}
                         </Text>
                       ) : null}
                       {companyAddress && companyPhone ? (
-                        <Text className="text-sm text-black/60 dark:text-white/70">{', '}</Text>
+                        <Text className="text-app-meta-lg text-black/60 dark:text-white/70">{' • '}</Text>
                       ) : null}
                       {companyPhone ? (
-                        <Text className="text-sm text-black/70 dark:text-white/75">
+                        <Text className="text-app-meta-lg text-black/60 dark:text-white/70">
                           {companyPhone}
                         </Text>
                       ) : null}
                     </View>
                   ) : null}
-                  {companyPib ? (
-                    <Text className="mt-2 text-sm text-black/65 dark:text-white/75">
-                      <Text className="font-bold text-[#1C2745] dark:text-white">{`${t('settings.companyPib')}: `}</Text>
-                      {companyPib}
-                    </Text>
-                  ) : null}
-                  {companyRegistrationNumber ? (
-                    <Text className="mt-1 text-sm text-black/65 dark:text-white/75">
-                      <Text className="font-bold text-[#1C2745] dark:text-white">{`${t('settings.companyRegistrationNumberShort')}: `}</Text>
-                      {companyRegistrationNumber}
+                  {companyPib || companyRegistrationNumber ? (
+                    <Text className="mt-2 text-app-meta-lg text-black/65 dark:text-white/75" numberOfLines={1}>
+                      {companyPib ? `${t('settings.companyPib')}: ${companyPib}` : ''}
+                      {companyPib && companyRegistrationNumber ? ' • ' : ''}
+                      {companyRegistrationNumber
+                        ? `${t('settings.companyRegistrationNumberShort')}: ${companyRegistrationNumber}`
+                        : ''}
                     </Text>
                   ) : null}
                 </View>
               </View>
 
               {companyAccountNumber ? (
-                <View className="mt-4 rounded-[20px] bg-black/5 px-4 py-3 dark:bg-white/5">
-                  <Text className="text-xs font-medium uppercase tracking-[0.4px] text-black/45 dark:text-white/45">
-                    {t('settings.companyAccountNumber')}
-                  </Text>
-                  <Text className="mt-1 text-sm font-semibold text-[#1C2745] dark:text-white">
-                    {companyAccountNumber}
-                  </Text>
-                </View>
+                <>
+                  <View className="mt-4 h-px bg-black/10 dark:bg-white/10" />
+                  <View className="mt-4 flex-row items-center justify-between">
+                    <Text className="text-app-meta-lg text-black/55 dark:text-white/65">
+                      {t('settings.companyAccountNumber')}
+                    </Text>
+                    <Text className="ml-4 flex-1 text-right text-app-meta-lg font-semibold text-[#1C2745] dark:text-white" numberOfLines={1}>
+                      {companyAccountNumber}
+                    </Text>
+                  </View>
+                </>
               ) : null}
             </>
           ) : (
-            <Text className="mt-4 text-sm text-black/60 dark:text-white/70">
+            <Text className="mt-4 text-app-meta-lg text-black/60 dark:text-white/70">
               {t('settings.companyEmpty')}
             </Text>
           )}
 
           {companyMessage ? (
             <View className="mt-4 rounded-[20px] bg-black/5 px-4 py-3 dark:bg-white/5">
-              <Text className="text-sm text-[#2F8C57] dark:text-[#7AD69C]">{companyMessage}</Text>
+              <Text className="text-app-meta-lg text-[#2F8C57] dark:text-[#7AD69C]">{companyMessage}</Text>
             </View>
           ) : null}
         </View>
 
-        <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/80 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/80">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-1 pr-4">
-              <View className="flex-row items-center">
-                <View className="h-10 w-10 items-center justify-center rounded-[14px] bg-[#EEF3FF] dark:bg-[#243047]">
-                  <Ionicons name="moon-outline" size={18} color={colors.tint} />
-                </View>
-                <View className="ml-3 flex-1">
-                  <Text className="text-[18px] font-extrabold text-[#1C2745] dark:text-white">
-                    {t('settings.darkTheme')}
-                  </Text>
-                  <Text className="mt-1 text-sm text-black/60 dark:text-white/70">
-                    {t('settings.darkThemeHelp')}
-                  </Text>
-                </View>
-              </View>
-            </View>
-            <Switch
-              value={themeSwitchValue}
-              disabled={themeSwitchPending}
-              onValueChange={(next) => {
-                setThemeSwitchValue(next);
-                setThemeSwitchPending(true);
-                setPendingThemeTarget(next);
-                if (themeToggleTimerRef.current) {
-                  clearTimeout(themeToggleTimerRef.current);
-                }
-                themeToggleTimerRef.current = setTimeout(() => {
-                  setColorScheme(next ? 'dark' : 'light');
-                  themeToggleTimerRef.current = null;
-                }, 90);
-              }}
-              trackColor={switchTrackColor}
-              thumbColor={switchThumbColor}
-              ios_backgroundColor={switchBgColor}
-            />
-          </View>
-        </View>
-
-        <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/80 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/80">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-1 pr-4">
-              <View className="flex-row items-center">
-                <View className="h-10 w-10 items-center justify-center rounded-[14px] bg-[#EEF8F1] dark:bg-[#203126]">
-                  <Ionicons name="notifications-outline" size={18} color={isDark ? '#7AD69C' : '#2F8C57'} />
-                </View>
-                <View className="ml-3 flex-1">
-                  <Text className="text-[18px] font-extrabold text-[#1C2745] dark:text-white">
-                    {t('settings.notifications')}
-                  </Text>
-                  <Text className="mt-1 text-sm text-black/60 dark:text-white/70">
-                    {t('settings.notificationsHelp')}
-                  </Text>
+        <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/80 dark:border-white/10 dark:bg-[#1C1C1E]/80">
+          <View className="px-4 py-4">
+            <View className="flex-row items-center justify-between">
+              <View className="flex-1 pr-4">
+                <View className="flex-row items-center">
+                  <View className="h-10 w-10 items-center justify-center rounded-[14px] bg-[#EEF3FF] dark:bg-[#243047]">
+                    <Ionicons name="moon-outline" size={18} color={colors.tint} />
+                  </View>
+                  <View className="ml-3 flex-1">
+                    <Text className="text-app-row-lg font-bold text-[#1C2745] dark:text-white">
+                      {t('settings.darkTheme')}
+                    </Text>
+                    <Text className="mt-1 text-app-meta-lg text-black/60 dark:text-white/70">
+                      {t('settings.darkThemeHelp')}
+                    </Text>
+                  </View>
                 </View>
               </View>
-            </View>
-            <Switch
-              value={notificationsEnabled ?? false}
-              disabled={notificationsEnabled == null || notificationsSaving}
-              onValueChange={(next) => {
-                const previous = notificationsEnabled ?? false;
-                setNotificationsEnabledState(next);
-                setNotificationsSaving(true);
-                void (async () => {
-                  try {
-                    await setNotificationsEnabled(next);
-                  } catch {
-                    setNotificationsEnabledState(previous);
-                  } finally {
-                    setNotificationsSaving(false);
+              <Switch
+                value={themeSwitchValue}
+                disabled={themeSwitchPending}
+                onValueChange={(next) => {
+                  setThemeSwitchValue(next);
+                  setThemeSwitchPending(true);
+                  setPendingThemeTarget(next);
+                  if (themeToggleTimerRef.current) {
+                    clearTimeout(themeToggleTimerRef.current);
                   }
-                })();
-              }}
-              trackColor={switchTrackColor}
-              thumbColor={switchThumbColor}
-              ios_backgroundColor={switchBgColor}
-            />
+                  themeToggleTimerRef.current = setTimeout(() => {
+                    setColorScheme(next ? 'dark' : 'light');
+                    themeToggleTimerRef.current = null;
+                  }, 90);
+                }}
+                trackColor={switchTrackColor}
+                thumbColor={switchThumbColor}
+                ios_backgroundColor={switchBgColor}
+              />
+            </View>
           </View>
 
-          {notificationsEnabled ? (
-            <>
-              <View className="mt-4 h-px bg-black/10 dark:bg-white/10" />
-              <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">
-                {t('settings.defaultReminder')}
-              </Text>
-              <Text className="mt-1 text-sm text-black/50 dark:text-white/60">
-                {t('settings.defaultReminderHelp')}
-              </Text>
-              <View className="mt-3 flex-row items-center">
-                {reminderOptions.map((option) => {
-                  const selected = defaultReminder === option.value;
-                  return (
-                    <Pressable
-                      key={option.value}
-                      onPress={() => {
-                        setDefaultReminder(option.value);
-                        void setDefaultJobReminderPreference(option.value);
-                      }}
-                      className={[
-                        'mr-2 rounded-3xl px-3 py-2',
-                        selected ? 'bg-[#2F68ED] dark:bg-[#3A7BFF]' : 'bg-black/5 dark:bg-white/5',
-                      ].join(' ')}>
-                      <Text
-                        className={
-                          selected
-                            ? 'text-sm font-semibold text-white'
-                            : 'text-sm text-black dark:text-white'
-                        }>
-                        {option.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </>
-          ) : null}
-        </View>
+          <View className="mx-4 h-px bg-black/10 dark:bg-white/10" />
 
-        <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/80 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/80">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-1 pr-4">
+          <View className="px-4 py-4">
+            <View className="flex-row items-center justify-between">
+              <View className="flex-1 pr-4">
+                <View className="flex-row items-center">
+                  <View className="h-10 w-10 items-center justify-center rounded-[14px] bg-[#EEF8F1] dark:bg-[#203126]">
+                    <Ionicons name="notifications-outline" size={18} color={isDark ? '#7AD69C' : '#2F8C57'} />
+                  </View>
+                  <View className="ml-3 flex-1">
+                    <Text className="text-app-row-lg font-bold text-[#1C2745] dark:text-white">
+                      {t('settings.notifications')}
+                    </Text>
+                    <Text className="mt-1 text-app-meta-lg text-black/60 dark:text-white/70">
+                      {t('settings.notificationsHelp')}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+              <Switch
+                value={notificationsEnabled ?? false}
+                disabled={notificationsEnabled == null || notificationsSaving}
+                onValueChange={(next) => {
+                  const previous = notificationsEnabled ?? false;
+                  setNotificationsEnabledState(next);
+                  setNotificationsSaving(true);
+                  void (async () => {
+                    try {
+                      await setNotificationsEnabled(next);
+                    } catch {
+                      setNotificationsEnabledState(previous);
+                    } finally {
+                      setNotificationsSaving(false);
+                    }
+                  })();
+                }}
+                trackColor={switchTrackColor}
+                thumbColor={switchThumbColor}
+                ios_backgroundColor={switchBgColor}
+              />
+            </View>
+
+            {notificationsEnabled ? (
+              <>
+                <View className="mt-4 h-px bg-black/10 dark:bg-white/10" />
+                <Text className="mt-4 text-app-meta-lg font-medium text-black/60 dark:text-white/70">
+                  {t('settings.defaultReminder')}
+                </Text>
+                <Text className="mt-1 text-app-meta-lg text-black/50 dark:text-white/60">
+                  {t('settings.defaultReminderHelp')}
+                </Text>
+                <View className="mt-3 flex-row items-center">
+                  {reminderOptions.map((option) => {
+                    const selected = defaultReminder === option.value;
+                    return (
+                      <Pressable
+                        key={option.value}
+                        onPress={() => {
+                          setDefaultReminder(option.value);
+                          void setDefaultJobReminderPreference(option.value);
+                        }}
+                        className={[
+                          'mr-2 rounded-3xl px-3 py-2',
+                          selected ? 'bg-[#2F68ED] dark:bg-[#3A7BFF]' : 'bg-black/5 dark:bg-white/5',
+                        ].join(' ')}>
+                        <Text
+                          className={
+                            selected
+                              ? 'text-app-meta font-semibold text-white'
+                              : 'text-app-meta text-black dark:text-white'
+                          }>
+                          {option.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </>
+            ) : null}
+          </View>
+
+          <View className="mx-4 h-px bg-black/10 dark:bg-white/10" />
+
+          <View className="px-4 py-4">
+            <View className="flex-row items-center justify-between">
               <View className="flex-row items-center">
                 <View className="h-10 w-10 items-center justify-center rounded-[14px] bg-[#F2EEFF] dark:bg-[#2D2540]">
                   <Ionicons name="language-outline" size={18} color={isDark ? '#C0A7FF' : '#7359C8'} />
                 </View>
-                <View className="ml-3 flex-1">
-                  <Text className="text-[18px] font-extrabold text-[#1C2745] dark:text-white">
+                <View className="ml-3">
+                  <Text className="text-app-row-lg font-bold text-[#1C2745] dark:text-white">
                     {t('settings.language')}
                   </Text>
                 </View>
               </View>
-            </View>
-            <Pressable
-              onPress={() => {
-                void i18n.changeLanguage('sr');
-                void setStoredLanguage('sr');
-              }}
-              className={[
-                'mr-2 rounded-3xl px-4 py-2.5',
-                !isEnglish ? 'bg-[#2F68ED] dark:bg-[#3A7BFF]' : 'bg-black/5 dark:bg-white/5',
-              ].join(' ')}>
-              <Text
-                className={
-                  !isEnglish
-                    ? 'text-sm font-semibold text-white'
-                    : 'text-sm text-black dark:text-white'
-                }>
-                {t('settings.serbian')}
-              </Text>
-            </Pressable>
+              <View className="flex-row items-center">
+                <Pressable
+                  onPress={() => {
+                    void i18n.changeLanguage('sr');
+                    void setStoredLanguage('sr');
+                  }}
+                  className={[
+                    'mr-2 rounded-3xl px-4 py-2.5',
+                    !isEnglish ? 'bg-[#2F68ED] dark:bg-[#3A7BFF]' : 'bg-black/5 dark:bg-white/5',
+                  ].join(' ')}>
+                  <Text
+                    className={
+                      !isEnglish
+                        ? 'text-app-meta font-semibold text-white'
+                        : 'text-app-meta text-black dark:text-white'
+                    }>
+                    {t('settings.serbian')}
+                  </Text>
+                </Pressable>
 
-            <Pressable
-              onPress={() => {
-                void i18n.changeLanguage('en');
-                void setStoredLanguage('en');
-              }}
-              className={[
-                'rounded-3xl px-4 py-2.5',
-                isEnglish ? 'bg-[#2F68ED] dark:bg-[#3A7BFF]' : 'bg-black/5 dark:bg-white/5',
-              ].join(' ')}>
-              <Text
-                className={
-                  isEnglish
-                    ? 'text-sm font-semibold text-white'
-                    : 'text-sm text-black dark:text-white'
-                }>
-                {t('settings.english')}
-              </Text>
-            </Pressable>
+                <Pressable
+                  onPress={() => {
+                    void i18n.changeLanguage('en');
+                    void setStoredLanguage('en');
+                  }}
+                  className={[
+                    'rounded-3xl px-4 py-2.5',
+                    isEnglish ? 'bg-[#2F68ED] dark:bg-[#3A7BFF]' : 'bg-black/5 dark:bg-white/5',
+                  ].join(' ')}>
+                  <Text
+                    className={
+                      isEnglish
+                        ? 'text-app-meta font-semibold text-white'
+                        : 'text-app-meta text-black dark:text-white'
+                    }>
+                    {t('settings.english')}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
           </View>
         </View>
 
         <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/80 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/80">
-          <Text className="text-[18px] font-extrabold text-[#1C2745] dark:text-white">
+          <Text className="text-app-section font-extrabold text-[#1C2745] dark:text-white">
             {t('settings.infoSection')}
           </Text>
           <View className="mt-4">
             {infoItems.map((item, index) => (
               <View key={item.key}>
-                {index > 0 ? <View className="h-px bg-black/10 dark:bg-white/10" /> : null}
+                {index > 0 ? <View className="mx-0 h-px bg-black/10 dark:bg-white/10" /> : null}
                 <Pressable
                   onPress={() => {
                     if (item.key === 'terms' || item.key === 'privacy') {
@@ -831,20 +848,15 @@ export default function PodesavanjaScreen() {
                     }
                     setInfoModalKey(item.key);
                   }}
-                  className="flex-row items-center py-3">
+                  className="flex-row items-center py-3.5">
                   <View
                     className="h-10 w-10 items-center justify-center rounded-[14px]"
-                    style={{
-                      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F4F6FB',
-                    }}>
-                    <Ionicons name={item.icon} size={18} color={colors.text} />
+                    style={{ backgroundColor: item.iconBg }}>
+                    <Ionicons name={item.icon} size={18} color={item.iconColor} />
                   </View>
                   <View className="ml-3 flex-1">
-                    <Text className="text-[16px] font-bold text-[#1C2745] dark:text-white">
+                    <Text className="text-app-row-lg font-medium text-[#1C2745] dark:text-white">
                       {item.title}
-                    </Text>
-                    <Text className="mt-1 text-sm text-black/60 dark:text-white/70" numberOfLines={1}>
-                      {item.body}
                     </Text>
                   </View>
                   <Ionicons name="chevron-forward" size={18} color={colors.secondaryText} />
@@ -854,52 +866,48 @@ export default function PodesavanjaScreen() {
           </View>
         </View>
 
-        <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/80 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/80">
-          <Pressable
-            onPress={onDeleteAccount}
-            disabled={deletingAccount}
-            className="overflow-hidden rounded-3xl border border-[#FFD8D3] bg-[#FFF8F7] px-4 py-4 disabled:opacity-70 dark:border-[#5A2B2A] dark:bg-[#2A1A1A]">
-            <View className="flex-row items-center">
-              <View className="h-11 w-11 items-center justify-center rounded-[16px] bg-[#FFE8E5] dark:bg-[#3A2020]">
-                {deletingAccount ? (
-                  <ActivityIndicator color="#FF3B30" />
-                ) : (
-                  <Ionicons name="trash-outline" size={20} color="#FF3B30" />
-                )}
-              </View>
-              <View className="ml-3 flex-1">
-                <Text className="text-[17px] font-extrabold text-[#D93025] dark:text-[#FF8A80]">
-                  {t('settings.deleteAccount')}
-                </Text>
-                <Text className="mt-1 text-sm text-[#B35A53] dark:text-[#D8A19D]">
-                  {t('settings.deleteAccountHelp')}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color="#D93025" />
-            </View>
-          </Pressable>
-        </View>
-
-        <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/80 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/80">
+        <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/80 dark:border-white/10 dark:bg-[#1C1C1E]/80">
           <Pressable
             onPress={() => {
               void supabase.auth.signOut();
             }}
-            className="overflow-hidden rounded-3xl border border-[#F5C8C4] bg-[#FFF5F4] px-4 py-4 dark:border-[#5A2B2A] dark:bg-[#2A1A1A]">
-            <View className="flex-row items-center">
-              <View className="h-11 w-11 items-center justify-center rounded-[16px] bg-[#FFE5E2] dark:bg-[#3A2020]">
-                <Ionicons name="log-out-outline" size={20} color="#FF3B30" />
-              </View>
-              <View className="ml-3 flex-1">
-                <Text className="text-[17px] font-extrabold text-[#D93025] dark:text-[#FF8A80]">
-                  {t('settings.signOut')}
-                </Text>
-                <Text className="mt-1 text-sm text-[#B35A53] dark:text-[#D8A19D]">
-                  {t('settings.signOutHelp')}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color="#D93025" />
+            className="flex-row items-center px-4 py-4">
+            <View className="h-10 w-10 items-center justify-center rounded-[14px] bg-[#FFE5E2] dark:bg-[#3A2020]">
+              <Ionicons name="log-out-outline" size={18} color="#FF3B30" />
             </View>
+            <View className="ml-3 flex-1">
+              <Text className="text-app-row-lg font-medium text-[#D93025] dark:text-[#FF8A80]">
+                {t('settings.signOut')}
+              </Text>
+              <Text className="mt-1 text-app-meta-lg text-black/60 dark:text-white/70">
+                {t('settings.signOutHelp')}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#D93025" />
+          </Pressable>
+
+          <View className="mx-4 h-px bg-black/10 dark:bg-white/10" />
+
+          <Pressable
+            onPress={onDeleteAccount}
+            disabled={deletingAccount}
+            className="flex-row items-center px-4 py-4 disabled:opacity-70">
+            <View className="h-10 w-10 items-center justify-center rounded-[14px] bg-[#FFE8E5] dark:bg-[#3A2020]">
+              {deletingAccount ? (
+                <ActivityIndicator color="#FF3B30" />
+              ) : (
+                <Ionicons name="trash-outline" size={18} color="#FF3B30" />
+              )}
+            </View>
+            <View className="ml-3 flex-1">
+              <Text className="text-app-row-lg font-medium text-[#D93025] dark:text-[#FF8A80]">
+                {t('settings.deleteAccount')}
+              </Text>
+              <Text className="mt-1 text-app-meta-lg text-black/60 dark:text-white/70">
+                {t('settings.deleteAccountHelp')}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#D93025" />
           </Pressable>
         </View>
       </View>
@@ -909,7 +917,7 @@ export default function PodesavanjaScreen() {
           <Pressable onPress={closeUsernameModal} className="absolute inset-0" />
           <View className="w-full max-w-[360px] overflow-hidden rounded-3xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-[#1C1C1E]">
             <View className="flex-row items-center justify-between">
-              <Text className="text-[18px] font-extrabold text-[#1C2745] dark:text-white">
+              <Text className="text-app-section font-extrabold text-[#1C2745] dark:text-white">
                 {t('settings.editProfileTitle')}
               </Text>
               <Pressable
@@ -919,7 +927,7 @@ export default function PodesavanjaScreen() {
               </Pressable>
             </View>
 
-            <Text className="mt-4 text-[16px] font-bold text-[#1C2745] dark:text-white">
+            <Text className="mt-4 text-app-row font-bold text-[#1C2745] dark:text-white">
               {t('settings.changeUsername')}
             </Text>
             <AppTextInput
@@ -935,7 +943,7 @@ export default function PodesavanjaScreen() {
               className="mt-4"
             />
 
-            {usernameError ? <Text className="mt-3 text-sm text-red-600">{usernameError}</Text> : null}
+            {usernameError ? <Text className="mt-3 text-app-meta text-red-600">{usernameError}</Text> : null}
 
             <Pressable
               onPress={onSaveUsername}
@@ -946,7 +954,7 @@ export default function PodesavanjaScreen() {
               ) : (
                 <>
                   <Ionicons name="save-outline" size={18} color="#FFFFFF" />
-                  <Text className="ml-2 text-base font-semibold text-white">{t('settings.saveProfileChanges')}</Text>
+                  <Text className="ml-2 text-app-row font-semibold text-white">{t('settings.saveProfileChanges')}</Text>
                 </>
               )}
             </Pressable>
@@ -969,7 +977,7 @@ export default function PodesavanjaScreen() {
               contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
               style={{ maxHeight: 640 }}>
               <View className="flex-row items-center justify-between">
-                <Text className="text-[18px] font-extrabold text-[#1C2745] dark:text-white">
+                <Text className="text-app-section font-extrabold text-[#1C2745] dark:text-white">
                   {t('settings.companySection')}
                 </Text>
                 <Pressable
@@ -979,11 +987,11 @@ export default function PodesavanjaScreen() {
                 </Pressable>
               </View>
 
-              <Text className="mt-2 text-sm text-black/60 dark:text-white/70">
+              <Text className="mt-2 text-app-meta text-black/60 dark:text-white/70">
                 {t('settings.companyHelp')}
               </Text>
 
-              <Text className="mt-4 text-[16px] font-bold text-[#1C2745] dark:text-white">
+              <Text className="mt-4 text-app-row font-bold text-[#1C2745] dark:text-white">
                 {t('settings.companyLogo')}
               </Text>
               <View className="mt-4">
@@ -1036,7 +1044,7 @@ export default function PodesavanjaScreen() {
               </View>
               </View>
 
-              <Text className="mt-4 text-[16px] font-bold text-[#1C2745] dark:text-white">
+              <Text className="mt-4 text-app-row font-bold text-[#1C2745] dark:text-white">
                 {t('settings.companyName')}
               </Text>
               <AppTextInput
@@ -1052,7 +1060,7 @@ export default function PodesavanjaScreen() {
                 className="mt-4"
               />
 
-              <Text className="mt-4 text-[16px] font-bold text-[#1C2745] dark:text-white">
+              <Text className="mt-4 text-app-row font-bold text-[#1C2745] dark:text-white">
                 {t('settings.companyPhone')}
               </Text>
               <AppTextInput
@@ -1069,7 +1077,7 @@ export default function PodesavanjaScreen() {
                 className="mt-4"
               />
 
-              <Text className="mt-4 text-[16px] font-bold text-[#1C2745] dark:text-white">
+              <Text className="mt-4 text-app-row font-bold text-[#1C2745] dark:text-white">
                 {t('settings.companyAddress')}
               </Text>
               <AppTextInput
@@ -1085,7 +1093,7 @@ export default function PodesavanjaScreen() {
                 className="mt-4"
               />
 
-              <Text className="mt-4 text-[16px] font-bold text-[#1C2745] dark:text-white">
+              <Text className="mt-4 text-app-row font-bold text-[#1C2745] dark:text-white">
                 {t('settings.companyPib')}
               </Text>
               <AppTextInput
@@ -1102,7 +1110,7 @@ export default function PodesavanjaScreen() {
                 className="mt-4"
               />
 
-              <Text className="mt-4 text-[16px] font-bold text-[#1C2745] dark:text-white">
+              <Text className="mt-4 text-app-row font-bold text-[#1C2745] dark:text-white">
                 {t('settings.companyRegistrationNumber')}
               </Text>
               <AppTextInput
@@ -1119,7 +1127,7 @@ export default function PodesavanjaScreen() {
                 className="mt-4"
               />
 
-              <Text className="mt-4 text-[16px] font-bold text-[#1C2745] dark:text-white">
+              <Text className="mt-4 text-app-row font-bold text-[#1C2745] dark:text-white">
                 {t('settings.companyAccountNumber')}
               </Text>
               <AppTextInput
@@ -1135,7 +1143,7 @@ export default function PodesavanjaScreen() {
                 className="mt-4"
               />
 
-              {companyError ? <Text className="mt-3 text-sm text-red-600">{companyError}</Text> : null}
+              {companyError ? <Text className="mt-3 text-app-meta text-red-600">{companyError}</Text> : null}
 
               <Pressable
                 onPress={() => {
@@ -1148,7 +1156,7 @@ export default function PodesavanjaScreen() {
                 ) : (
                   <>
                     <Ionicons name="save-outline" size={18} color="#FFFFFF" />
-                    <Text className="ml-2 text-base font-semibold text-white">{t('settings.saveCompany')}</Text>
+                    <Text className="ml-2 text-app-row font-semibold text-white">{t('settings.saveCompany')}</Text>
                   </>
                 )}
               </Pressable>
@@ -1163,7 +1171,7 @@ export default function PodesavanjaScreen() {
           <Pressable onPress={() => setInfoModalKey(null)} className="absolute inset-0" />
           <View className="w-full max-w-[360px] overflow-hidden rounded-3xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-[#1C1C1E]">
             <View className="flex-row items-center justify-between">
-              <Text className="text-[18px] font-extrabold text-[#1C2745] dark:text-white">
+              <Text className="text-app-section font-extrabold text-[#1C2745] dark:text-white">
                 {activeInfoItem?.title}
               </Text>
               <Pressable
@@ -1172,7 +1180,7 @@ export default function PodesavanjaScreen() {
                 <Ionicons name="close" size={18} color={colors.text} />
               </Pressable>
             </View>
-            <Text className="mt-4 text-sm leading-6 text-black/70 dark:text-white/75">
+            <Text className="mt-4 text-app-meta text-black/70 dark:text-white/75">
               {activeInfoItem?.body}
             </Text>
           </View>

@@ -25,9 +25,9 @@ export const AppTextInput = forwardRef<TextInput, AppTextInputProps>(function Ap
       {...props}
       editable={effectiveEditable}
       placeholderTextColor={placeholderTextColor ?? computedPlaceholderTextColor}
-      style={[{ fontSize: 16, lineHeight: 22, paddingVertical: 13 }, style]}
+      style={[{ paddingVertical: 13 }, style]}
       className={[
-        'rounded-3xl bg-black/5 px-4 text-base text-black dark:bg-white/10 dark:text-white',
+        'rounded-3xl bg-black/5 px-4 text-app-body text-black dark:bg-white/10 dark:text-white',
         className,
       ]
         .filter(Boolean)

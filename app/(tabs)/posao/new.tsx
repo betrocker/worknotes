@@ -247,7 +247,7 @@ export default function NewJobScreen() {
 
         <View className="px-6">
           <View className="overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
-            <Text className="text-sm font-medium text-black/60 dark:text-white/70">{t('jobs.titleLabel')}</Text>
+            <Text className="text-app-meta font-medium text-black/60 dark:text-white/70">{t('jobs.titleLabel')}</Text>
             <AppTextInput
               value={title}
               onChangeText={setTitle}
@@ -256,14 +256,14 @@ export default function NewJobScreen() {
               className="mt-2"
             />
 
-            <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">
+            <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">
               {t('jobs.clientLabel')}
             </Text>
             <View className="mt-2">
               <Pressable
                 onPress={toggleClients}
                 className="flex-row items-center justify-between rounded-3xl bg-black/5 px-4 py-3 dark:bg-white/10">
-                <Text className="text-base text-black dark:text-white">
+                <Text className="text-app-row text-black dark:text-white">
                   {selectedClient?.name || t('jobs.selectClient')}
                 </Text>
                 <Ionicons name={clientOpen ? 'chevron-up' : 'chevron-down'} size={18} color={colors.text} />
@@ -271,7 +271,7 @@ export default function NewJobScreen() {
               {selectedClient ? (
                 <Pressable onPress={onClearClient} className="mt-2 flex-row items-center">
                   <Ionicons name="close-circle" size={16} color={colors.secondaryText} />
-                  <Text className="ml-2 text-sm text-black/60 dark:text-white/70">{t('jobs.clearClient')}</Text>
+                  <Text className="ml-2 text-app-meta text-black/60 dark:text-white/70">{t('jobs.clearClient')}</Text>
                 </Pressable>
               ) : null}
             </View>
@@ -286,7 +286,7 @@ export default function NewJobScreen() {
                   <>
                     {clients.length === 0 ? (
                       <View className="p-4">
-                        <Text className="text-base text-black/60 dark:text-white/70">
+                        <Text className="text-app-row text-black/60 dark:text-white/70">
                           {t('jobs.noClients')}
                         </Text>
                       </View>
@@ -303,7 +303,7 @@ export default function NewJobScreen() {
                               ? 'px-4 py-3'
                               : 'px-4 py-3 border-t border-black/10 dark:border-white/10'
                           }>
-                          <Text className="text-base text-black dark:text-white">{item.name || '-'}</Text>
+                          <Text className="text-app-row text-black dark:text-white">{item.name || '-'}</Text>
                         </Pressable>
                       ))
                     )}
@@ -312,7 +312,7 @@ export default function NewJobScreen() {
               </View>
             ) : null}
 
-            <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">
+            <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">
               {t('jobs.statusLabel')}
             </Text>
             <View className="mt-2 flex-row flex-wrap">
@@ -331,7 +331,7 @@ export default function NewJobScreen() {
                         ? 'bg-[#007AFF] dark:bg-[#0A84FF]'
                         : 'bg-black/5 dark:bg-white/10',
                     ].join(' ')}>
-                    <Text className={selected ? 'text-sm font-semibold text-white' : 'text-sm text-black dark:text-white'}>
+                    <Text className={selected ? 'text-app-meta font-semibold text-white' : 'text-app-meta text-black dark:text-white'}>
                       {option.label}
                     </Text>
                   </Pressable>
@@ -349,13 +349,13 @@ export default function NewJobScreen() {
               className="mt-3"
             />
 
-            <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">
+            <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">
               {t('jobs.dateLabel')}
             </Text>
             <Pressable
               onPress={() => setShowDatePicker(true)}
               className="mt-2 flex-row items-center justify-between rounded-3xl bg-black/5 px-4 py-3 dark:bg-white/10">
-              <Text className="text-base text-black dark:text-white">
+              <Text className="text-app-row text-black dark:text-white">
                 {displayDate || t('jobs.datePlaceholder')}
               </Text>
               <Ionicons name="calendar-outline" size={18} color={colors.text} />
@@ -363,7 +363,7 @@ export default function NewJobScreen() {
             {scheduledDate ? (
               <Pressable onPress={() => setScheduledDate('')} className="mt-2 flex-row items-center">
                 <Ionicons name="close-circle" size={16} color={colors.secondaryText} />
-                <Text className="ml-2 text-sm text-black/60 dark:text-white/70">{t('jobs.clearDate')}</Text>
+                <Text className="ml-2 text-app-meta text-black/60 dark:text-white/70">{t('jobs.clearDate')}</Text>
               </Pressable>
             ) : null}
             {showDatePicker ? (
@@ -379,7 +379,7 @@ export default function NewJobScreen() {
               />
             ) : null}
 
-            <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">
+            <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">
               {t('jobs.reminderLabel')}
             </Text>
             <View className="mt-2 flex-row flex-wrap">
@@ -398,8 +398,8 @@ export default function NewJobScreen() {
                     <Text
                       className={
                         selected
-                          ? 'text-sm font-semibold text-white'
-                          : 'text-sm text-black dark:text-white'
+                          ? 'text-app-meta font-semibold text-white'
+                          : 'text-app-meta text-black dark:text-white'
                       }>
                       {option.label}
                     </Text>
@@ -408,7 +408,7 @@ export default function NewJobScreen() {
               })}
             </View>
 
-          <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">{t('jobs.priceLabel')}</Text>
+          <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">{t('jobs.priceLabel')}</Text>
           <AppTextInput
             value={price}
             onChangeText={setPrice}
@@ -417,9 +417,9 @@ export default function NewJobScreen() {
             placeholderTextColor={placeholderTextColor}
             className="mt-2"
           />
-          <Text className="mt-1 text-xs text-black/50 dark:text-white/60">{t('jobs.amountEurNote')}</Text>
+          <Text className="mt-1 text-app-meta text-black/50 dark:text-white/60">{t('jobs.amountEurNote')}</Text>
 
-            <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">
+            <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">
               {t('jobs.descriptionLabel')}
             </Text>
             <AppTextInput
@@ -432,7 +432,7 @@ export default function NewJobScreen() {
               className="mt-2 min-h-[96px]"
             />
 
-            {error ? <Text className="mt-3 text-sm text-red-600">{error}</Text> : null}
+            {error ? <Text className="mt-3 text-app-meta text-red-600">{error}</Text> : null}
           </View>
         </View>
       </ScrollView>

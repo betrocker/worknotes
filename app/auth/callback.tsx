@@ -24,7 +24,7 @@ export default function AuthCallbackScreen() {
   return (
     <View className="flex-1 items-center justify-center bg-[#F2F2F7] dark:bg-black">
       <ActivityIndicator />
-      <Text className="mt-3 text-sm text-black/60 dark:text-white/70">{t('authCallback.connecting')}</Text>
+      <Text className="mt-3 text-app-meta text-black/60 dark:text-white/70">{t('authCallback.connecting')}</Text>
     </View>
   );
 }

@@ -67,7 +67,7 @@ export default function NewClientScreen() {
 
       <View className="px-6">
         <View className="overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
-          <Text className="text-sm font-medium text-black/60 dark:text-white/70">{t('clients.nameLabel')}</Text>
+          <Text className="text-app-meta font-medium text-black/60 dark:text-white/70">{t('clients.nameLabel')}</Text>
           <AppTextInput
             value={name}
             onChangeText={setName}
@@ -76,7 +76,7 @@ export default function NewClientScreen() {
             className="mt-2"
           />
 
-          <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">{t('clients.phoneLabel')}</Text>
+          <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">{t('clients.phoneLabel')}</Text>
           <AppTextInput
             value={phone}
             onChangeText={setPhone}
@@ -86,7 +86,7 @@ export default function NewClientScreen() {
             className="mt-2"
           />
 
-          <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">{t('clients.addressLabel')}</Text>
+          <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">{t('clients.addressLabel')}</Text>
           <AppTextInput
             value={address}
             onChangeText={setAddress}
@@ -95,7 +95,7 @@ export default function NewClientScreen() {
             className="mt-2"
           />
 
-          <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">{t('clients.noteLabel')}</Text>
+          <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">{t('clients.noteLabel')}</Text>
           <AppTextInput
             value={note}
             onChangeText={setNote}
@@ -105,7 +105,7 @@ export default function NewClientScreen() {
             className="mt-2 min-h-[96px]"
           />
 
-          {error ? <Text className="mt-3 text-sm text-red-600">{error}</Text> : null}
+          {error ? <Text className="mt-3 text-app-meta text-red-600">{error}</Text> : null}
         </View>
       </View>
     </ScrollView>

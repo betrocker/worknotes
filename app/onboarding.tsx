@@ -159,7 +159,7 @@ export default function OnboardingScreen() {
 
             <View className="w-[72px] items-end">
               <Pressable onPress={!isLast ? finish : undefined} hitSlop={10} disabled={isLast}>
-                <Text className="text-[15px] font-semibold text-white" style={{ opacity: isLast ? 0 : 1 }}>
+                <Text className="text-app-meta-lg font-semibold text-white" style={{ opacity: isLast ? 0 : 1 }}>
                   {t('onboarding.skip')}
                 </Text>
               </Pressable>
@@ -266,7 +266,7 @@ export default function OnboardingScreen() {
                 }}
                 disabled={submitting}
                 className="ml-3 flex-1 flex-row items-center justify-center rounded-[22px] bg-[#1D4ED8] px-4 py-3.5 disabled:opacity-60">
-                <Text className="text-[15px] font-semibold text-white">
+                <Text className="text-app-meta-lg font-semibold text-white">
                   {isLast ? t('onboarding.start') : t('onboarding.next')}
                 </Text>
                 <Ionicons

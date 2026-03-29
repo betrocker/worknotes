@@ -51,6 +51,7 @@ export type ClientWithDebt = {
   latest_active_job_id: string | null;
   latest_activity_at: string | null;
   top_debt_job_title: string | null;
+  debt_jobs_count: number;
 };
 
 type ClientDetailRow = {
@@ -136,15 +137,19 @@ export async function listClientsWithDebt(userId: string): Promise<ClientWithDeb
   if (error) throw new Error(error.message);
   const rows = data ?? [];
   return rows.map((client) => {
-    const totals = client.jobs.reduce(
-      (acc, job) => {
-        acc.totalPrice += job.price ?? 0;
-        acc.totalPaid += (job.payments ?? []).reduce((sum, p) => sum + (p.amount ?? 0), 0);
-        return acc;
-      },
-      { totalPrice: 0, totalPaid: 0 }
-    );
-    const debt = Math.max(0, totals.totalPrice - totals.totalPaid);
+    const debtJobs = client.jobs
+      .map((job) => {
+        const paid = (job.payments ?? []).reduce((sum, p) => sum + (p.amount ?? 0), 0);
+        return {
+          id: job.id,
+          title: job.title,
+          debt: Math.max(0, (job.price ?? 0) - paid),
+          scheduled_date: job.scheduled_date,
+          created_at: job.created_at,
+        };
+      })
+      .filter((job) => job.debt > 0);
+    const debt = debtJobs.reduce((sum, job) => sum + job.debt, 0);
     const activeJobsList = client.jobs.filter((job) => (job.status ?? '').toLowerCase() !== 'done');
     const activeJobs = activeJobsList.length;
     const latestActiveJob = [...activeJobsList].sort((a, b) => {
@@ -152,23 +157,14 @@ export async function listClientsWithDebt(userId: string): Promise<ClientWithDeb
       const bDate = new Date(b.scheduled_date ?? b.created_at ?? 0).getTime();
       return bDate - aDate;
     })[0];
-    const topDebtJob = [...client.jobs]
-      .map((job) => {
-        const paid = (job.payments ?? []).reduce((sum, p) => sum + (p.amount ?? 0), 0);
-        return {
-          title: job.title,
-          debt: Math.max(0, (job.price ?? 0) - paid),
-          scheduled_date: job.scheduled_date,
-          created_at: job.created_at,
-        };
-      })
-      .filter((job) => job.debt > 0)
+    const topDebtJob = [...debtJobs]
       .sort((a, b) => {
         if (b.debt !== a.debt) return b.debt - a.debt;
         const aDate = new Date(a.scheduled_date ?? a.created_at ?? 0).getTime();
         const bDate = new Date(b.scheduled_date ?? b.created_at ?? 0).getTime();
         return bDate - aDate;
       })[0];
+    const debtJobsCount = debtJobs.length;
     const latestActivityAt = [...client.jobs]
       .map((job) => job.completed_at ?? job.scheduled_date ?? job.created_at)
       .filter((value): value is string => Boolean(value))
@@ -186,6 +182,7 @@ export async function listClientsWithDebt(userId: string): Promise<ClientWithDeb
       latest_active_job_id: latestActiveJob?.id ?? null,
       latest_activity_at: latestActivityAt,
       top_debt_job_title: topDebtJob?.title ?? null,
+      debt_jobs_count: debtJobsCount,
     };
   });
 }

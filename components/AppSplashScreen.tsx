@@ -48,7 +48,7 @@ export function AppSplashScreen({ hideMascot = false }: AppSplashScreenProps) {
 
         <View className="absolute bottom-12 items-center">
           <ActivityIndicator size="small" color="#FFFFFF" />
-          <Text className="mt-3 text-base text-white/95">{t('splash.preparing')}</Text>
+          <Text className="mt-3 text-app-body text-white/95">{t('splash.preparing')}</Text>
         </View>
       </View>
     </LinearGradient>

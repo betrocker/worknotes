@@ -1,10 +1,11 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
 import * as Print from 'expo-print';
 import { File, Paths } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useFocusEffect } from '@react-navigation/native';
@@ -14,6 +15,7 @@ import {
   Animated,
   FlatList,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -104,12 +106,33 @@ export default function JobDetailScreen() {
   const [invoiceSubmitting, setInvoiceSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const [quickActionsY, setQuickActionsY] = useState(0);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const mainScrollRef = useRef<ScrollView>(null);
 
   const locale = i18n.language === 'sr' ? 'sr-Latn-RS' : i18n.language;
   const dateFormatter = useMemo(
     () => new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'short', year: 'numeric' }),
     [locale]
   );
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates?.height ?? 0);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
   const imageDateTimeFormatter = useMemo(
     () =>
       new Intl.DateTimeFormat(locale, {
@@ -959,7 +982,7 @@ export default function JobDetailScreen() {
       return (
       <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
         <View className="flex-row items-center justify-between">
-          <Text className="text-[18px] font-extrabold text-[#1C2745] dark:text-white">
+          <Text className="text-app-section font-extrabold text-[#1C2745] dark:text-white">
             {selectionMode
               ? t('jobs.imageSelectedCount', { count: selectionCount })
               : `${kind === 'before' ? t('jobs.imageBefore') : t('jobs.imageAfter')} (${allItems.length})`}
@@ -991,7 +1014,7 @@ export default function JobDetailScreen() {
                   <Pressable
                     onPress={() => toggleImageSection(kind)}
                     className="mr-2 rounded-3xl bg-black/5 px-3 py-2 dark:bg-white/10">
-                    <Text className="text-xs font-semibold text-black/70 dark:text-white/80">
+                    <Text className="text-app-meta-lg font-semibold text-black/70 dark:text-white/80">
                       {expanded ? t('jobs.showLessPhotos') : t('jobs.showAllPhotos')}
                     </Text>
                   </Pressable>
@@ -1025,7 +1048,7 @@ export default function JobDetailScreen() {
         </View>
 
         {uploadProgress?.kind === kind ? (
-          <Text className="mt-2 text-xs font-medium text-black/55 dark:text-white/65">
+          <Text className="mt-2 text-app-meta-lg font-medium text-black/55 dark:text-white/65">
             {t('jobs.uploadingPhotos', {
               done: uploadProgress.done,
               total: uploadProgress.total,
@@ -1034,7 +1057,7 @@ export default function JobDetailScreen() {
         ) : null}
 
         {items.length === 0 && pending.length === 0 ? (
-          <Text className="mt-3 text-sm text-black/60 dark:text-white/70">
+          <Text className="mt-3 text-app-meta-lg text-black/60 dark:text-white/70">
             {kind === 'before' ? t('jobs.noBeforeImages') : t('jobs.noAfterImages')}
           </Text>
         ) : (
@@ -1120,12 +1143,11 @@ export default function JobDetailScreen() {
 
   return (
     <>
-      <ScrollView
-        stickyHeaderIndices={[0]}
-        className="flex-1 bg-[#F2F2F7] dark:bg-black"
-        contentContainerClassName="pb-32">
-        <View style={{ position: 'relative', zIndex: 20, backgroundColor: colors.background }}>
-        <View className="px-6 pb-6" style={{ paddingTop: insets.top + 12 }}>
+      <View className="flex-1 bg-[#F2F2F7] dark:bg-black">
+        <View
+          onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20, backgroundColor: colors.background }}>
+          <View className="px-6 pb-6" style={{ paddingTop: insets.top + 12 }}>
           <View className="flex-row items-center justify-between">
           <Pressable
             accessibilityRole="button"
@@ -1141,7 +1163,7 @@ export default function JobDetailScreen() {
               accessibilityLabel={t('jobs.edit')}
               onPress={onEdit}
               className="mr-3 h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
-              <Ionicons name="create-outline" size={18} color={colors.text} />
+              <FontAwesome name="pencil" size={16} color={colors.text} />
             </Pressable>
             <Pressable
               accessibilityRole="button"
@@ -1153,27 +1175,39 @@ export default function JobDetailScreen() {
           </View>
         </View>
 
-          <Text className="mt-4 font-bold text-[34px] leading-[40px] tracking-tight text-black dark:text-white">
+          <Text className="mt-4 font-bold text-app-display tracking-tight text-black dark:text-white">
             {job?.title || t('jobs.untitled')}
           </Text>
           <View className="mt-1 flex-row items-center">
-            <Ionicons name="person-outline" size={16} color={colors.secondaryText} />
-            <Text className="ml-2 text-base text-black/60 dark:text-white/70">
+            <Ionicons name="person-outline" size={17} color={colors.secondaryText} />
+            <Text className="ml-2 text-app-subtitle text-black/60 dark:text-white/70">
               {job?.client?.name || t('jobs.noClient')}
             </Text>
           </View>
           {job?.archived_at ? (
             <View className="mt-3 self-start rounded-full bg-[#F1F4FB] px-3 py-1.5 dark:bg-white/10">
-              <Text className="text-[12px] font-bold text-[#6C789A] dark:text-white/80">
+              <Text className="text-app-meta font-bold text-[#6C789A] dark:text-white/80">
                 {t('jobs.archived')}
               </Text>
             </View>
           ) : null}
         </View>
-      </View>
+        </View>
 
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}>
+      <ScrollView
+        ref={mainScrollRef}
+        className="flex-1 bg-[#F2F2F7] dark:bg-black"
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: 128 + keyboardHeight }}>
       <View className="px-6 pt-4">
         <View className="overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
+          <Text className="mb-4 text-app-section font-extrabold text-[#1C2745] dark:text-white">
+            {t('jobs.overviewTitle')}
+          </Text>
           {loading ? (
             <View className="items-center py-6">
               <ActivityIndicator />
@@ -1181,53 +1215,53 @@ export default function JobDetailScreen() {
           ) : job ? (
             <>
               <View className="flex-row items-center justify-between">
-                <Text className="text-sm font-medium text-black/60 dark:text-white/70">{t('jobs.dateLabel')}</Text>
-                <Text className="text-base text-black dark:text-white">{formatDate(job.scheduled_date)}</Text>
+                <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">{t('jobs.dateLabel')}</Text>
+                <Text className="text-app-row text-black dark:text-white">{formatDate(job.scheduled_date)}</Text>
               </View>
-              <View className="my-4 h-px bg-black/10 dark:bg-white/10" />
+              <View className="my-3 h-px bg-black/10 dark:bg-white/10" />
 
               <View className="flex-row items-center justify-between">
-                <Text className="text-sm font-medium text-black/60 dark:text-white/70">{t('jobs.statusLabel')}</Text>
+                <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">{t('jobs.statusLabel')}</Text>
                 <View className="flex-row items-center">
-                  <Text className="text-base text-black dark:text-white">
+                  <Text className="text-app-row text-black dark:text-white">
                     {job.archived_at ? t('jobs.archived') : formatStatus(job.status)}
                   </Text>
                   {job.completed_at ? (
                     <>
-                      <Text className="mx-2 text-sm text-black/30 dark:text-white/30">•</Text>
-                      <Text className="text-base text-black dark:text-white">
+                      <Text className="mx-2 text-app-meta-lg text-black/30 dark:text-white/30">•</Text>
+                      <Text className="text-app-row text-black dark:text-white">
                         {formatCompletedDate(job.completed_at)}
                       </Text>
                     </>
                   ) : null}
                 </View>
               </View>
-              <View className="my-4 h-px bg-black/10 dark:bg-white/10" />
+              <View className="my-3 h-px bg-black/10 dark:bg-white/10" />
 
               <View className="flex-row items-center justify-between">
-                <Text className="text-sm font-medium text-black/60 dark:text-white/70">
+                <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">
                   {t('jobs.reminderLabel')}
                 </Text>
-                <Text className="text-base text-black dark:text-white">{formatReminder(reminderType)}</Text>
+                <Text className="text-app-row text-black dark:text-white">{formatReminder(reminderType)}</Text>
               </View>
-              <View className="my-4 h-px bg-black/10 dark:bg-white/10" />
+              <View className="my-3 h-px bg-black/10 dark:bg-white/10" />
 
               <View className="flex-row items-center justify-between">
-                <Text className="text-sm font-medium text-black/60 dark:text-white/70">{t('jobs.priceLabel')}</Text>
-                <Text className="text-base text-black dark:text-white">
+                <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">{t('jobs.priceLabel')}</Text>
+                <Text className="text-app-row text-black dark:text-white">
                 {formatPrice(job.price)}
                 </Text>
               </View>
 
               {(job.archived_at || job.status === 'done') ? (
                 <>
-                  <View className="my-4 h-px bg-black/10 dark:bg-white/10" />
+                  <View className="my-3 h-px bg-black/10 dark:bg-white/10" />
                   <View className="flex-row items-center justify-between">
                     <View className="mr-4 flex-1">
-                      <Text className="text-sm font-medium text-black/60 dark:text-white/70">
+                      <Text className="text-app-meta font-medium text-black/60 dark:text-white/70">
                         {job.archived_at ? t('jobs.archivedLabel') : t('jobs.archiveReadyLabel')}
                       </Text>
-                      <Text className="mt-1 text-base text-black dark:text-white">
+                  <Text className="mt-0.5 text-app-row text-black dark:text-white">
                         {job.archived_at
                           ? formatArchiveDate(job.archived_at) || t('jobs.archived')
                           : t('jobs.archiveReadyBody')}
@@ -1241,7 +1275,7 @@ export default function JobDetailScreen() {
                       ].join(' ')}>
                       <Text
                         className={[
-                          'text-[13px] font-bold',
+                        'text-app-meta font-bold',
                           job.archived_at ? 'text-[#3C69D9] dark:text-[#8FB2FF]' : 'text-black dark:text-white',
                         ].join(' ')}>
                         {job.archived_at ? t('jobs.unarchive') : t('jobs.archive')}
@@ -1253,25 +1287,25 @@ export default function JobDetailScreen() {
 
               {job.description ? (
                 <>
-                  <View className="my-4 h-px bg-black/10 dark:bg-white/10" />
-                  <Text className="text-sm font-medium text-black/60 dark:text-white/70">
+                  <View className="my-3 h-px bg-black/10 dark:bg-white/10" />
+                  <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">
                     {t('jobs.descriptionLabel')}
                   </Text>
-                  <Text className="mt-2 text-base text-black/80 dark:text-white/80">{job.description}</Text>
+                  <Text className="mt-1.5 text-app-body text-black/80 dark:text-white/80">{job.description}</Text>
                 </>
               ) : null}
 
             </>
           ) : (
-            <Text className="text-base text-black/60 dark:text-white/70">{t('jobs.notFound')}</Text>
+            <Text className="text-app-meta text-black/60 dark:text-white/70">{t('jobs.notFound')}</Text>
           )}
 
-          {error ? <Text className="mt-3 text-sm text-red-600">{error}</Text> : null}
+          {error ? <Text className="mt-3 text-app-meta text-red-600">{error}</Text> : null}
         </View>
 
         <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
           <View className="flex-row items-center justify-between">
-            <Text className="text-[18px] font-extrabold text-[#1C2745] dark:text-white">
+            <Text className="text-app-section font-extrabold text-[#1C2745] dark:text-white">
               {t('jobs.invoiceSection')}
             </Text>
             <Pressable
@@ -1285,7 +1319,7 @@ export default function JobDetailScreen() {
               ) : (
                 <>
                   <Ionicons name="document-text-outline" size={14} color={colors.text} />
-                  <Text className="ml-1 text-[12px] font-semibold text-black dark:text-white">
+                  <Text className="ml-1 text-app-meta font-semibold text-black dark:text-white">
                     {t('jobs.invoice.shortAction')}
                   </Text>
                 </>
@@ -1295,14 +1329,14 @@ export default function JobDetailScreen() {
 
           <View className="mt-4 rounded-3xl bg-black/[0.03] p-3 dark:bg-white/[0.05]">
             <View className="flex-row items-center justify-between">
-              <Text className="text-[15px] font-extrabold text-[#1C2745] dark:text-white">
+              <Text className="text-app-row-lg font-extrabold text-[#1C2745] dark:text-white">
                 {t('jobs.invoiceItems')}
               </Text>
               <Pressable
                 onPress={openNewItemModal}
                 className="flex-row items-center rounded-3xl bg-[#E8F0FF] px-3 py-2 dark:bg-[#1E2A44]">
                 <Ionicons name="add" size={14} color={colors.text} />
-                <Text className="ml-1 text-[12px] font-semibold text-black dark:text-white">
+                  <Text className="ml-1 text-app-meta-lg font-semibold text-black dark:text-white">
                   {t('jobs.invoiceItemsAdd')}
                 </Text>
               </Pressable>
@@ -1315,16 +1349,16 @@ export default function JobDetailScreen() {
                     {index > 0 ? <View className="my-3 h-px bg-black/10 dark:bg-white/10" /> : null}
                     <View className="flex-row items-start justify-between">
                       <View className="mr-3 flex-1">
-                        <Text className="text-[15px] font-semibold text-black dark:text-white">
+                        <Text className="text-app-row-lg font-semibold text-black dark:text-white">
                           {item.title || t('jobs.invoiceItemsUntitled')}
                         </Text>
-                        <Text className="mt-1 text-sm text-black/60 dark:text-white/70">
+                        <Text className="mt-1 text-app-meta-lg text-black/60 dark:text-white/70">
                           {(item.quantity ?? 0).toLocaleString(locale)} {item.unit || t('jobs.invoice.unitService')} x{' '}
                           {formatPrice(item.unit_price ?? 0)}
                         </Text>
                       </View>
                       <View className="items-end">
-                        <Text className="text-[15px] font-bold text-black dark:text-white">
+                        <Text className="text-app-row-lg font-bold text-black dark:text-white">
                           {formatPrice(item.total ?? 0)}
                         </Text>
                         <View className="mt-2 flex-row items-center">
@@ -1344,16 +1378,16 @@ export default function JobDetailScreen() {
                   </View>
                 ))}
                 <View className="mt-3 flex-row items-center justify-between rounded-2xl bg-white/70 px-3 py-2 dark:bg-[#2A2A2C]">
-                  <Text className="text-sm font-medium text-black/60 dark:text-white/70">
+                  <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">
                     {t('jobs.invoiceItemsTotal')}
                   </Text>
-                  <Text className="text-base font-bold text-black dark:text-white">
+                  <Text className="text-app-row-lg font-bold text-black dark:text-white">
                     {formatPrice(invoiceItemsTotal)}
                   </Text>
                 </View>
               </View>
             ) : (
-              <Text className="mt-3 text-sm text-black/60 dark:text-white/70">
+              <Text className="mt-3 text-app-meta-lg text-black/60 dark:text-white/70">
                 {t('jobs.invoiceItemsEmpty')}
               </Text>
             )}
@@ -1362,7 +1396,7 @@ export default function JobDetailScreen() {
 
         <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
           <View className="flex-row items-center justify-between">
-            <Text className="text-[18px] font-extrabold text-[#1C2745] dark:text-white">
+            <Text className="text-app-section font-extrabold text-[#1C2745] dark:text-white">
               {t('jobs.financials')}
             </Text>
             <View className="flex-row items-center">
@@ -1375,7 +1409,7 @@ export default function JobDetailScreen() {
                 }
                 className="mr-2 flex-row items-center rounded-3xl bg-[#E8F0FF] px-2.5 py-2 dark:bg-[#1E2A44]">
                 <Ionicons name="wallet-outline" size={14} color={colors.text} />
-                <Text className="ml-1 text-[12px] font-semibold text-black dark:text-white">
+                <Text className="ml-1 text-app-meta-lg font-semibold text-black dark:text-white">
                   {t('jobs.paymentShort')}
                 </Text>
               </Pressable>
@@ -1383,7 +1417,7 @@ export default function JobDetailScreen() {
                 onPress={() => router.push({ pathname: '/(tabs)/posao/[id]/expense/new' as any, params: { id } })}
                 className="flex-row items-center rounded-3xl bg-[#FDEBEE] px-2.5 py-2 dark:bg-[#3A1F24]">
                 <Ionicons name="receipt-outline" size={14} color={colors.text} />
-                <Text className="ml-1 text-[12px] font-semibold text-black dark:text-white">
+                <Text className="ml-1 text-app-meta-lg font-semibold text-black dark:text-white">
                   {t('jobs.expenseShort')}
                 </Text>
               </Pressable>
@@ -1392,35 +1426,35 @@ export default function JobDetailScreen() {
 
           <View className="mt-4">
             <View className="flex-row items-center justify-between">
-              <Text className="text-sm font-medium text-black/60 dark:text-white/70">{t('jobs.totalPaid')}</Text>
-              <Text className="text-base text-black dark:text-white">
+              <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">{t('jobs.totalPaid')}</Text>
+              <Text className="text-app-row text-black dark:text-white">
                 {formatPrice(totalPaid)}
               </Text>
             </View>
             <View className="mt-2 flex-row items-center justify-between">
-              <Text className="text-sm font-medium text-black/60 dark:text-white/70">{t('jobs.totalExpenses')}</Text>
-              <Text className="text-base text-black dark:text-white">
+              <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">{t('jobs.totalExpenses')}</Text>
+              <Text className="text-app-row text-black dark:text-white">
                 {formatPrice(totalExpense)}
               </Text>
             </View>
             <View className="mt-2 flex-row items-center justify-between">
-              <Text className="text-sm font-medium text-black/60 dark:text-white/70">{t('jobs.profit')}</Text>
-              <Text className="text-base font-semibold text-black dark:text-white">
+              <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">{t('jobs.profit')}</Text>
+              <Text className="text-app-row font-semibold text-black dark:text-white">
                 {formatPrice(profit)}
               </Text>
             </View>
             {tipAmount > 0 ? (
               <View className="mt-2 flex-row items-center justify-between">
-                <Text className="text-sm font-medium text-black/60 dark:text-white/70">{t('jobs.tip')}</Text>
-                <Text className="text-base font-semibold text-[#2F8C57] dark:text-[#7AD69C]">
+                <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">{t('jobs.tip')}</Text>
+                <Text className="text-app-row font-semibold text-[#2F8C57] dark:text-[#7AD69C]">
                   {formatPrice(tipAmount)}
                 </Text>
               </View>
             ) : null}
             {outstanding != null ? (
               <View className="mt-2 flex-row items-center justify-between">
-                <Text className="text-sm font-medium text-black/60 dark:text-white/70">{t('jobs.outstanding')}</Text>
-                <Text className="text-base text-black dark:text-white">
+                <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">{t('jobs.outstanding')}</Text>
+                <Text className="text-app-row text-black dark:text-white">
                   {formatPrice(outstanding)}
                 </Text>
               </View>
@@ -1428,9 +1462,9 @@ export default function JobDetailScreen() {
           </View>
 
           <View className="my-4 h-px bg-black/10 dark:bg-white/10" />
-          <Text className="text-sm font-medium text-black/60 dark:text-white/70">{t('jobs.payments')}</Text>
+          <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">{t('jobs.payments')}</Text>
           {payments.length === 0 ? (
-            <Text className="mt-2 text-sm text-black/60 dark:text-white/70">{t('jobs.noPayments')}</Text>
+            <Text className="mt-2 text-app-meta-lg text-black/60 dark:text-white/70">{t('jobs.noPayments')}</Text>
           ) : (
             payments.map((p) => (
               <Pressable
@@ -1443,14 +1477,14 @@ export default function JobDetailScreen() {
                 }
                 className="mt-2 flex-row items-center justify-between">
                 <View className="flex-1 pr-4">
-                  <Text className="text-sm text-black/80 dark:text-white/80" numberOfLines={1}>
+                  <Text className="text-app-meta-lg text-black/80 dark:text-white/80" numberOfLines={1}>
                     {p.note || t('jobs.payment')}
                   </Text>
                   {p.payment_date ? (
-                    <Text className="text-xs text-black/50 dark:text-white/60">{formatListDate(p.payment_date)}</Text>
+                    <Text className="text-app-meta-lg text-black/50 dark:text-white/60">{formatListDate(p.payment_date)}</Text>
                   ) : null}
                 </View>
-                <Text className="text-sm text-black/70 dark:text-white/80">
+                <Text className="text-app-meta-lg text-black/70 dark:text-white/80">
                   {formatPrice(p.amount ?? 0)}
                 </Text>
               </Pressable>
@@ -1458,9 +1492,9 @@ export default function JobDetailScreen() {
           )}
 
           <View className="my-4 h-px bg-black/10 dark:bg-white/10" />
-          <Text className="text-sm font-medium text-black/60 dark:text-white/70">{t('jobs.expenses')}</Text>
+          <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">{t('jobs.expenses')}</Text>
           {expenses.length === 0 ? (
-            <Text className="mt-2 text-sm text-black/60 dark:text-white/70">{t('jobs.noExpenses')}</Text>
+            <Text className="mt-2 text-app-meta-lg text-black/60 dark:text-white/70">{t('jobs.noExpenses')}</Text>
           ) : (
             expenses.map((e) => (
               <Pressable
@@ -1473,14 +1507,14 @@ export default function JobDetailScreen() {
                 }
                 className="mt-2 flex-row items-center justify-between">
                 <View className="flex-1 pr-4">
-                  <Text className="text-sm text-black/80 dark:text-white/80" numberOfLines={1}>
+                  <Text className="text-app-meta-lg text-black/80 dark:text-white/80" numberOfLines={1}>
                     {e.title || t('jobs.expense')}
                   </Text>
                   {e.created_at ? (
-                    <Text className="text-xs text-black/50 dark:text-white/60">{formatListDate(e.created_at)}</Text>
+                    <Text className="text-app-meta-lg text-black/50 dark:text-white/60">{formatListDate(e.created_at)}</Text>
                   ) : null}
                 </View>
-                <Text className="text-sm text-black/70 dark:text-white/80">
+                <Text className="text-app-meta-lg text-black/70 dark:text-white/80">
                   {formatPrice(e.amount ?? 0)}
                 </Text>
               </Pressable>
@@ -1491,21 +1525,32 @@ export default function JobDetailScreen() {
         {renderImageSection('before', beforeImages, pendingBeforeImages)}
         {renderImageSection('after', afterImages, pendingAfterImages)}
 
-        <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
-          <Text className="text-[18px] font-extrabold text-[#1C2745] dark:text-white">{t('jobs.quickActions')}</Text>
+        <View
+          onLayout={(event) => setQuickActionsY(event.nativeEvent.layout.y)}
+          className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
+          <Text className="text-app-section font-extrabold text-[#1C2745] dark:text-white">{t('jobs.quickActions')}</Text>
           {phoneDigits ? (
             <View className="mt-3">
-              <Text className="text-sm font-medium text-black/60 dark:text-white/70">
+              <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">
                 {t('jobs.customMessage')}
               </Text>
               <View className="mt-2">
-                <TextInput
+                <AppTextInput
                   value={customMessage}
                   onChangeText={setCustomMessage}
+                  onFocus={() => {
+                    setTimeout(() => {
+                      mainScrollRef.current?.scrollTo({
+                        y: Math.max(0, quickActionsY - 24),
+                        animated: true,
+                      });
+                    }, Platform.OS === 'android' ? 260 : 120);
+                  }}
                   placeholder={t('jobs.customMessagePlaceholder')}
                   placeholderTextColor={colors.secondaryText}
                   multiline
-                  className="min-h-[80px] rounded-3xl bg-black/5 px-4 py-3 text-base text-black dark:bg-white/10 dark:text-white"
+                  textAlignVertical="top"
+                  className="min-h-[80px] bg-black/5 dark:bg-white/10"
                 />
               </View>
 
@@ -1514,30 +1559,32 @@ export default function JobDetailScreen() {
                   onPress={onCall}
                   className="mr-2 mt-2 flex-row items-center rounded-3xl bg-black/5 px-4 py-2 dark:bg-white/10">
                   <Ionicons name="call-outline" size={16} color={colors.text} />
-                  <Text className="ml-2 text-sm text-black dark:text-white">{t('jobs.call')}</Text>
+                  <Text className="ml-2 text-app-meta text-black dark:text-white">{t('jobs.call')}</Text>
                 </Pressable>
 
                 <Pressable
                   onPress={onSms}
                   className="mr-2 mt-2 flex-row items-center rounded-3xl bg-[#E8F0FF] px-4 py-2 dark:bg-[#1E2A44]">
                   <Ionicons name="chatbubble-outline" size={16} color={colors.text} />
-                  <Text className="ml-2 text-sm text-black dark:text-white">{t('jobs.sms')}</Text>
+                  <Text className="ml-2 text-app-meta text-black dark:text-white">{t('jobs.sms')}</Text>
                 </Pressable>
 
                 <Pressable
                   onPress={onViber}
                   className="mr-2 mt-2 flex-row items-center rounded-3xl bg-[#E8F7EF] px-4 py-2 dark:bg-[#203326]">
                   <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.text} />
-                  <Text className="ml-2 text-sm text-black dark:text-white">{t('jobs.viber')}</Text>
+                  <Text className="ml-2 text-app-meta text-black dark:text-white">{t('jobs.viber')}</Text>
                 </Pressable>
               </View>
             </View>
           ) : (
-            <Text className="mt-2 text-sm text-black/60 dark:text-white/70">{t('jobs.noPhone')}</Text>
+            <Text className="mt-2 text-app-meta text-black/60 dark:text-white/70">{t('jobs.noPhone')}</Text>
           )}
         </View>
+        </View>
+      </ScrollView>
+      </KeyboardAvoidingView>
       </View>
-    </ScrollView>
 
     <Modal transparent visible={itemModalOpen} animationType="fade" onRequestClose={closeItemModal}>
       <KeyboardAvoidingView
@@ -1546,7 +1593,7 @@ export default function JobDetailScreen() {
         <Pressable onPress={closeItemModal} className="absolute inset-0" />
         <View className="rounded-t-[32px] bg-white px-6 pb-6 pt-5 dark:bg-[#1C1C1E]">
           <View className="mb-4 flex-row items-center justify-between">
-            <Text className="text-[22px] font-extrabold text-[#1C2745] dark:text-white">
+            <Text className="text-app-section font-extrabold text-[#1C2745] dark:text-white">
               {editingItem ? t('jobs.invoiceItemsEdit') : t('jobs.invoiceItemsCreate')}
             </Text>
             <Pressable
@@ -1561,19 +1608,19 @@ export default function JobDetailScreen() {
             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
             automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
             showsVerticalScrollIndicator={false}>
-            <Text className="mb-2 text-[16px] font-semibold text-black dark:text-white">
+            <Text className="mb-2 text-app-row font-semibold text-black dark:text-white">
               {t('jobs.invoiceItemsFieldTitle')}
             </Text>
             <AppTextInput value={itemTitle} onChangeText={setItemTitle} placeholder={t('jobs.invoiceItemsFieldTitlePlaceholder')} />
 
-            <Text className="mb-2 mt-4 text-[16px] font-semibold text-black dark:text-white">
+            <Text className="mb-2 mt-4 text-app-row font-semibold text-black dark:text-white">
               {t('jobs.invoiceItemsFieldUnit')}
             </Text>
             <AppTextInput value={itemUnit} onChangeText={setItemUnit} placeholder={t('jobs.invoiceItemsFieldUnitPlaceholder')} />
 
             <View className="mt-4 flex-row">
               <View className="mr-3 flex-1">
-                <Text className="mb-2 text-[16px] font-semibold text-black dark:text-white">
+                <Text className="mb-2 text-app-row font-semibold text-black dark:text-white">
                   {t('jobs.invoiceItemsFieldQuantity')}
                 </Text>
                 <AppTextInput
@@ -1584,7 +1631,7 @@ export default function JobDetailScreen() {
                 />
               </View>
               <View className="flex-1">
-                <Text className="mb-2 text-[16px] font-semibold text-black dark:text-white">
+                <Text className="mb-2 text-app-row font-semibold text-black dark:text-white">
                   {t('jobs.invoiceItemsFieldUnitPrice')}
                 </Text>
                 <AppTextInput
@@ -1605,7 +1652,7 @@ export default function JobDetailScreen() {
               {itemSubmitting ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text className="text-base font-semibold text-white">{t('common.save')}</Text>
+                <Text className="text-app-row font-semibold text-white">{t('common.save')}</Text>
               )}
             </Pressable>
           </ScrollView>
@@ -1623,7 +1670,7 @@ export default function JobDetailScreen() {
             </Pressable>
             <View className="flex-row items-center">
               {previewImages.length > 1 ? (
-                <Text className="mr-3 text-sm font-semibold text-white/80">
+                <Text className="mr-3 text-app-meta font-semibold text-white/80">
                   {previewIndex + 1} / {previewImages.length}
                 </Text>
               ) : null}
@@ -1657,7 +1704,7 @@ export default function JobDetailScreen() {
               className="absolute left-0 right-0 z-10 items-center"
               style={{ top: insets.top + 58 }}>
               <View className="rounded-full bg-black/40 px-4 py-2 border border-white/10">
-                <Text className="text-sm font-bold text-white">
+                <Text className="text-app-meta font-bold text-white">
                   {formatImageDateTime(previewImage.created_at)}
                 </Text>
               </View>
@@ -1674,7 +1721,7 @@ export default function JobDetailScreen() {
                   className="h-9 w-9 items-center justify-center rounded-full">
                   <Ionicons name="remove" size={18} color="white" />
                 </Pressable>
-                <Text className="mx-2 min-w-[44px] text-center text-sm font-semibold text-white/90">
+                <Text className="mx-2 min-w-[44px] text-center text-app-meta font-semibold text-white/90">
                   {androidZoom.toFixed(1)}x
                 </Text>
                 <Pressable
@@ -1685,7 +1732,7 @@ export default function JobDetailScreen() {
                 <Pressable
                   onPress={resetAndroidZoom}
                   className="ml-1 h-9 items-center justify-center rounded-full px-3">
-                  <Text className="text-xs font-semibold text-white/80">{t('jobs.imageResetZoom')}</Text>
+                  <Text className="text-app-meta font-semibold text-white/80">{t('jobs.imageResetZoom')}</Text>
                 </Pressable>
               </View>
             </View>

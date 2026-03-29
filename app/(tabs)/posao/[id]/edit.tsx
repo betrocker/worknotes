@@ -12,9 +12,9 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Colors from '@/constants/Colors';
-import { StickyFormHeader } from '@/components/StickyFormHeader';
 import { useColorScheme } from '@/components/useColorScheme';
 import { usePlaceholderTextColor } from '@/components/usePlaceholderTextColor';
 import { AppTextInput } from '@/components/AppTextInput';
@@ -39,6 +39,7 @@ export default function EditJobScreen() {
   const { session } = useAuth();
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
+  const insets = useSafeAreaInsets();
 
   const userId = session?.user?.id ?? null;
   const id = typeof params.id === 'string' ? params.id : null;
@@ -58,6 +59,7 @@ export default function EditJobScreen() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
   const placeholderTextColor = usePlaceholderTextColor(submitting);
 
   const selectedClient = useMemo(
@@ -251,19 +253,50 @@ export default function EditJobScreen() {
       className="flex-1 bg-[#F2F2F7] dark:bg-black"
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}>
-      <ScrollView
-        stickyHeaderIndices={[0]}
-        className="flex-1"
-        contentContainerClassName="pb-32"
-        keyboardShouldPersistTaps="handled">
-        <StickyFormHeader
-          title={t('jobs.edit')}
-          onBack={onBack}
-          onSave={onSave}
-          saveLabel={t('common.save')}
-          submitting={submitting}
-        />
+      <View
+        onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 20,
+          elevation: 0,
+          paddingTop: insets.top + 12,
+          paddingHorizontal: 24,
+          paddingBottom: 24,
+          backgroundColor: colorScheme === 'dark' ? '#000000' : '#F2F2F7',
+        }}>
+        <View className="flex-row items-center justify-between">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('common.back')}
+            onPress={onBack}
+            className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
+            <Ionicons name="chevron-back" size={20} color={colors.text} />
+          </Pressable>
 
+          <Pressable
+            disabled={submitting}
+            onPress={onSave}
+            className="h-10 items-center justify-center rounded-3xl bg-[#007AFF] px-5 disabled:opacity-60 dark:bg-[#0A84FF]">
+            {submitting ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <Text className="text-app-body font-semibold text-white">{t('common.save')}</Text>
+            )}
+          </Pressable>
+        </View>
+
+        <Text className="mt-4 font-bold text-app-display tracking-tight text-black dark:text-white">
+          {t('jobs.edit')}
+        </Text>
+      </View>
+
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: 128 }}
+        keyboardShouldPersistTaps="handled">
         <View className="px-6 pt-4">
           <View className="overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
             {loading ? (
@@ -272,7 +305,7 @@ export default function EditJobScreen() {
               </View>
             ) : (
               <>
-                <Text className="text-sm font-medium text-black/60 dark:text-white/70">{t('jobs.titleLabel')}</Text>
+                <Text className="text-app-meta font-medium text-black/60 dark:text-white/70">{t('jobs.titleLabel')}</Text>
                 <AppTextInput
                   value={title}
                   onChangeText={setTitle}
@@ -281,14 +314,14 @@ export default function EditJobScreen() {
                   className="mt-2"
                 />
 
-                <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">
+                <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">
                   {t('jobs.clientLabel')}
                 </Text>
                 <View className="mt-2">
                   <Pressable
                     onPress={toggleClients}
                     className="flex-row items-center justify-between rounded-3xl bg-black/5 px-4 py-3 dark:bg-white/10">
-                    <Text className="text-base text-black dark:text-white">
+                    <Text className="text-app-row text-black dark:text-white">
                       {selectedClient?.name || t('jobs.selectClient')}
                     </Text>
                     <Ionicons
@@ -300,7 +333,7 @@ export default function EditJobScreen() {
                   {selectedClient ? (
                     <Pressable onPress={onClearClient} className="mt-2 flex-row items-center">
                       <Ionicons name="close-circle" size={16} color={colors.secondaryText} />
-                      <Text className="ml-2 text-sm text-black/60 dark:text-white/70">
+                      <Text className="ml-2 text-app-meta text-black/60 dark:text-white/70">
                         {t('jobs.clearClient')}
                       </Text>
                     </Pressable>
@@ -317,7 +350,7 @@ export default function EditJobScreen() {
                       <>
                         {clients.length === 0 ? (
                           <View className="p-4">
-                            <Text className="text-base text-black/60 dark:text-white/70">
+                            <Text className="text-app-row text-black/60 dark:text-white/70">
                               {t('jobs.noClients')}
                             </Text>
                           </View>
@@ -334,7 +367,7 @@ export default function EditJobScreen() {
                                   ? 'px-4 py-3'
                                   : 'px-4 py-3 border-t border-black/10 dark:border-white/10'
                               }>
-                              <Text className="text-base text-black dark:text-white">{item.name || '-'}</Text>
+                              <Text className="text-app-row text-black dark:text-white">{item.name || '-'}</Text>
                             </Pressable>
                           ))
                         )}
@@ -343,7 +376,7 @@ export default function EditJobScreen() {
                   </View>
                 ) : null}
 
-                <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">
+                <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">
                   {t('jobs.statusLabel')}
                 </Text>
                 <View className="mt-2 flex-row flex-wrap">
@@ -362,7 +395,7 @@ export default function EditJobScreen() {
                         ].join(' ')}>
                         <Text
                           className={
-                            selected ? 'text-sm font-semibold text-white' : 'text-sm text-black dark:text-white'
+                            selected ? 'text-app-meta font-semibold text-white' : 'text-app-meta text-black dark:text-white'
                           }>
                           {option.label}
                         </Text>
@@ -381,13 +414,13 @@ export default function EditJobScreen() {
                   className="mt-3"
                 />
 
-                <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">
+                <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">
                   {t('jobs.dateLabel')}
                 </Text>
                 <Pressable
                   onPress={() => setShowDatePicker(true)}
                   className="mt-2 flex-row items-center justify-between rounded-3xl bg-black/5 px-4 py-3 dark:bg-white/10">
-                  <Text className="text-base text-black dark:text-white">
+                  <Text className="text-app-row text-black dark:text-white">
                     {displayDate || t('jobs.datePlaceholder')}
                   </Text>
                   <Ionicons name="calendar-outline" size={18} color={colors.text} />
@@ -395,7 +428,7 @@ export default function EditJobScreen() {
                 {scheduledDate ? (
                   <Pressable onPress={() => setScheduledDate('')} className="mt-2 flex-row items-center">
                     <Ionicons name="close-circle" size={16} color={colors.secondaryText} />
-                    <Text className="ml-2 text-sm text-black/60 dark:text-white/70">{t('jobs.clearDate')}</Text>
+                    <Text className="ml-2 text-app-meta text-black/60 dark:text-white/70">{t('jobs.clearDate')}</Text>
                   </Pressable>
                 ) : null}
                 {showDatePicker ? (
@@ -411,7 +444,7 @@ export default function EditJobScreen() {
                   />
                 ) : null}
 
-                <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">
+                <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">
                   {t('jobs.reminderLabel')}
                 </Text>
                 <View className="mt-2 flex-row flex-wrap">
@@ -428,8 +461,8 @@ export default function EditJobScreen() {
                         <Text
                           className={
                             selected
-                              ? 'text-sm font-semibold text-white'
-                              : 'text-sm text-black dark:text-white'
+                              ? 'text-app-meta font-semibold text-white'
+                              : 'text-app-meta text-black dark:text-white'
                           }>
                           {option.label}
                         </Text>
@@ -438,7 +471,7 @@ export default function EditJobScreen() {
                   })}
                 </View>
 
-                <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">
+                <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">
                   {t('jobs.priceLabel')}
                 </Text>
                 <AppTextInput
@@ -449,9 +482,9 @@ export default function EditJobScreen() {
                   placeholderTextColor={placeholderTextColor}
                   className="mt-2"
                 />
-                <Text className="mt-1 text-xs text-black/50 dark:text-white/60">{t('jobs.amountEurNote')}</Text>
+                <Text className="mt-1 text-app-meta text-black/50 dark:text-white/60">{t('jobs.amountEurNote')}</Text>
 
-                <Text className="mt-4 text-sm font-medium text-black/60 dark:text-white/70">
+                <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">
                   {t('jobs.descriptionLabel')}
                 </Text>
                 <AppTextInput
@@ -466,7 +499,7 @@ export default function EditJobScreen() {
               </>
             )}
 
-            {error ? <Text className="mt-3 text-sm text-red-600">{error}</Text> : null}
+            {error ? <Text className="mt-3 text-app-meta text-red-600">{error}</Text> : null}
           </View>
         </View>
       </ScrollView>
