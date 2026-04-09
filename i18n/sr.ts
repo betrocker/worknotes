@@ -561,7 +561,7 @@ const sr = {
     infoSectionHelp: 'Pravna dokumenta, podrška i osnovne informacije o aplikaciji.',
     appVersion: 'Verzija aplikacije',
     support: 'Podrška',
-    supportHelp: 'Ako primetiš problem u radu aplikacije, zapiši korake i javi da to rešimo precizno.\n\nKontakt: podrska@tefter.app',
+    supportHelp: 'Ako primetiš problem u radu aplikacije, zapiši korake i javi da to rešimo precizno.\n\nKontakt: podrska@etefter.app',
     openPaywall: 'Pregled pretplate',
     openPaywallHelp: 'Otvori paywall ekran i proveri planove, CTA i kupovinu.',
     termsTitle: 'Uslovi korišćenja',
@@ -682,7 +682,7 @@ const sr = {
         {
           title: '11. Kontakt',
           boxTitle: 'Tefter podrška',
-          boxLines: ['Email: podrska@tefter.app'],
+          boxLines: ['Email: podrska@etefter.app'],
         },
       ],
       footer: '',
@@ -784,7 +784,7 @@ const sr = {
         {
           title: '11. Kontakt',
           boxTitle: 'Tefter podrška',
-          boxLines: ['Email: podrska@tefter.app'],
+          boxLines: ['Email: podrska@etefter.app'],
         },
       ],
       footer: '',
@@ -853,3 +853,4 @@ const sr = {
 };
 
 export default sr;
+

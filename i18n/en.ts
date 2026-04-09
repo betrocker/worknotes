@@ -551,7 +551,7 @@ const en = {
     infoSectionHelp: 'Legal documents, support, and basic app information.',
     appVersion: 'App version',
     support: 'Support',
-    supportHelp: 'If you notice an issue in the app, note the steps and report it so we can fix it precisely.\n\nContact: podrska@tefter.app',
+    supportHelp: 'If you notice an issue in the app, note the steps and report it so we can fix it precisely.\n\nContact: podrska@etefter.app',
     openPaywall: 'Subscription preview',
     openPaywallHelp: 'Open the paywall screen and review plans, CTA, and purchase flow.',
     termsTitle: 'Terms of use',
@@ -670,7 +670,7 @@ const en = {
         {
           title: '11. Contact',
           boxTitle: 'Tefter support',
-          boxLines: ['Email: podrska@tefter.app'],
+          boxLines: ['Email: podrska@etefter.app'],
         },
       ],
       footer: '',
@@ -772,7 +772,7 @@ const en = {
         {
           title: '11. Contact',
           boxTitle: 'Tefter support',
-          boxLines: ['Email: podrska@tefter.app'],
+          boxLines: ['Email: podrska@etefter.app'],
         },
       ],
       footer: '',
@@ -841,3 +841,4 @@ const en = {
 };
 
 export default en;
+

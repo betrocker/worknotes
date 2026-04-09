@@ -46,7 +46,8 @@
         "expo-image-picker",
         {
           "photosPermission": "Tefter koristi galeriju za dodavanje slika pre i posle posla, kao i loga firme.",
-          "cameraPermission": "Tefter koristi kameru za fotografisanje slika pre i posle posla."
+          "cameraPermission": "Tefter koristi kameru za fotografisanje slika pre i posle posla.",
+          "microphonePermission": false
         }
       ],
       [
@@ -56,7 +57,8 @@
           "color": "#1A4FE0",
           "defaultChannel": "job-reminders"
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true

@@ -63,9 +63,9 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
       if (!userId) {
         if (active) {
           setReady(true);
-          setHasAccess(!enabled);
+          setHasAccess(true);
           setHasSubscription(false);
-          setHasTrialAccess(false);
+          setHasTrialAccess(true);
           setTrialEndsAt(null);
           setCustomerInfo(null);
         }
@@ -86,7 +86,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
 
           if (active) {
             setReady(true);
-            setHasAccess(true);
+            setHasAccess(isExpoGo || trialAccess);
             setHasSubscription(false);
             setHasTrialAccess(trialAccess);
             setTrialEndsAt(trialEndsAtValue);
@@ -95,7 +95,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
         } catch {
           if (active) {
             setReady(true);
-            setHasAccess(true);
+            setHasAccess(isExpoGo);
             setHasSubscription(false);
             setHasTrialAccess(false);
             setTrialEndsAt(null);
@@ -130,7 +130,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        await Purchases.setLogLevel(LOG_LEVEL.DEBUG);
+        await Purchases.setLogLevel(__DEV__ ? LOG_LEVEL.DEBUG : LOG_LEVEL.WARN);
 
         if (!configuredRef.current) {
           Purchases.configure({
@@ -144,7 +144,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
             setCustomerInfo(info);
             const subscribed = hasActiveEntitlement(info, RC_ENTITLEMENT_ID);
             setHasSubscription(subscribed);
-            setHasAccess(trialAccess || subscribed);
+            setHasAccess(subscribed || trialAccess);
           };
           listenerRef.current = listener;
           Purchases.addCustomerInfoUpdateListener(listener);
@@ -165,7 +165,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
         setCustomerInfo(info);
         const subscribed = hasActiveEntitlement(info, RC_ENTITLEMENT_ID);
         setHasSubscription(subscribed);
-        setHasAccess(trialAccess || subscribed);
+        setHasAccess(subscribed || trialAccess);
       } catch (error) {
         console.warn('[billing] RevenueCat init failed:', error);
         if (!active) return;
@@ -216,7 +216,6 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
         setHasTrialAccess(trialAccess);
         setTrialEndsAt(trialEndsAtValue);
       } catch {
-        setHasSubscription(false);
         setHasTrialAccess(false);
         setTrialEndsAt(null);
       }

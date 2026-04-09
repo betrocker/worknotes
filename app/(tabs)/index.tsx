@@ -11,7 +11,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { listClientOpenDebtJobs, listClientsWithDebt, type ClientOpenDebtJob, type ClientWithDebt } from '@/lib/clients';
 import { parseDateInput } from '@/lib/date';
-import { getHomeFeed, type HomeActivityItem } from '@/lib/home';
+import { getHomeFeed, type HomeActivityItem, type HomeFeed } from '@/lib/home';
 import { listJobs, type JobListItem } from '@/lib/jobs';
 import { getUserDisplayName } from '@/lib/user';
 import { useAuth } from '@/providers/AuthProvider';
@@ -30,7 +30,7 @@ export default function TabOneScreen() {
   const [todayJobs, setTodayJobs] = useState<JobListItem[]>([]);
   const [clientsWithDebt, setClientsWithDebt] = useState<ClientWithDebt[]>([]);
   const [upcomingJobsCount, setUpcomingJobsCount] = useState<number | null>(null);
-  const [activeJobs, setActiveJobs] = useState<JobListItem[]>([]);
+  const [activeJobs, setActiveJobs] = useState<HomeFeed['activeJobs']>([]);
   const [recentActivities, setRecentActivities] = useState<HomeActivityItem[]>([]);
   const [paymentPicker, setPaymentPicker] = useState<{ clientName: string | null; jobs: ClientOpenDebtJob[] } | null>(null);
 

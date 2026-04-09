@@ -70,6 +70,8 @@ export default function KlijentiScreen() {
     }, [load])
   );
 
+  const locale = i18n.language === 'sr' ? 'sr-Latn-RS' : i18n.language;
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items
@@ -84,7 +86,6 @@ export default function KlijentiScreen() {
       .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', locale, { sensitivity: 'base' }));
   }, [filter, items, locale, query]);
 
-  const locale = i18n.language === 'sr' ? 'sr-Latn-RS' : i18n.language;
   const formatMoney = useMemo(
     () =>
       new Intl.NumberFormat(locale, {

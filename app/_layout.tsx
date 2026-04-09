@@ -37,13 +37,26 @@ export const unstable_settings = {
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
-Text.defaultProps = Text.defaultProps || {};
-Text.defaultProps.allowFontScaling = false;
-Text.defaultProps.maxFontSizeMultiplier = 1;
+const GlobalText = Text as typeof Text & {
+  defaultProps?: {
+    allowFontScaling?: boolean;
+    maxFontSizeMultiplier?: number;
+  };
+};
+const GlobalTextInput = TextInput as typeof TextInput & {
+  defaultProps?: {
+    allowFontScaling?: boolean;
+    maxFontSizeMultiplier?: number;
+  };
+};
 
-TextInput.defaultProps = TextInput.defaultProps || {};
-TextInput.defaultProps.allowFontScaling = false;
-TextInput.defaultProps.maxFontSizeMultiplier = 1;
+GlobalText.defaultProps = GlobalText.defaultProps || {};
+GlobalText.defaultProps.allowFontScaling = false;
+GlobalText.defaultProps.maxFontSizeMultiplier = 1;
+
+GlobalTextInput.defaultProps = GlobalTextInput.defaultProps || {};
+GlobalTextInput.defaultProps.allowFontScaling = false;
+GlobalTextInput.defaultProps.maxFontSizeMultiplier = 1;
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({

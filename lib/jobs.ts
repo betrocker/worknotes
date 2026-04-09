@@ -61,21 +61,16 @@ async function resolveCompletedAt(
 }
 
 export async function listJobs(userId: string, options: ListJobsOptions = {}): Promise<JobListItem[]> {
-  let query = supabase
+  const { data, error } = await supabase
     .from('jobs')
     .select('id,title,description,price,status,scheduled_date,completed_at,archived_at,created_at,client:clients(name)')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .overrideTypes<JobListItem[], { merge: false }>();
 
-  if (!options.includeArchived) {
-    query = query.is('archived_at', null);
-  }
-
-  const { data, error } = await query;
-
   if (error) throw new Error(error.message);
-  return data ?? [];
+  const rows = data ?? [];
+  return options.includeArchived ? rows : rows.filter((job) => job.archived_at == null);
 }
 
 export async function createJob(userId: string, input: JobInput): Promise<JobRecord> {

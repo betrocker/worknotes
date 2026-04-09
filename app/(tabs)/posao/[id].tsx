@@ -810,8 +810,13 @@ export default function JobDetailScreen() {
   const downloadImageToCache = useCallback(async (item: JobImageRow) => {
     if (!item.image_url) return null;
     const extension = item.image_url.split('?')[0]?.split('.').pop()?.toLowerCase() || 'jpg';
+    const normalizedExtension = extension === 'png' ? 'png' : 'jpg';
     const localFile = new File(Paths.cache, `job-image-${item.id}.${extension}`);
-    return await File.downloadFileAsync(item.image_url, localFile);
+    await File.downloadFileAsync(item.image_url, localFile);
+    return {
+      uri: localFile.uri,
+      extension: normalizedExtension,
+    };
   }, []);
 
   const onShareImageItem = useCallback(async (item: JobImageRow) => {
@@ -828,7 +833,7 @@ export default function JobDetailScreen() {
         return;
       }
       await Sharing.shareAsync(downloadedFile.uri, {
-        mimeType: `image/${downloadedFile.extension === '.png' ? 'png' : 'jpeg'}`,
+        mimeType: `image/${downloadedFile.extension === 'png' ? 'png' : 'jpeg'}`,
         dialogTitle: t('jobs.imageShareAction'),
       });
     } catch (e: unknown) {
