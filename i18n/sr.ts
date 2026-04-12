@@ -146,9 +146,15 @@ const sr = {
     cta: 'Aktiviraj plan',
     ctaMonthly: 'Aktiviraj mesečni plan',
     ctaYearly: 'Aktiviraj godišnji plan',
+    ctaTrial_one: 'Pokreni {{count}} dan besplatno',
+    ctaTrial_few: 'Pokreni {{count}} dana besplatno',
+    ctaTrial_other: 'Pokreni {{count}} dana besplatno',
     continueFree: 'Nastavi sa besplatnom verzijom',
     bestValue: 'Najbolja vrednost',
     annualSubnote: '≈ € 2.5 mesečno',
+    trialBadge_one: '{{count}} dan besplatno',
+    trialBadge_few: '{{count}} dana besplatno',
+    trialBadge_other: '{{count}} dana besplatno',
     reassurance: 'Koriste majstori koji žele više reda i sigurnu naplatu.',
     footerNote: 'Obnavlja se automatski • Možeš otkazati bilo kada • Uslovi korišćenja • Politika privatnosti',
     restore: 'Obnovi kupovine',
@@ -844,6 +850,11 @@ const sr = {
   authCallback: {
     connecting: 'Povezivanje naloga…',
     missingToken: 'OAuth callback nije vratio code/token.',
+    expoGoNotSupported:
+      'Google prijava nije podržana u Expo Go za ovu aplikaciju. Koristi Development Build ili Production build.',
+    invalidRedirect: 'OAuth se vratio na neočekivani redirect URL.',
+    cancelledOrNotReturned: 'Google prijava je otkazana ili se nije vratila u aplikaciju.',
+    unexpectedResult: 'Google prijava nije uspela (rezultat browser-a: {{type}}).',
   },
   notFound: {
     title: 'Ups!',

@@ -338,12 +338,6 @@ export default function PodesavanjaScreen() {
   };
 
   const onPickCompanyLogo = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      setCompanyError(t('settings.logoPermission'));
-      return;
-    }
-
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,

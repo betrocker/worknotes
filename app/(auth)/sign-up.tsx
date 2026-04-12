@@ -64,7 +64,7 @@ export default function SignUpScreen() {
     setInfo(null);
     const result = await startGoogleOAuth();
     setSubmitting(false);
-    if (!result.ok && result.error) {
+    if (!result.ok) {
       setError(result.error);
     }
   };

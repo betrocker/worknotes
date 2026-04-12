@@ -224,14 +224,7 @@ export default function OnboardingScreen() {
             style={{
               borderRadius: 28,
               backgroundColor: isDark ? 'rgba(28,32,44,0.92)' : 'rgba(255,255,255,0.86)',
-              borderWidth: 1,
-              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(235,240,255,0.96)',
               padding: isCompact ? 14 : 18,
-              shadowColor: '#000000',
-              shadowOpacity: isDark ? 0.26 : 0.18,
-              shadowRadius: 10,
-              shadowOffset: { width: 2, height: 6 },
-              elevation: 12,
             }}>
             <View>
               {current.points.map((point, pointIndex) => (

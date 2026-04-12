@@ -1,0 +1,94 @@
+diff --git a/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/modules/statusbar/StatusBarModule.kt b/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/modules/statusbar/StatusBarModule.kt
+index dbae14c..69c9100 100644
+--- a/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/modules/statusbar/StatusBarModule.kt
++++ b/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/modules/statusbar/StatusBarModule.kt
+@@ -36,9 +36,13 @@ internal class StatusBarModule(reactContext: ReactApplicationContext?) :
+   override fun getTypedExportedConstants(): Map<String, Any> {
+     val currentActivity = reactApplicationContext.currentActivity
+     val statusBarColor =
+-        currentActivity?.window?.statusBarColor?.let { color ->
+-          String.format("#%06X", 0xFFFFFF and color)
+-        } ?: "black"
++        if (Build.VERSION.SDK_INT >= 35) {
++          "black"
++        } else {
++          currentActivity?.window?.statusBarColor?.let { color ->
++            String.format("#%06X", 0xFFFFFF and color)
++          } ?: "black"
++        }
+     return mapOf(
+         HEIGHT_KEY to PixelUtil.toDIPFromPixel(getStatusBarHeightPx(currentActivity).toFloat()),
+         DEFAULT_BACKGROUND_COLOR_KEY to statusBarColor,
+@@ -61,6 +65,12 @@ internal class StatusBarModule(reactContext: ReactApplicationContext?) :
+           "StatusBarModule: Ignored status bar change, current activity is edge-to-edge.")
+       return
+     }
++    if (Build.VERSION.SDK_INT >= 35) {
++      FLog.w(
++          ReactConstants.TAG,
++          "StatusBarModule: Ignored status bar color change on Android 15+.")
++      return
++    }
+     UiThreadUtil.runOnUiThread(
+         object : GuardedRunnable(reactApplicationContext) {
+           override fun runGuarded() {
+diff --git a/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/views/view/WindowUtil.kt b/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/views/view/WindowUtil.kt
+index 60f2a94..e0ece75 100644
+--- a/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/views/view/WindowUtil.kt
++++ b/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/views/view/WindowUtil.kt
+@@ -73,9 +73,6 @@ private fun Window.statusBarHide() {
+     }
+   } else {
+     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+-      // Ensure the content extends into the cutout area
+-      attributes.layoutInDisplayCutoutMode =
+-          WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+       setDecorFitsSystemWindows(false)
+     }
+     addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+@@ -92,8 +89,6 @@ private fun Window.statusBarShow() {
+     }
+   } else {
+     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+-      attributes.layoutInDisplayCutoutMode =
+-          WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
+       setDecorFitsSystemWindows(true)
+     }
+     addFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN)
+@@ -112,25 +107,23 @@ internal fun Window.enableEdgeToEdge() {
+     isNavigationBarContrastEnforced = true
+   }
+ 
+-  statusBarColor = Color.TRANSPARENT
+-  navigationBarColor =
+-      when {
+-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> Color.TRANSPARENT
+-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isDarkMode -> LightNavigationBarColor
+-        else -> DarkNavigationBarColor
+-      }
++  if (Build.VERSION.SDK_INT < 35) {
++    statusBarColor = Color.TRANSPARENT
++    navigationBarColor =
++        when {
++          Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> Color.TRANSPARENT
++          Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isDarkMode -> LightNavigationBarColor
++          else -> DarkNavigationBarColor
++        }
++  }
+ 
+   WindowInsetsControllerCompat(this, decorView).run {
+     isAppearanceLightNavigationBars = !isDarkMode
+   }
+ 
+-  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
++  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+     attributes.layoutInDisplayCutoutMode =
+-        when {
+-          Build.VERSION.SDK_INT >= Build.VERSION_CODES.R ->
+-              WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+-          else -> WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+-        }
++        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+   }
+ }
+ 

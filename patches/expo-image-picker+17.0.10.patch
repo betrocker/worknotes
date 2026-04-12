@@ -1,0 +1,22 @@
+diff --git a/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/ExpoCropImageUtils.kt b/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/ExpoCropImageUtils.kt
+index a690ab2..8b56784 100644
+--- a/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/ExpoCropImageUtils.kt
++++ b/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/ExpoCropImageUtils.kt
+@@ -1,5 +1,6 @@
+ package expo.modules.imagepicker
+ 
+ import android.graphics.Color
++import android.os.Build
+ import android.util.TypedValue
+ import com.canhub.cropper.CropImageOptions
+@@ -82,7 +83,9 @@ object ExpoCropImageUtils {
+     toolbarColor: Int,
+     isNight: Boolean
+   ) {
+-    window.statusBarColor = toolbarColor
++    if (Build.VERSION.SDK_INT < 35) {
++      window.statusBarColor = toolbarColor
++    }
+     WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = !isNight
+   }
+ }

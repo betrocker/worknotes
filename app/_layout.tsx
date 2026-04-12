@@ -179,7 +179,7 @@ function RootNavigationContent({ initialized }: { initialized: boolean }) {
   if (splashVisible) {
     return (
       <>
-        <StatusBar style="light" backgroundColor="#1A4FE0" />
+        <StatusBar style="light" />
         <AppSplashScreen />
       </>
     );
@@ -189,7 +189,6 @@ function RootNavigationContent({ initialized }: { initialized: boolean }) {
     <View style={{ flex: 1, backgroundColor: "#1A4FE0" }}>
       <StatusBar
         style={colorScheme === "dark" ? "light" : "dark"}
-        backgroundColor={colorScheme === "dark" ? "#000000" : "#F2F2F7"}
       />
       <SplashVisibilityProvider showSplash={false}>
         <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>

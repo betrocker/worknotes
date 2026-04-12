@@ -3,7 +3,6 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import * as Print from 'expo-print';
 import { File, Paths } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
-import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -651,12 +650,6 @@ export default function JobDetailScreen() {
               setError(t('jobs.imagePermissions'));
               return;
             }
-          } else {
-            const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (!permission.granted) {
-              setError(t('jobs.imagePermissions'));
-              return;
-            }
           }
 
           setUploadProgress({ kind, done: 0, total: 0 });
@@ -849,15 +842,20 @@ export default function JobDetailScreen() {
   const onSaveImageItem = useCallback(async (item: JobImageRow) => {
     if (!item.image_url) return;
     try {
-      const permission = await MediaLibrary.requestPermissionsAsync();
-      if (!permission.granted) {
-        setError(t('jobs.imageSavePermission'));
-        return;
-      }
       const downloadedFile = await downloadImageToCache(item);
       if (!downloadedFile) return;
-      await MediaLibrary.createAssetAsync(downloadedFile.uri);
-      Alert.alert(t('jobs.imageSavedTitle'), t('jobs.imageSaved'));
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        await Share.share({
+          url: item.image_url,
+          message: item.image_url,
+        });
+        return;
+      }
+      await Sharing.shareAsync(downloadedFile.uri, {
+        mimeType: `image/${downloadedFile.extension === 'png' ? 'png' : 'jpeg'}`,
+        dialogTitle: t('jobs.imageSaveAction'),
+      });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     }

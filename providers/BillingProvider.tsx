@@ -7,6 +7,8 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 
 const RC_INIT_TIMEOUT_MS = 6000;
+const TRIAL_DURATION_DAYS = 7;
+const TRIAL_DURATION_MS = TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000;
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -55,6 +57,65 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
   const configuredRef = useRef(false);
   const listenerRef = useRef<((info: CustomerInfo) => void) | null>(null);
   const lastUserIdRef = useRef<string | null>(null);
+  const getOrInitializeTrialState = useCallback(async (currentUserId: string) => {
+    const nowIso = new Date().toISOString();
+    const nowMs = Date.now();
+
+    const readTrial = async () => {
+      const { data: row, error } = await supabase
+        .from('users')
+        .select('trial_started_at,trial_ends_at')
+        .eq('id', currentUserId)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      const trialStartedAt = typeof row?.trial_started_at === 'string' ? row.trial_started_at : null;
+      const trialEndsAt = typeof row?.trial_ends_at === 'string' ? row.trial_ends_at : null;
+      return { trialStartedAt, trialEndsAt };
+    };
+
+    let { trialStartedAt, trialEndsAt } = await readTrial();
+    const parsedEndsAtMs = trialEndsAt ? new Date(trialEndsAt).getTime() : NaN;
+    const hasValidTrialEndsAt = Number.isFinite(parsedEndsAtMs);
+
+    if (!hasValidTrialEndsAt) {
+      const startIso = trialStartedAt ?? nowIso;
+      const startMs = new Date(startIso).getTime();
+      const normalizedStartMs = Number.isFinite(startMs) ? startMs : nowMs;
+      const normalizedStartIso = Number.isFinite(startMs) ? startIso : nowIso;
+      const endIso = new Date(normalizedStartMs + TRIAL_DURATION_MS).toISOString();
+
+      const { error } = await supabase
+        .from('users')
+        .update({
+          trial_started_at: normalizedStartIso,
+          trial_ends_at: endIso,
+        })
+        .eq('id', currentUserId);
+
+      if (error) throw error;
+
+      ({ trialStartedAt, trialEndsAt } = await readTrial());
+
+      if (!trialStartedAt) {
+        trialStartedAt = normalizedStartIso;
+      }
+
+      if (!trialEndsAt) {
+        trialEndsAt = endIso;
+      }
+    }
+
+    const trialEndsAtMs = trialEndsAt ? new Date(trialEndsAt).getTime() : NaN;
+    const trialAccess = Number.isFinite(trialEndsAtMs) && trialEndsAtMs > Date.now();
+
+    return {
+      trialAccess,
+      trialEndsAt: Number.isFinite(trialEndsAtMs) ? trialEndsAt : null,
+      trialStartedAt,
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -74,15 +135,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
 
       if (!enabled || !apiKey) {
         try {
-          const { data: userRow } = await supabase
-            .from('users')
-            .select('trial_ends_at')
-            .eq('id', userId)
-            .maybeSingle();
-
-          const trialEndsAtValue = typeof userRow?.trial_ends_at === 'string' ? userRow.trial_ends_at : null;
-          const trialEndsAtMs = trialEndsAtValue ? new Date(trialEndsAtValue).getTime() : null;
-          const trialAccess = trialEndsAtMs != null && trialEndsAtMs > Date.now();
+          const { trialAccess, trialEndsAt: trialEndsAtValue } = await getOrInitializeTrialState(userId);
 
           if (active) {
             setReady(true);
@@ -109,15 +162,8 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
 
       let trialAccess = false;
       try {
-        const { data: userRow } = await supabase
-          .from('users')
-          .select('trial_ends_at')
-          .eq('id', userId)
-          .maybeSingle();
-
-        const trialEndsAtValue = typeof userRow?.trial_ends_at === 'string' ? userRow.trial_ends_at : null;
-        const trialEndsAtMs = trialEndsAtValue ? new Date(trialEndsAtValue).getTime() : null;
-        trialAccess = trialEndsAtMs != null && trialEndsAtMs > Date.now();
+        const { trialAccess: nextTrialAccess, trialEndsAt: trialEndsAtValue } = await getOrInitializeTrialState(userId);
+        trialAccess = nextTrialAccess;
         if (active) {
           setHasTrialAccess(trialAccess);
           setTrialEndsAt(trialEndsAtValue);
@@ -171,7 +217,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
         if (!active) return;
         setCustomerInfo(null);
         setHasSubscription(false);
-        setHasAccess((prev) => prev || trialAccess);
+        setHasAccess(trialAccess);
       } finally {
         if (active) {
           setReady(true);
@@ -184,7 +230,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     return () => {
       active = false;
     };
-  }, [apiKey, enabled, userId]);
+  }, [apiKey, enabled, getOrInitializeTrialState, isExpoGo, userId]);
 
   useEffect(() => {
     return () => {
@@ -205,14 +251,8 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     let trialAccess = false;
     if (userId) {
       try {
-        const { data: userRow } = await supabase
-          .from('users')
-          .select('trial_ends_at')
-          .eq('id', userId)
-          .maybeSingle();
-        const trialEndsAtValue = typeof userRow?.trial_ends_at === 'string' ? userRow.trial_ends_at : null;
-        const trialEndsAtMs = trialEndsAtValue ? new Date(trialEndsAtValue).getTime() : null;
-        trialAccess = trialEndsAtMs != null && trialEndsAtMs > Date.now();
+        const { trialAccess: nextTrialAccess, trialEndsAt: trialEndsAtValue } = await getOrInitializeTrialState(userId);
+        trialAccess = nextTrialAccess;
         setHasTrialAccess(trialAccess);
         setTrialEndsAt(trialEndsAtValue);
       } catch {
@@ -227,7 +267,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     setHasSubscription(subscribed);
     setHasAccess(trialAccess || subscribed);
     return info;
-  }, [enabled, userId]);
+  }, [enabled, getOrInitializeTrialState, userId]);
 
   const value = useMemo<BillingContextValue>(
     () => ({

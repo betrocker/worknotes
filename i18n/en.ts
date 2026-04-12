@@ -146,9 +146,13 @@ const en = {
     cta: 'Activate plan',
     ctaMonthly: 'Activate monthly plan',
     ctaYearly: 'Activate yearly plan',
+    ctaTrial_one: 'Start {{count}}-day free trial',
+    ctaTrial_other: 'Start {{count}}-day free trial',
     continueFree: 'Continue with free version',
     bestValue: 'Best value',
     annualSubnote: '≈ € 2.5 monthly',
+    trialBadge_one: '{{count}}-day free trial',
+    trialBadge_other: '{{count}}-day free trial',
     reassurance: 'Used by tradespeople who want more order and safer collections.',
     footerNote: 'Renews automatically • Cancel anytime • Terms of use • Privacy policy',
     restore: 'Restore purchases',
@@ -832,6 +836,11 @@ const en = {
   authCallback: {
     connecting: 'Connecting account…',
     missingToken: 'OAuth callback did not return a code/token.',
+    expoGoNotSupported:
+      'Google sign-in is not supported in Expo Go for this app. Use a Development Build or Production build.',
+    invalidRedirect: 'OAuth returned to an unexpected redirect URL.',
+    cancelledOrNotReturned: 'Google sign-in was cancelled or did not return to the app.',
+    unexpectedResult: 'Google sign-in failed (browser result: {{type}}).',
   },
   notFound: {
     title: 'Oops!',

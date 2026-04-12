@@ -60,7 +60,7 @@ export default function SignInScreen() {
     setError(null);
     const result = await startGoogleOAuth();
     setSubmitting(false);
-    if (!result.ok && result.error) setError(result.error);
+    if (!result.ok) setError(result.error);
   };
 
   const signIn = async () => {

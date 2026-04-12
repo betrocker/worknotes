@@ -15,6 +15,7 @@ const ThemePreferenceContext = createContext<ThemePreferenceContextValue | null>
 export function ThemePreferenceProvider({ children }: { children: React.ReactNode }) {
   const { colorScheme, setColorScheme } = useNativewindColorScheme();
   const [ready, setReady] = useState(false);
+  const [preferredTheme, setPreferredTheme] = useState<AppThemePreference>('light');
 
   useEffect(() => {
     let active = true;
@@ -22,11 +23,9 @@ export function ThemePreferenceProvider({ children }: { children: React.ReactNod
     (async () => {
       try {
         const stored = await getStoredThemePreference();
-        if (stored) {
-          setColorScheme(stored);
-        } else {
-          setColorScheme('light');
-        }
+        const nextTheme = stored ?? 'light';
+        setPreferredTheme(nextTheme);
+        setColorScheme(nextTheme);
       } finally {
         if (active) {
           setReady(true);
@@ -39,10 +38,18 @@ export function ThemePreferenceProvider({ children }: { children: React.ReactNod
     };
   }, [setColorScheme]);
 
-  const currentScheme: AppThemePreference = colorScheme === 'dark' ? 'dark' : 'light';
+  useEffect(() => {
+    if (!ready) return;
+    if (colorScheme !== preferredTheme) {
+      setColorScheme(preferredTheme);
+    }
+  }, [colorScheme, preferredTheme, ready, setColorScheme]);
+
+  const currentScheme: AppThemePreference = preferredTheme;
 
   const persistAndSet = useCallback(
     (theme: AppThemePreference) => {
+      setPreferredTheme(theme);
       setColorScheme(theme);
       void setStoredThemePreference(theme);
     },

@@ -18,7 +18,43 @@ type PlanCard = {
   isAnnual: boolean;
   priceString: string;
   periodLabel: string;
+  trialDays: number | null;
 };
+
+function periodUnitToDays(unit: string | undefined, value: number | null | undefined): number | null {
+  if (!value || value <= 0) return null;
+
+  switch ((unit ?? '').toUpperCase()) {
+    case 'DAY':
+      return value;
+    case 'WEEK':
+      return value * 7;
+    case 'MONTH':
+      return value * 30;
+    case 'YEAR':
+      return value * 365;
+    default:
+      return null;
+  }
+}
+
+function getPackageTrialDays(pkg: PurchasesPackage | null): number | null {
+  if (!pkg) return null;
+
+  const freePhase = pkg.product.defaultOption?.freePhase;
+  if (freePhase?.price?.amountMicros === 0) {
+    const phaseDays = periodUnitToDays(freePhase.billingPeriod?.unit, freePhase.billingPeriod?.value);
+    if (phaseDays) return phaseDays;
+  }
+
+  const introPrice = pkg.product.introPrice;
+  if (introPrice && introPrice.price === 0) {
+    const introDays = periodUnitToDays(introPrice.periodUnit, introPrice.periodNumberOfUnits);
+    if (introDays) return introDays;
+  }
+
+  return null;
+}
 
 export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
@@ -78,6 +114,7 @@ export default function PaywallScreen() {
         if (!active) return;
         setPackages(mockPackages);
         setSelectedPackageId(
+          mockPackages.find((entry) => getPackageTrialDays(entry) != null)?.identifier ??
           mockPackages.find((entry) => entry.packageType === PACKAGE_TYPE.ANNUAL)?.identifier ??
             mockPackages[0].identifier
         );
@@ -111,7 +148,12 @@ export default function PaywallScreen() {
           if (prev && available.some((entry) => entry.identifier === prev)) {
             return prev;
           }
-          return available.find((entry) => entry.packageType === PACKAGE_TYPE.ANNUAL)?.identifier ?? available[0]?.identifier ?? null;
+          return (
+            available.find((entry) => getPackageTrialDays(entry) != null)?.identifier ??
+            available.find((entry) => entry.packageType === PACKAGE_TYPE.ANNUAL)?.identifier ??
+            available[0]?.identifier ??
+            null
+          );
         });
       } catch (e: unknown) {
         if (!active) return;
@@ -136,6 +178,7 @@ export default function PaywallScreen() {
     () => packages.find((entry) => entry.identifier === selectedPackageId) ?? null,
     [packages, selectedPackageId]
   );
+  const selectedTrialDays = useMemo(() => getPackageTrialDays(selectedPackage), [selectedPackage]);
   const paywallTitle = (i18n.resolvedLanguage ?? i18n.language).toLowerCase().startsWith('sr')
     ? 'Nikad više ne zaboravi ko ti duguje'
     : t('paywall.title');
@@ -160,6 +203,7 @@ export default function PaywallScreen() {
           : entry.packageType === PACKAGE_TYPE.ANNUAL
             ? t('paywall.periodYearly')
             : entry.product.identifier,
+      trialDays: getPackageTrialDays(entry),
     }));
   }, [packages, selectedPackageId, t]);
 
@@ -205,7 +249,9 @@ export default function PaywallScreen() {
       router.replace('/(tabs)/podesavanja');
       return;
     }
-    await onSignOut();
+    if (hasTrialAccess) {
+      router.replace('/(tabs)');
+    }
   };
 
   return (
@@ -225,15 +271,17 @@ export default function PaywallScreen() {
         overScrollMode="never"
         keyboardShouldPersistTaps="handled">
         <View className="flex-row items-center justify-end">
-          <Pressable
-            onPress={() => {
-              void onClose();
-            }}
-            accessibilityRole="button"
-            accessibilityLabel={t('paywall.close')}
-            className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
-            <Ionicons name="close" size={18} color={isDark ? '#FFFFFF' : '#1C1C1E'} />
-          </Pressable>
+          {canContinueFree ? (
+            <Pressable
+              onPress={() => {
+                void onClose();
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={t('paywall.close')}
+              className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
+              <Ionicons name="close" size={18} color={isDark ? '#FFFFFF' : '#1C1C1E'} />
+            </Pressable>
+          ) : null}
         </View>
 
         <View className="mt-5">
@@ -370,6 +418,11 @@ export default function PaywallScreen() {
                       {t('paywall.annualSubnote')}
                     </Text>
                   ) : null}
+                  {plan.trialDays ? (
+                    <Text className={plan.active ? 'mt-2 text-app-meta-lg font-semibold text-white/90' : 'mt-2 text-app-meta-lg font-semibold text-[#2F8C57] dark:text-[#7AD69C]'}>
+                      {t('paywall.trialBadge', { count: plan.trialDays })}
+                    </Text>
+                  ) : null}
                 </View>
               </Pressable>
             ))
@@ -405,11 +458,13 @@ export default function PaywallScreen() {
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <Text className="text-app-body font-bold text-white">
-              {t(
-                selectedPackage?.packageType === PACKAGE_TYPE.MONTHLY
-                  ? 'paywall.ctaMonthly'
-                  : 'paywall.ctaYearly'
-              )}
+              {selectedTrialDays && !hasSubscription
+                ? t('paywall.ctaTrial', { count: selectedTrialDays })
+                : t(
+                    selectedPackage?.packageType === PACKAGE_TYPE.MONTHLY
+                      ? 'paywall.ctaMonthly'
+                      : 'paywall.ctaYearly'
+                  )}
             </Text>
           )}
         </Pressable>
