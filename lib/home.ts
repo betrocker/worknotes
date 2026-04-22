@@ -11,18 +11,18 @@ type HomeJobRow = {
   created_at: string | null;
   price: number | null;
   client: { name: string | null } | null;
-  payments: Array<{
+  payments: {
     id: string;
     amount: number | null;
     payment_date: string | null;
     note: string | null;
-  }>;
-  expenses: Array<{
+  }[];
+  expenses: {
     id: string;
     amount: number | null;
     title: string | null;
     created_at: string | null;
-  }>;
+  }[];
 };
 
 export type HomeActivityItem = {

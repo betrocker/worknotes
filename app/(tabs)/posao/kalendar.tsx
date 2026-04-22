@@ -21,6 +21,7 @@ const toDateKey = (date: Date) => {
 };
 
 const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
+type CalendarDayCell = { key: string; date: Date | null };
 
 export default function JobsCalendarScreen() {
   const router = useRouter();
@@ -128,7 +129,7 @@ export default function JobsCalendarScreen() {
     const first = startOfMonth(monthCursor);
     const firstWeekday = (first.getDay() + 6) % 7;
     const daysInMonth = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 0).getDate();
-    const days: Array<{ key: string; date: Date | null }> = [];
+    const days: CalendarDayCell[] = [];
 
     for (let index = 0; index < firstWeekday; index += 1) {
       days.push({ key: `empty-${index}`, date: null });
@@ -143,7 +144,7 @@ export default function JobsCalendarScreen() {
       days.push({ key: `tail-${days.length}`, date: null });
     }
 
-    const result: Array<Array<{ key: string; date: Date | null }>> = [];
+    const result: CalendarDayCell[][] = [];
     for (let index = 0; index < days.length; index += 7) {
       result.push(days.slice(index, index + 7));
     }

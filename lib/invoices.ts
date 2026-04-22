@@ -42,7 +42,7 @@ export async function getOrCreateInvoiceForJob(userId: string, jobId: string): P
       .eq('year', year)
       .order('sequence_number', { ascending: false })
       .limit(1)
-      .overrideTypes<Array<{ sequence_number: number }>, { merge: false }>();
+      .overrideTypes<{ sequence_number: number }[], { merge: false }>();
 
     if (listError) throw new Error(listError.message);
 

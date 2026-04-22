@@ -39,6 +39,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   const userId = session?.user?.id ?? null;
 
   const focusedRoute = state.routes[state.index];
+  const focusedRouteKey = focusedRoute?.key ?? null;
   const focusedIsTab = !!focusedRoute && TAB_ROUTE_NAMES.has(focusedRoute.name);
 
   const visibleRoutes = useMemo(() => {
@@ -59,18 +60,18 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
 
   useEffect(() => {
     if (!itemWidth) return;
-    if (!focusedRoute) return;
+    if (!focusedRouteKey) return;
     if (!visibleRoutes.length) return;
     const visibleIndex = Math.max(
       0,
-      visibleRoutes.findIndex((route) => route.key === focusedRoute?.key)
+      visibleRoutes.findIndex((route) => route.key === focusedRouteKey)
     );
     Animated.timing(translateX, {
       toValue: visibleIndex * itemWidth,
       duration: 180,
       useNativeDriver: true,
     }).start();
-  }, [focusedRoute?.key, itemWidth, translateX, visibleRoutes]);
+  }, [focusedRouteKey, itemWidth, translateX, visibleRoutes]);
 
   useEffect(() => {
     if (!userId) {
@@ -93,7 +94,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
     return () => {
       mounted = false;
     };
-  }, [focusedRoute?.key, userId]);
+  }, [focusedRouteKey, userId]);
 
   const onLayout = (event: LayoutChangeEvent) => {
     setBarWidth(event.nativeEvent.layout.width);
@@ -159,7 +160,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
             const { options } = descriptors[route.key];
             const label = options.title ?? route.name;
 
-            const isFocused = focusedRoute?.key === route.key;
+            const isFocused = focusedRouteKey === route.key;
             const iconName = getIconForRoute(route.name, isFocused);
             const color = isFocused ? colors.text : colors.tabIconDefault;
             const badgeCount = route.name === 'dugovanja' ? debtsBadgeCount : 0;

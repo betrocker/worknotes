@@ -191,6 +191,24 @@ export default function DugovanjaScreen() {
     setContactClient(item);
   }, []);
 
+  const onRowPress = useCallback(
+    async (item: ClientWithDebt) => {
+      if (!userId) return;
+      try {
+        const jobs = await listClientOpenDebtJobs(userId, item.id);
+        if (jobs.length === 0) return;
+        if (jobs.length === 1) {
+          router.push(`/(tabs)/posao/${jobs[0].id}` as any);
+          return;
+        }
+        setDebtJobsPicker({ clientName: item.name, jobs });
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [router, userId]
+  );
+
   const onCloseContactModal = useCallback(() => {
     setContactClient(null);
   }, []);
@@ -214,7 +232,7 @@ export default function DugovanjaScreen() {
           placeholder={t('debts.searchPlaceholder')}
         />
 
-        {error ? <Text className="mt-3 text-app-meta text-red-600">{error}</Text> : null}
+        {error ? <Text className="mt-3 text-app-meta text-red-600 dark:text-red-400">{error}</Text> : null}
 
         <View
           className="mt-4 flex-1 overflow-hidden rounded-[24px]"
@@ -266,7 +284,10 @@ export default function DugovanjaScreen() {
               ListHeaderComponent={filtered.length > 0 ? <View className="h-3" /> : null}
               ListFooterComponent={filtered.length > 0 ? <View className="h-3" /> : null}
               renderItem={({ item, index }) => (
-                <View
+                <Pressable
+                  onPress={() => {
+                    void onRowPress(item);
+                  }}
                   className="bg-white px-4 py-4 dark:bg-[#1C1C1E]"
                   style={{
                     borderTopWidth: index > 0 ? 1 : 0,
@@ -357,7 +378,7 @@ export default function DugovanjaScreen() {
                       </View>
                     </View>
                   </View>
-                </View>
+                </Pressable>
               )}
             />
           )}

@@ -15,15 +15,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
-import { useColorScheme } from '@/components/useColorScheme';
 import { usePlaceholderTextColor } from '@/components/usePlaceholderTextColor';
 import { AppTextInput } from '@/components/AppTextInput';
 import { supabase } from '@/lib/supabase';
 
 export default function ResetPasswordScreen() {
   const insets = useSafeAreaInsets();
-  const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark';
   const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -145,7 +142,7 @@ export default function ResetPasswordScreen() {
 
               <Link href="/(auth)/sign-in" asChild>
                 <Pressable className="mt-2 py-2">
-                  <Text className="text-center text-app-row font-semibold text-[#3C69D9]">
+                  <Text className="text-center text-app-row font-semibold text-[#3C69D9] dark:text-[#8FB2FF]">
                     {t('auth.resetPassword.backToSignIn')}
                   </Text>
                 </Pressable>

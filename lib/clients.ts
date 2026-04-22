@@ -26,7 +26,7 @@ type ClientDebtRow = {
   address: string | null;
   note: string | null;
   created_at: string | null;
-  jobs: Array<{
+  jobs: {
     id: string;
     title: string | null;
     price: number | null;
@@ -34,8 +34,8 @@ type ClientDebtRow = {
     scheduled_date: string | null;
     completed_at: string | null;
     created_at: string | null;
-    payments: Array<{ amount: number | null }>;
-  }>;
+    payments: { amount: number | null }[];
+  }[];
 };
 
 export type ClientWithDebt = {
@@ -61,7 +61,7 @@ type ClientDetailRow = {
   address: string | null;
   note: string | null;
   created_at: string | null;
-  jobs: Array<{
+  jobs: {
     id: string;
     title: string | null;
     price: number | null;
@@ -69,8 +69,8 @@ type ClientDetailRow = {
     scheduled_date: string | null;
     completed_at: string | null;
     created_at: string | null;
-    payments: Array<{ id: string; amount: number | null; payment_date: string | null; note: string | null }>;
-  }>;
+    payments: { id: string; amount: number | null; payment_date: string | null; note: string | null }[];
+  }[];
 };
 
 export type ClientDetailJob = {
@@ -83,7 +83,7 @@ export type ClientDetailJob = {
   created_at: string | null;
   paid: number;
   debt: number;
-  payments: Array<{ id: string; amount: number | null; payment_date: string | null; note: string | null }>;
+  payments: { id: string; amount: number | null; payment_date: string | null; note: string | null }[];
 };
 
 export type ClientDetail = {

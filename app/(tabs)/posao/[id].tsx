@@ -22,9 +22,7 @@ import {
   Pressable,
   Share,
   ScrollView,
-  StyleSheet,
   Text,
-  TextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -77,9 +75,7 @@ export default function JobDetailScreen() {
   const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
   const [invoiceItems, setInvoiceItems] = useState<JobInvoiceItemRow[]>([]);
   const [images, setImages] = useState<JobImageRow[]>([]);
-  const [pendingImages, setPendingImages] = useState<
-    Array<{ uri: string; kind: JobImageKind; key: string }>
-  >([]);
+  const [pendingImages, setPendingImages] = useState<{ uri: string; kind: JobImageKind; key: string }[]>([]);
   const [reminderType, setReminderType] = useState<JobReminderOption>('same_day');
   const [uploadProgress, setUploadProgress] = useState<{
     kind: JobImageKind;
@@ -899,27 +895,6 @@ export default function JobDetailScreen() {
     [onShareImageItem, selectedImageIds, t]
   );
 
-  const onDeleteImageItem = useCallback(
-    (item: JobImageRow) => {
-      Alert.alert(t('jobs.imageDeleteTitle'), t('jobs.imageDeleteMessage'), [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('jobs.imageDeleteAction'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteJobImage(item.id, item.storage_path);
-              setImages((prev) => prev.filter((row) => row.id !== item.id));
-            } catch (e: unknown) {
-              setError(e instanceof Error ? e.message : String(e));
-            }
-          },
-        },
-      ]);
-    },
-    [t]
-  );
-
   const onDeleteSelectedImages = useCallback(
     (items: JobImageRow[]) => {
       const selectedItems = items.filter((item) => selectedImageIds.includes(item.id));
@@ -969,7 +944,7 @@ export default function JobDetailScreen() {
     (
       kind: JobImageKind,
       items: JobImageRow[],
-      pending: Array<{ uri: string; kind: JobImageKind; key: string }>
+      pending: { uri: string; kind: JobImageKind; key: string }[]
     ) => {
       const expanded = expandedImageSections[kind];
       const selectionMode = selectedImageKind === kind && selectedImageIds.length > 0;

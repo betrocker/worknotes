@@ -86,7 +86,7 @@ export function PaymentJobPickerModal({ visible, clientName, jobs, onClose, onSe
                     </Text>
                   </View>
                   <View className="items-end">
-                    <Text className="text-app-row font-extrabold text-[#C84D4D]">
+                    <Text className="text-app-row font-extrabold text-[#C84D4D] dark:text-[#FF8A8A]">
                       {moneyFormatter.format(job.debt)}
                     </Text>
                   </View>

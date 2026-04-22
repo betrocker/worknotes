@@ -155,11 +155,12 @@ function RootNavigationContent({ initialized }: { initialized: boolean }) {
 
   if (!splashVisible && guardsReady) {
     const inAuthGroup = segments[0] === "(auth)";
+    const inOAuthCallback = segments[0] === "auth" && segments[1] === "callback";
     const inOnboarding = segments[0] === "onboarding";
     const inPaywall = segments[0] === "paywall";
     const paywallPreview = params.preview === "1";
 
-    if (!session && !inAuthGroup) {
+    if (!session && !inAuthGroup && !inOAuthCallback) {
       return <Redirect href="/(auth)/sign-in" />;
     }
 

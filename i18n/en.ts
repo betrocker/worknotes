@@ -835,12 +835,18 @@ const en = {
   },
   authCallback: {
     connecting: 'Connecting account…',
-    missingToken: 'OAuth callback did not return a code/token.',
+    missingToken: 'Google sign-in did not return an ID token.',
     expoGoNotSupported:
       'Google sign-in is not supported in Expo Go for this app. Use a Development Build or Production build.',
+    webNotSupported: 'Google sign-in is currently not supported in the web build of this app.',
+    googleMissingWebClientId:
+      'Missing EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID. Add your Google Web Client ID to .env.',
+    googleInProgress: 'Google sign-in is already in progress. Please wait for it to finish.',
+    googlePlayServicesUnavailable:
+      'Google Play Services are unavailable or outdated on this device.',
     invalidRedirect: 'OAuth returned to an unexpected redirect URL.',
     cancelledOrNotReturned: 'Google sign-in was cancelled or did not return to the app.',
-    unexpectedResult: 'Google sign-in failed (browser result: {{type}}).',
+    unexpectedResult: 'Google sign-in failed (detail: {{type}}).',
   },
   notFound: {
     title: 'Oops!',

@@ -509,7 +509,7 @@ export default function TabOneScreen() {
                 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                   <View style={{ marginRight: 12, flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-                    <Ionicons style={{ marginRight: 12 }} name="cash-outline" size={17} color="#C84D4D" />
+                    <Ionicons style={{ marginRight: 12 }} name="cash-outline" size={17} color={isDark ? '#FF8A8A' : '#C84D4D'} />
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>{client.name || t('common.unnamed')}</Text>
                       <View style={{ marginTop: 4, flexDirection: 'row', alignItems: 'center' }}>
@@ -520,7 +520,7 @@ export default function TabOneScreen() {
                     </View>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={{ color: '#C84D4D', fontSize: 16, fontWeight: '800' }}>{formatCurrency(client.debt)}</Text>
+                    <Text style={{ color: isDark ? '#FF8A8A' : '#C84D4D', fontSize: 16, fontWeight: '800' }}>{formatCurrency(client.debt)}</Text>
                     <Pressable
                       onPress={(event) => {
                         event.stopPropagation();
@@ -533,7 +533,7 @@ export default function TabOneScreen() {
                         paddingHorizontal: 14,
                         paddingVertical: 8,
                       }}>
-                      <Text style={{ color: '#2F68ED', fontSize: 13, fontWeight: '700' }}>{t('jobs.payment')}</Text>
+                      <Text style={{ color: isDark ? '#8FB2FF' : '#2F68ED', fontSize: 13, fontWeight: '700' }}>{t('jobs.payment')}</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -564,7 +564,7 @@ export default function TabOneScreen() {
                 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                   <View style={{ marginRight: 12, flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-                    <Ionicons style={{ marginRight: 12 }} name="briefcase-outline" size={17} color="#C26A1A" />
+                    <Ionicons style={{ marginRight: 12 }} name="briefcase-outline" size={17} color={isDark ? '#FFBF7A' : '#C26A1A'} />
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>{job.title || t('jobs.untitled')}</Text>
                       <View style={{ marginTop: 4, flexDirection: 'row', alignItems: 'center' }}>
@@ -587,11 +587,11 @@ export default function TabOneScreen() {
                       style={{
                         borderRadius: 999,
                         borderWidth: 1,
-                        borderColor: '#C26A1A',
+                        borderColor: isDark ? '#FFBF7A' : '#C26A1A',
                         paddingHorizontal: 12,
                         paddingVertical: 5,
                       }}>
-                      <Text style={{ color: '#C26A1A', fontSize: 11, fontWeight: '700' }}>{t('jobs.statuses.inProgress')}</Text>
+                      <Text style={{ color: isDark ? '#FFBF7A' : '#C26A1A', fontSize: 11, fontWeight: '700' }}>{t('jobs.statuses.inProgress')}</Text>
                     </View>
                   </View>
                 </View>

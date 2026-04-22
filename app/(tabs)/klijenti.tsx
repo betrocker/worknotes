@@ -363,41 +363,38 @@ export default function KlijentiScreen() {
               )}
               ListHeaderComponent={filtered.length > 0 ? <View className="h-3" /> : null}
               ListFooterComponent={filtered.length > 0 ? <View className="h-3" /> : null}
-              renderItem={({ item, index }) => (
-                <Pressable
-                  onPress={() =>
-                    router.push({ pathname: '/(tabs)/klijent/[id]' as any, params: { id: item.id } })
-                  }
-                  className="bg-white px-4 py-4 dark:bg-[#1C1C1E]"
-                  style={{
-                    borderTopWidth: index > 0 ? 1 : 0,
-                    borderTopColor: 'transparent',
-                  }}>
-                  <View>
-                    {index > 0 ? (
-                      <View
-                        style={{
-                          position: 'absolute',
-                          top: -16,
-                          left: 0,
-                          right: 0,
-                          height: 1,
-                          backgroundColor:
-                            colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(60,60,67,0.08)',
-                        }}
-                      />
-                    ) : null}
-
+              renderItem={({ item, index }) => {
+                const dividerColor =
+                  colorScheme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(60,60,67,0.10)';
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={item.name || '-'}
+                    onPress={() =>
+                      router.push({ pathname: '/(tabs)/klijent/[id]' as any, params: { id: item.id } })
+                    }
+                    android_ripple={{
+                      color: colorScheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                    }}
+                    className="px-4 py-4"
+                    style={{
+                      backgroundColor: colorScheme === 'dark' ? '#1C1C1E' : '#FFFFFF',
+                      borderTopWidth: index > 0 ? 1 : 0,
+                      borderTopColor: dividerColor,
+                    }}>
                     <View className="flex-row items-start justify-between">
                       <View className="mr-3 flex-1">
-                        <Text className="text-app-row-lg font-bold text-[#1C2745] dark:text-white" numberOfLines={1}>
+                        <Text
+                          className="text-app-row-lg font-bold text-[#1C2745] dark:text-white"
+                          numberOfLines={1}>
                           {item.name || '-'}
                         </Text>
                       </View>
 
                       {item.debt > 0 ? (
                         <Text className="ml-3 text-app-meta-lg text-red-600 dark:text-red-400">
-                          {t('clients.debt')}: <Text className="font-semibold">{formatMoney.format(item.debt)}</Text>
+                          {t('clients.debt')}:{' '}
+                          <Text className="font-semibold">{formatMoney.format(item.debt)}</Text>
                         </Text>
                       ) : null}
                     </View>
@@ -405,11 +402,15 @@ export default function KlijentiScreen() {
                     <View className="mt-0.5 flex-row items-center justify-between">
                       <View className="mr-4 flex-1 flex-row items-center">
                         {item.phone ? (
-                          <Text className="text-app-meta-lg text-black/60 dark:text-white/70" numberOfLines={1}>
+                          <Text
+                            className="text-app-meta-lg text-black/60 dark:text-white/70"
+                            numberOfLines={1}>
                             {item.phone}
                           </Text>
                         ) : item.address ? (
-                          <Text className="text-app-meta-lg text-black/60 dark:text-white/70" numberOfLines={1}>
+                          <Text
+                            className="text-app-meta-lg text-black/60 dark:text-white/70"
+                            numberOfLines={1}>
                             {item.address}
                           </Text>
                         ) : null}
@@ -417,14 +418,16 @@ export default function KlijentiScreen() {
 
                       <View className="flex-row items-center">
                         <Pressable
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            onContact(item);
-                          }}
+                          onPress={() => onContact(item)}
+                          hitSlop={6}
                           accessibilityRole="button"
                           accessibilityLabel={t('clients.contact')}
                           className="mr-2 flex-row items-center rounded-full bg-black/[0.04] px-3 py-1.5 dark:bg-white/[0.06]">
-                          <Ionicons name="chatbubble-ellipses-outline" size={14} color={colors.secondaryText} />
+                          <Ionicons
+                            name="chatbubble-ellipses-outline"
+                            size={14}
+                            color={colors.secondaryText}
+                          />
                           <Text className="ml-1.5 text-app-meta-lg font-medium text-black/75 dark:text-white/80">
                             {t('clients.contact')}
                           </Text>
@@ -432,10 +435,8 @@ export default function KlijentiScreen() {
 
                         {item.debt > 0 ? (
                           <Pressable
-                            onPress={(e) => {
-                              e.stopPropagation();
-                              onAddPayment(item);
-                            }}
+                            onPress={() => onAddPayment(item)}
+                            hitSlop={6}
                             accessibilityRole="button"
                             accessibilityLabel={t('jobs.payment')}
                             className="flex-row items-center rounded-full bg-[#EAF1FF] px-3 py-1.5 dark:bg-[#243149]">
@@ -453,9 +454,9 @@ export default function KlijentiScreen() {
                         ) : null}
                       </View>
                     </View>
-                  </View>
-                </Pressable>
-              )}
+                  </Pressable>
+                );
+              }}
             />
           )}
           {!loading && listCanScroll && showScrollHint ? (

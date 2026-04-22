@@ -849,12 +849,18 @@ const sr = {
   },
   authCallback: {
     connecting: 'Povezivanje naloga…',
-    missingToken: 'OAuth callback nije vratio code/token.',
+    missingToken: 'Google prijava nije vratila ID token.',
     expoGoNotSupported:
       'Google prijava nije podržana u Expo Go za ovu aplikaciju. Koristi Development Build ili Production build.',
+    webNotSupported: 'Google prijava trenutno nije podržana na web verziji ove aplikacije.',
+    googleMissingWebClientId:
+      'Nedostaje EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID. Dodaj Google Web Client ID u .env.',
+    googleInProgress: 'Google prijava je već u toku. Sačekaj da se prethodni pokušaj završi.',
+    googlePlayServicesUnavailable:
+      'Google Play Services nisu dostupni ili su zastareli na ovom uređaju.',
     invalidRedirect: 'OAuth se vratio na neočekivani redirect URL.',
     cancelledOrNotReturned: 'Google prijava je otkazana ili se nije vratila u aplikaciju.',
-    unexpectedResult: 'Google prijava nije uspela (rezultat browser-a: {{type}}).',
+    unexpectedResult: 'Google prijava nije uspela (detalj: {{type}}).',
   },
   notFound: {
     title: 'Ups!',

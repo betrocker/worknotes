@@ -262,7 +262,7 @@ export default function SignUpScreen() {
 
               <Link href="/(auth)/sign-in" asChild>
                 <Pressable className="mt-2 py-2">
-                <Text className="text-center text-app-row font-semibold text-[#3C69D9]">
+                <Text className="text-center text-app-row font-semibold text-[#3C69D9] dark:text-[#8FB2FF]">
                   {t('auth.signUp.alreadyHave')}
                 </Text>
                 </Pressable>

@@ -1,160 +1,112 @@
-import * as Linking from 'expo-linking';
-import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
+import {
+  GoogleSignin,
+  isErrorWithCode,
+  isSuccessResponse,
+  statusCodes,
+} from '@react-native-google-signin/google-signin';
 import i18n from '@/lib/i18n';
 
 import { supabase } from '@/lib/supabase';
 
-WebBrowser.maybeCompleteAuthSession();
-const CALLBACK_POLL_MS = 1800;
-const CALLBACK_POLL_STEP_MS = 150;
+let googleConfigured = false;
 
-function parseHashParams(urlString: string) {
-  try {
-    const url = new URL(urlString);
-    const hash = url.hash?.startsWith('#') ? url.hash.slice(1) : url.hash;
-    if (!hash) return new URLSearchParams();
-    return new URLSearchParams(hash);
-  } catch {
-    return new URLSearchParams();
-  }
-}
+function ensureGoogleConfigured() {
+  if (googleConfigured) return { ok: true as const };
 
-function parseSearchParams(urlString: string) {
-  try {
-    const url = new URL(urlString);
-    return url.searchParams;
-  } catch {
-    return new URLSearchParams();
-  }
-}
+  const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim();
+  const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim();
 
-function getParam(urlString: string, key: string): string | null {
-  const search = parseSearchParams(urlString);
-  const searchValue = search.get(key);
-  if (searchValue) return searchValue;
-
-  const hash = parseHashParams(urlString);
-  const hashValue = hash.get(key);
-  if (hashValue) return hashValue;
-
-  try {
-    const parsed = Linking.parse(urlString);
-    const fallback = parsed.queryParams?.[key];
-    if (typeof fallback === 'string' && fallback.length > 0) return fallback;
-  } catch {
-    // no-op
+  if (!webClientId) {
+    return {
+      ok: false as const,
+      error: i18n.t('authCallback.googleMissingWebClientId'),
+    };
   }
 
-  return null;
-}
+  GoogleSignin.configure({
+    webClientId,
+    iosClientId: iosClientId || undefined,
+    offlineAccess: false,
+  });
 
-function looksLikeCallback(urlString: string, redirectTo: string) {
-  if (urlString.startsWith(redirectTo)) return true;
-
-  try {
-    const parsed = Linking.parse(urlString);
-    return parsed.path === 'auth/callback';
-  } catch {
-    return false;
-  }
-}
-
-async function completeSessionFromUrl(urlString: string, redirectTo: string) {
-  if (!looksLikeCallback(urlString, redirectTo)) {
-    return { ok: false as const, error: i18n.t('authCallback.invalidRedirect'), redirectTo };
-  }
-
-  const code = getParam(urlString, 'code');
-  if (code) {
-    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-    if (exchangeError) return { ok: false as const, error: exchangeError.message, redirectTo };
-    return { ok: true as const, redirectTo };
-  }
-
-  const access_token = getParam(urlString, 'access_token');
-  const refresh_token = getParam(urlString, 'refresh_token');
-  if (access_token && refresh_token) {
-    const { error: setError } = await supabase.auth.setSession({ access_token, refresh_token });
-    if (setError) return { ok: false as const, error: setError.message, redirectTo };
-    return { ok: true as const, redirectTo };
-  }
-
-  return { ok: false as const, error: i18n.t('authCallback.missingToken'), redirectTo };
-}
-
-function wait(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  googleConfigured = true;
+  return { ok: true as const };
 }
 
 export async function startGoogleOAuth() {
-  // In Expo Go this becomes an exp://.../--/auth/callback URL.
-  // In a standalone/dev build it becomes your scheme (e.g. expotailwindrouter://auth/callback).
-  const redirectTo = Linking.createURL('auth/callback');
   const isExpoGo =
     Constants.executionEnvironment === 'storeClient' || Constants.appOwnership === 'expo';
 
   if (isExpoGo) {
+    return { ok: false as const, error: i18n.t('authCallback.expoGoNotSupported') };
+  }
+
+  if (Platform.OS === 'web') {
+    return { ok: false as const, error: i18n.t('authCallback.webNotSupported') };
+  }
+
+  const configResult = ensureGoogleConfigured();
+  if (!configResult.ok) {
+    return configResult;
+  }
+
+  try {
+    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+    const googleResponse = await GoogleSignin.signIn();
+
+    if (!isSuccessResponse(googleResponse)) {
+      return { ok: false as const, error: i18n.t('authCallback.cancelledOrNotReturned') };
+    }
+
+    const idToken = googleResponse.data.idToken;
+    if (!idToken) {
+      console.warn(
+        '[oauth] Google sign-in returned no idToken. Make sure EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID is the "Web application" OAuth Client ID (not the Android one) and that an Android OAuth Client ID with the correct SHA-1 + package name exists in Google Cloud Console.'
+      );
+      return { ok: false as const, error: i18n.t('authCallback.missingToken') };
+    }
+
+    const { error } = await supabase.auth.signInWithIdToken({
+      provider: 'google',
+      token: idToken,
+    });
+
+    if (error) {
+      console.warn('[oauth] supabase.auth.signInWithIdToken failed:', error.message, error);
+      return { ok: false as const, error: `Supabase: ${error.message}` };
+    }
+
+    return { ok: true as const };
+  } catch (error: unknown) {
+    console.warn('[oauth] Google sign-in threw:', error);
+
+    if (isErrorWithCode(error)) {
+      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+        return { ok: false as const, error: i18n.t('authCallback.cancelledOrNotReturned') };
+      }
+      if (error.code === statusCodes.IN_PROGRESS) {
+        return { ok: false as const, error: i18n.t('authCallback.googleInProgress') };
+      }
+      if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        return {
+          ok: false as const,
+          error: i18n.t('authCallback.googlePlayServicesUnavailable'),
+        };
+      }
+      const codeLabel = error.code ? `[${error.code}] ` : '';
+      const message = error.message || i18n.t('authCallback.unexpectedResult', { type: 'native_google_signin' });
+      return { ok: false as const, error: `${codeLabel}${message}` };
+    }
+
+    if (error instanceof Error && error.message) {
+      return { ok: false as const, error: error.message };
+    }
+
     return {
       ok: false as const,
-      error: i18n.t('authCallback.expoGoNotSupported'),
-      redirectTo,
+      error: i18n.t('authCallback.unexpectedResult', { type: 'native_google_signin' }),
     };
   }
-
-  const { data: oauthData, error: oauthError } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: {
-      redirectTo,
-      skipBrowserRedirect: true,
-      queryParams: {
-        prompt: 'select_account',
-        access_type: 'offline',
-      },
-    },
-  });
-
-  if (oauthError) {
-    return { ok: false as const, error: oauthError.message, redirectTo };
-  }
-
-  let callbackOutcome:
-    | { ok: true; redirectTo: string }
-    | { ok: false; error: string; redirectTo: string }
-    | null = null;
-
-  const subscription = Linking.addEventListener('url', (event) => {
-    if (callbackOutcome || !looksLikeCallback(event.url, redirectTo)) return;
-    void (async () => {
-      callbackOutcome = await completeSessionFromUrl(event.url, redirectTo);
-    })();
-  });
-
-  const result = await WebBrowser.openAuthSessionAsync(oauthData.url, redirectTo);
-  subscription.remove();
-
-  if (result.type === 'success' && result.url) {
-    return completeSessionFromUrl(result.url, redirectTo);
-  }
-
-  // Android devices sometimes report cancel/dismiss even when the deep-link callback was delivered.
-  const pollSteps = Math.ceil(CALLBACK_POLL_MS / CALLBACK_POLL_STEP_MS);
-  for (let step = 0; step < pollSteps; step += 1) {
-    if (callbackOutcome) return callbackOutcome;
-    await wait(CALLBACK_POLL_STEP_MS);
-  }
-
-  const { data: sessionData } = await supabase.auth.getSession();
-  if (sessionData.session) {
-    return { ok: true as const, redirectTo };
-  }
-
-  return {
-    ok: false as const,
-    error:
-      result.type === 'cancel' || result.type === 'dismiss'
-        ? i18n.t('authCallback.cancelledOrNotReturned')
-        : i18n.t('authCallback.unexpectedResult', { type: result.type }),
-    redirectTo,
-  };
 }

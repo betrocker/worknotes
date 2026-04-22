@@ -42,7 +42,7 @@ async function syncJobPrice(jobId: string) {
     .from('job_invoice_items')
     .select('total')
     .eq('job_id', jobId)
-    .overrideTypes<Array<{ total: number | null }>, { merge: false }>();
+    .overrideTypes<{ total: number | null }[], { merge: false }>();
 
   if (error) throw new Error(error.message);
 
@@ -60,7 +60,7 @@ async function getNextPosition(jobId: string) {
     .eq('job_id', jobId)
     .order('position', { ascending: false })
     .limit(1)
-    .overrideTypes<Array<{ position: number | null }>, { merge: false }>();
+    .overrideTypes<{ position: number | null }[], { merge: false }>();
 
   if (error) throw new Error(error.message);
   return (data?.[0]?.position ?? 0) + 1;

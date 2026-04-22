@@ -216,14 +216,14 @@ export default function SignInScreen() {
               <View className="mt-3 flex-row items-center justify-between">
                 <Link href="/(auth)/reset-password" asChild>
                   <Pressable className="py-2">
-                    <Text className="text-app-row font-semibold text-[#3C69D9]">
+                    <Text className="text-app-row font-semibold text-[#3C69D9] dark:text-[#8FB2FF]">
                       {t('auth.signIn.forgot')}
                     </Text>
                   </Pressable>
                 </Link>
                 <Link href="/(auth)/sign-up" asChild>
                   <Pressable className="py-2">
-                    <Text className="text-app-row font-semibold text-[#3C69D9]">
+                    <Text className="text-app-row font-semibold text-[#3C69D9] dark:text-[#8FB2FF]">
                       {t('auth.signIn.createAccount')}
                     </Text>
                   </Pressable>

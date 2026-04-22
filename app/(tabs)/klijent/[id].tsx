@@ -163,7 +163,7 @@ export default function ClientDetailScreen() {
   }, [timeline, timelineRange]);
 
   const groupedTimeline = useMemo(() => {
-    const groups: Array<{ key: string; label: string; items: TimelineEvent[] }> = [];
+    const groups: { key: string; label: string; items: TimelineEvent[] }[] = [];
     const indexByKey = new Map<string, number>();
 
     filteredTimeline.forEach((event) => {
@@ -246,48 +246,6 @@ export default function ClientDetailScreen() {
 
   return (
     <View className="flex-1 bg-[#F2F2F7] dark:bg-black">
-      <View
-        onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20, backgroundColor: colors.background }}>
-        <View className="px-6 pb-6" style={{ paddingTop: insets.top + 12 }}>
-          <View className="flex-row items-center justify-between">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('common.back')}
-              onPress={onBack}
-              className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
-              <Ionicons name="chevron-back" size={20} color={colors.text} />
-            </Pressable>
-
-            <View className="flex-row items-center">
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('clients.edit')}
-                onPress={onEdit}
-                className="mr-3 h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
-                <FontAwesome name="pencil" size={16} color={colors.text} />
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('clients.delete')}
-                onPress={onDelete}
-                className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
-                <Ionicons name="trash" size={18} color="#FF3B30" />
-              </Pressable>
-            </View>
-          </View>
-
-          <Text className="mt-4 font-bold text-app-display tracking-tight text-black dark:text-white">
-            {client?.name || '-'}
-          </Text>
-          <View className="mt-1 flex-row items-center">
-            <Text className="text-app-subtitle text-black/60 dark:text-white/70">
-              {clientMetaText}
-            </Text>
-          </View>
-        </View>
-      </View>
-
       <ScrollView
         className="flex-1 bg-[#F2F2F7] dark:bg-black"
         contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: 128 }}>
@@ -385,7 +343,7 @@ export default function ClientDetailScreen() {
                               </View>
                             </View>
                             <View className="items-end">
-                              <Text className="text-app-row-lg font-extrabold text-[#C84D4D]">
+                              <Text className="text-app-row-lg font-extrabold text-[#C84D4D] dark:text-[#FF8A8A]">
                                 {moneyFormatter.format(job.debt)}
                               </Text>
                               <Text className="mt-1 text-app-meta-lg text-black/45 dark:text-white/55">
@@ -568,6 +526,59 @@ export default function ClientDetailScreen() {
         )}
       </View>
       </ScrollView>
+
+      <View
+        onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 30,
+          elevation: 12,
+          backgroundColor: colors.background,
+        }}>
+        <View className="px-6 pb-6" style={{ paddingTop: insets.top + 12 }}>
+          <View className="flex-row items-center justify-between">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('common.back')}
+              onPress={onBack}
+              hitSlop={8}
+              className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
+              <Ionicons name="chevron-back" size={20} color={colors.text} />
+            </Pressable>
+
+            <View className="flex-row items-center">
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('clients.edit')}
+                onPress={onEdit}
+                hitSlop={8}
+                className="mr-3 h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
+                <FontAwesome name="pencil" size={16} color={colors.text} />
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('clients.delete')}
+                onPress={onDelete}
+                hitSlop={8}
+                className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
+                <Ionicons name="trash" size={18} color="#FF3B30" />
+              </Pressable>
+            </View>
+          </View>
+
+          <Text className="mt-4 font-bold text-app-display tracking-tight text-black dark:text-white">
+            {client?.name || '-'}
+          </Text>
+          <View className="mt-1 flex-row items-center">
+            <Text className="text-app-subtitle text-black/60 dark:text-white/70">
+              {clientMetaText}
+            </Text>
+          </View>
+        </View>
+      </View>
     </View>
   );
 }

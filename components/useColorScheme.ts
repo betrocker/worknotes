@@ -8,6 +8,10 @@ export function useSetColorScheme() {
   return useThemePreference().setColorScheme;
 }
 
+export function useReapplyColorScheme() {
+  return useThemePreference().reapplyColorScheme;
+}
+
 export function useToggleColorScheme() {
   return useThemePreference().toggleColorScheme;
 }
