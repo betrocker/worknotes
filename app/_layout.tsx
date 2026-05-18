@@ -14,7 +14,6 @@ import { Text, TextInput, View } from "react-native";
 import "../global.css";
 
 import { AuthProvider, useAuth } from "@/providers/AuthProvider";
-import { AppSplashScreen } from "@/components/AppSplashScreen";
 import { SplashVisibilityProvider } from "@/components/SplashVisibilityContext";
 import { useColorScheme } from "@/components/useColorScheme";
 import i18n from "@/lib/i18n";
@@ -140,49 +139,50 @@ function RootNavigationContent({ initialized }: { initialized: boolean }) {
   const { ready: billingReady, hasAccess } = useBilling();
   const segments = useSegments();
   const params = useGlobalSearchParams<{ preview?: string }>();
-  const guardsReady = initialized && themeReady && onboardingReady && billingReady;
-  const splashVisible = !initialized || !themeReady;
+  const appReady = initialized && themeReady;
 
   useEffect(() => {
-    if (splashVisible) {
-      void SplashScreen.hideAsync();
-      return;
-    }
-    if (!splashVisible) {
+    if (appReady) {
       void SplashScreen.hideAsync();
     }
-  }, [splashVisible]);
+  }, [appReady]);
 
-  if (!splashVisible && guardsReady) {
-    const inAuthGroup = segments[0] === "(auth)";
-    const inOAuthCallback = segments[0] === "auth" && segments[1] === "callback";
-    const inOnboarding = segments[0] === "onboarding";
-    const inPaywall = segments[0] === "paywall";
-    const paywallPreview = params.preview === "1";
+  const inAuthGroup = segments[0] === "(auth)";
+  const inOAuthCallback = segments[0] === "auth" && segments[1] === "callback";
+  const inOnboarding = segments[0] === "onboarding";
+  const inPaywall = segments[0] === "paywall";
+  const paywallPreview = params.preview === "1";
 
+  if (appReady) {
     if (!session && !inAuthGroup && !inOAuthCallback) {
       return <Redirect href="/(auth)/sign-in" />;
     }
 
-    if (session && !onboardingCompleted && !inOnboarding) {
+    if (session && onboardingReady && !onboardingCompleted && !inOnboarding) {
       return <Redirect href="/onboarding" />;
     }
 
-    if (session && onboardingCompleted && !hasAccess && !inPaywall) {
+    if (session && onboardingReady && billingReady && onboardingCompleted && !hasAccess && !inPaywall) {
       return <Redirect href="/paywall" />;
     }
 
-    if (session && onboardingCompleted && hasAccess && (inAuthGroup || inOnboarding || (inPaywall && !paywallPreview))) {
+    if (
+      session &&
+      onboardingReady &&
+      billingReady &&
+      onboardingCompleted &&
+      hasAccess &&
+      (inAuthGroup || inOnboarding || (inPaywall && !paywallPreview))
+    ) {
       return <Redirect href="/(tabs)" />;
     }
   }
 
-  if (splashVisible) {
+  if (!appReady) {
     return (
-      <>
+      <View style={{ flex: 1, backgroundColor: "#0C63E7" }}>
         <StatusBar style="light" />
-        <AppSplashScreen />
-      </>
+      </View>
     );
   }
 

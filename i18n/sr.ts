@@ -852,6 +852,8 @@ const sr = {
     missingToken: 'Google prijava nije vratila ID token.',
     expoGoNotSupported:
       'Google prijava nije podržana u Expo Go za ovu aplikaciju. Koristi Development Build ili Production build.',
+    googleNativeModuleMissing:
+      'Google prijava nije dostupna u ovom iOS buildu. Napravi novi Development Build ili Production build.',
     webNotSupported: 'Google prijava trenutno nije podržana na web verziji ove aplikacije.',
     googleMissingWebClientId:
       'Nedostaje EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID. Dodaj Google Web Client ID u .env.',

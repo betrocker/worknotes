@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 
-import { supabase } from '@/lib/supabase';
+import { clearSupabaseAuthStorage, isInvalidRefreshTokenError, supabase } from '@/lib/supabase';
 import { getUserDisplayName } from '@/lib/user';
 
 type AuthContextValue = {
@@ -19,18 +19,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    supabase.auth
-      .getSession()
-      .then(({ data }) => {
+    const loadSession = async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+
+        if (error && isInvalidRefreshTokenError(error)) {
+          await clearSupabaseAuthStorage();
+        } else if (error) {
+          console.warn('[auth] Failed to restore session:', error.message);
+        }
+
         if (!mounted) return;
-        setSession(data.session ?? null);
+        setSession(error ? null : (data.session ?? null));
         setInitialized(true);
-      })
-      .catch(() => {
+      } catch (error: unknown) {
+        if (isInvalidRefreshTokenError(error)) {
+          await clearSupabaseAuthStorage();
+        }
+
         if (!mounted) return;
         setSession(null);
         setInitialized(true);
-      });
+      }
+    };
+
+    void loadSession();
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);

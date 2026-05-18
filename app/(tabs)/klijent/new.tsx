@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { ScrollView, Text, View } from 'react-native';
 
@@ -24,6 +25,21 @@ export default function NewClientScreen() {
   const [error, setError] = useState<string | null>(null);
   const placeholderTextColor = usePlaceholderTextColor(submitting);
 
+  const resetForm = useCallback(() => {
+    setName('');
+    setPhone('');
+    setAddress('');
+    setNote('');
+    setSubmitting(false);
+    setError(null);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      resetForm();
+    }, [resetForm])
+  );
+
   const onSave = async () => {
     if (!userId) return;
     const trimmed = name.trim();
@@ -40,6 +56,7 @@ export default function NewClientScreen() {
         address: address.trim() || null,
         note: note.trim() || null,
       });
+      resetForm();
       router.replace({ pathname: '/(tabs)/klijenti' as any });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -56,7 +73,8 @@ export default function NewClientScreen() {
     <ScrollView
       stickyHeaderIndices={[0]}
       className="flex-1 bg-[#F2F2F7] dark:bg-black"
-      contentContainerClassName="pb-32">
+      contentContainerClassName="pb-32"
+      keyboardShouldPersistTaps="always">
       <StickyFormHeader
         title={t('clients.add')}
         onBack={onBack}

@@ -21,6 +21,16 @@ export function ThemePreferenceProvider({ children }: { children: React.ReactNod
   const preferredRef = useRef<AppThemePreference>('light');
   const reapplyTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
+  const applyTheme = useCallback(
+    (theme: AppThemePreference) => {
+      setColorScheme(theme);
+      if (typeof Appearance.setColorScheme === 'function') {
+        Appearance.setColorScheme(theme);
+      }
+    },
+    [setColorScheme]
+  );
+
   const clearReapplyTimers = useCallback(() => {
     for (const timer of reapplyTimersRef.current) {
       clearTimeout(timer);
@@ -29,8 +39,8 @@ export function ThemePreferenceProvider({ children }: { children: React.ReactNod
   }, []);
 
   const reapplyPreferredTheme = useCallback(() => {
-    setColorScheme(preferredRef.current);
-  }, [setColorScheme]);
+    applyTheme(preferredRef.current);
+  }, [applyTheme]);
 
   const scheduleReapplyBurst = useCallback(() => {
     clearReapplyTimers();
@@ -56,8 +66,8 @@ export function ThemePreferenceProvider({ children }: { children: React.ReactNod
         const nextTheme = stored ?? 'light';
         preferredRef.current = nextTheme;
         setPreferredTheme(nextTheme);
-        setColorScheme(nextTheme);
-        reapplyTimersRef.current.push(setTimeout(() => setColorScheme(nextTheme), 120));
+        applyTheme(nextTheme);
+        reapplyTimersRef.current.push(setTimeout(() => applyTheme(nextTheme), 120));
       } finally {
         if (active) {
           setReady(true);
@@ -68,7 +78,7 @@ export function ThemePreferenceProvider({ children }: { children: React.ReactNod
     return () => {
       active = false;
     };
-  }, [setColorScheme]);
+  }, [applyTheme]);
 
   useEffect(() => {
     return () => {
@@ -120,11 +130,11 @@ export function ThemePreferenceProvider({ children }: { children: React.ReactNod
       clearReapplyTimers();
       preferredRef.current = theme;
       setPreferredTheme(theme);
-      setColorScheme(theme);
-      reapplyTimersRef.current.push(setTimeout(() => setColorScheme(theme), 80));
+      applyTheme(theme);
+      reapplyTimersRef.current.push(setTimeout(() => applyTheme(theme), 80));
       void setStoredThemePreference(theme);
     },
-    [clearReapplyTimers, setColorScheme]
+    [applyTheme, clearReapplyTimers]
   );
 
   const toggleColorScheme = useCallback(() => {

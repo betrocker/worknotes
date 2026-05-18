@@ -104,6 +104,7 @@ export default function JobDetailScreen() {
   const [headerHeight, setHeaderHeight] = useState(0);
   const [quickActionsY, setQuickActionsY] = useState(0);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [itemModalHeight, setItemModalHeight] = useState(0);
   const mainScrollRef = useRef<ScrollView>(null);
 
   const locale = i18n.language === 'sr' ? 'sr-Latn-RS' : i18n.language;
@@ -375,6 +376,12 @@ export default function JobDetailScreen() {
       : 68);
   const previewBottomInset = insets.bottom + 40;
   const previewContentHeight = Math.max(screenHeight - previewTopInset - previewBottomInset, 220);
+  const itemSheetKeyboardOffset = 0;
+  const itemModalAvailableHeight = itemModalHeight || screenHeight;
+  const itemSheetMaxHeight = Math.max(
+    280,
+    Math.min(itemModalAvailableHeight - insets.top - 16, screenHeight - keyboardHeight - insets.top - 24)
+  );
 
   const phone = job?.client?.phone ?? null;
   const phoneDigits = phone ? phone.replace(/[^\d+]/g, '') : null;
@@ -1567,9 +1574,16 @@ export default function JobDetailScreen() {
     <Modal transparent visible={itemModalOpen} animationType="fade" onRequestClose={closeItemModal}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        className="flex-1 justify-end bg-black/35">
+        className="flex-1 justify-end bg-black/35"
+        onLayout={(event) => setItemModalHeight(event.nativeEvent.layout.height)}>
         <Pressable onPress={closeItemModal} className="absolute inset-0" />
-        <View className="rounded-t-[32px] bg-white px-6 pb-6 pt-5 dark:bg-[#1C1C1E]">
+        <View
+          className="rounded-t-[32px] bg-white px-6 pt-5 dark:bg-[#1C1C1E]"
+          style={{
+            paddingBottom: 24 + insets.bottom,
+            marginBottom: itemSheetKeyboardOffset,
+            maxHeight: itemSheetMaxHeight,
+          }}>
           <View className="mb-4 flex-row items-center justify-between">
             <Text className="text-app-section font-extrabold text-[#1C2745] dark:text-white">
               {editingItem ? t('jobs.invoiceItemsEdit') : t('jobs.invoiceItemsCreate')}
@@ -1585,7 +1599,8 @@ export default function JobDetailScreen() {
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
             automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
-            showsVerticalScrollIndicator={false}>
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 8 }}>
             <Text className="mb-2 text-app-row font-semibold text-black dark:text-white">
               {t('jobs.invoiceItemsFieldTitle')}
             </Text>

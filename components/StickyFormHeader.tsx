@@ -30,7 +30,7 @@ export function StickyFormHeader({
   const colors = Colors[colorScheme];
 
   return (
-    <View style={{ position: 'relative', zIndex: 20, backgroundColor: colors.background }}>
+    <View style={{ position: 'relative', zIndex: 20, elevation: 20, backgroundColor: colors.background }}>
       <View style={{ paddingTop: insets.top + 12, paddingHorizontal: 24, paddingBottom: 16 }}>
         <View className="flex-row items-center justify-between">
           <Pressable

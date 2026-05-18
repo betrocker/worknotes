@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import {
@@ -31,6 +32,18 @@ import { useAuth } from '@/providers/AuthProvider';
 
 type ClientOption = { id: string; name: string | null };
 
+function getInitialScheduledDateValue(prefilledScheduledDate: string | null): string {
+  if (prefilledScheduledDate) {
+    const parsed = parseDateInput(prefilledScheduledDate);
+    if (parsed) return prefilledScheduledDate;
+  }
+  const now = new Date();
+  const yyyy = String(now.getFullYear());
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 export default function NewJobScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ clientId?: string; scheduledDate?: string }>();
@@ -51,6 +64,9 @@ export default function NewJobScreen() {
   const [reminderType, setReminderType] = useState<JobReminderOption>('same_day');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [clientId, setClientId] = useState<string | null>(null);
+  const [scheduledDate, setScheduledDate] = useState(() =>
+    getInitialScheduledDateValue(prefilledScheduledDate)
+  );
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [clientOpen, setClientOpen] = useState(false);
   const [loadingClients, setLoadingClients] = useState(false);
@@ -99,9 +115,15 @@ export default function NewJobScreen() {
       const data = await listClients(userId);
       const mapped = data.map((client) => ({ id: client.id, name: client.name }));
       setClients(mapped);
-      if (preselectedClientId && mapped.some((client) => client.id === preselectedClientId)) {
-        setClientId(preselectedClientId);
-      }
+      setClientId((previous) => {
+        if (preselectedClientId && mapped.some((client) => client.id === preselectedClientId)) {
+          return preselectedClientId;
+        }
+        if (previous && mapped.some((client) => client.id === previous)) {
+          return previous;
+        }
+        return null;
+      });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -109,20 +131,36 @@ export default function NewJobScreen() {
     }
   }, [preselectedClientId, userId]);
 
-  useEffect(() => {
-    void loadClients();
-  }, [loadClients]);
+  const resetJobForm = useCallback(() => {
+    setTitle('');
+    setDescription('');
+    setPrice('');
+    setStatusValue('');
+    setStatusText('');
+    setClientId(null);
+    setClientOpen(false);
+    setScheduledDate(getInitialScheduledDateValue(prefilledScheduledDate));
+    setShowDatePicker(false);
+    setSubmitting(false);
+    setError(null);
+  }, [prefilledScheduledDate]);
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      const nextReminder = await getDefaultJobReminderPreference();
-      if (mounted) setReminderType(nextReminder);
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      resetJobForm();
+      void loadClients();
+      let isActive = true;
+      (async () => {
+        const nextReminder = await getDefaultJobReminderPreference();
+        if (isActive) setReminderType(nextReminder);
+      })();
+      return () => {
+        isActive = false;
+        setClientOpen(false);
+        setShowDatePicker(false);
+      };
+    }, [loadClients, resetJobForm])
+  );
 
   const parseAmount = useCallback((value: string): number | null => {
     const trimmed = value.trim();
@@ -174,6 +212,7 @@ export default function NewJobScreen() {
           clientName: selectedClient?.name ?? null,
         });
       }
+      resetJobForm();
       router.replace({ pathname: '/(tabs)/poslovi' as any });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -200,13 +239,6 @@ export default function NewJobScreen() {
     const dd = String(date.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
   }, []);
-  const [scheduledDate, setScheduledDate] = useState(() => {
-    if (prefilledScheduledDate) {
-      const parsed = parseDateInput(prefilledScheduledDate);
-      if (parsed) return prefilledScheduledDate;
-    }
-    return formatDate(new Date());
-  });
 
   const locale = i18n.language === 'sr' ? 'sr-Latn-RS' : i18n.language;
   const dateFormatter = useMemo(
@@ -232,19 +264,17 @@ export default function NewJobScreen() {
       className="flex-1 bg-[#F2F2F7] dark:bg-black"
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}>
+      <StickyFormHeader
+        title={t('jobs.add')}
+        onBack={onBack}
+        onSave={onSave}
+        saveLabel={t('common.save')}
+        submitting={submitting}
+      />
       <ScrollView
-        stickyHeaderIndices={[0]}
         className="flex-1"
-        contentContainerClassName="pb-32"
-        keyboardShouldPersistTaps="handled">
-        <StickyFormHeader
-          title={t('jobs.add')}
-          onBack={onBack}
-          onSave={onSave}
-          saveLabel={t('common.save')}
-          submitting={submitting}
-        />
-
+        contentContainerClassName="pb-32 pt-4"
+        keyboardShouldPersistTaps="always">
         <View className="px-6">
           <View className="overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
             <Text className="text-app-meta font-medium text-black/60 dark:text-white/70">{t('jobs.titleLabel')}</Text>

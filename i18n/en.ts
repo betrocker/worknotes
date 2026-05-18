@@ -838,6 +838,8 @@ const en = {
     missingToken: 'Google sign-in did not return an ID token.',
     expoGoNotSupported:
       'Google sign-in is not supported in Expo Go for this app. Use a Development Build or Production build.',
+    googleNativeModuleMissing:
+      'Google sign-in is not available in this iOS build. Create a new Development Build or Production build.',
     webNotSupported: 'Google sign-in is currently not supported in the web build of this app.',
     googleMissingWebClientId:
       'Missing EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID. Add your Google Web Client ID to .env.',

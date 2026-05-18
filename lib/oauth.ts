@@ -1,18 +1,25 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import {
-  GoogleSignin,
-  isErrorWithCode,
-  isSuccessResponse,
-  statusCodes,
-} from '@react-native-google-signin/google-signin';
 import i18n from '@/lib/i18n';
 
 import { supabase } from '@/lib/supabase';
 
-let googleConfigured = false;
+type GoogleSigninModule = typeof import('@react-native-google-signin/google-signin');
 
-function ensureGoogleConfigured() {
+let googleConfigured = false;
+let googleSigninModule: GoogleSigninModule | null = null;
+
+async function loadGoogleSigninModule() {
+  try {
+    googleSigninModule ??= await import('@react-native-google-signin/google-signin');
+    return { ok: true as const, module: googleSigninModule };
+  } catch (error: unknown) {
+    console.warn('[oauth] Google Sign-In native module is unavailable:', error);
+    return { ok: false as const, error: i18n.t('authCallback.googleNativeModuleMissing') };
+  }
+}
+
+function ensureGoogleConfigured(googleSignin: GoogleSigninModule) {
   if (googleConfigured) return { ok: true as const };
 
   const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim();
@@ -25,7 +32,7 @@ function ensureGoogleConfigured() {
     };
   }
 
-  GoogleSignin.configure({
+  googleSignin.GoogleSignin.configure({
     webClientId,
     iosClientId: iosClientId || undefined,
     offlineAccess: false,
@@ -47,16 +54,22 @@ export async function startGoogleOAuth() {
     return { ok: false as const, error: i18n.t('authCallback.webNotSupported') };
   }
 
-  const configResult = ensureGoogleConfigured();
+  const googleSigninResult = await loadGoogleSigninModule();
+  if (!googleSigninResult.ok) {
+    return googleSigninResult;
+  }
+
+  const googleSignin = googleSigninResult.module;
+  const configResult = ensureGoogleConfigured(googleSignin);
   if (!configResult.ok) {
     return configResult;
   }
 
   try {
-    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-    const googleResponse = await GoogleSignin.signIn();
+    await googleSignin.GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+    const googleResponse = await googleSignin.GoogleSignin.signIn();
 
-    if (!isSuccessResponse(googleResponse)) {
+    if (!googleSignin.isSuccessResponse(googleResponse)) {
       return { ok: false as const, error: i18n.t('authCallback.cancelledOrNotReturned') };
     }
 
@@ -82,14 +95,14 @@ export async function startGoogleOAuth() {
   } catch (error: unknown) {
     console.warn('[oauth] Google sign-in threw:', error);
 
-    if (isErrorWithCode(error)) {
-      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+    if (googleSignin.isErrorWithCode(error)) {
+      if (error.code === googleSignin.statusCodes.SIGN_IN_CANCELLED) {
         return { ok: false as const, error: i18n.t('authCallback.cancelledOrNotReturned') };
       }
-      if (error.code === statusCodes.IN_PROGRESS) {
+      if (error.code === googleSignin.statusCodes.IN_PROGRESS) {
         return { ok: false as const, error: i18n.t('authCallback.googleInProgress') };
       }
-      if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+      if (error.code === googleSignin.statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
         return {
           ok: false as const,
           error: i18n.t('authCallback.googlePlayServicesUnavailable'),
