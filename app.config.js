@@ -57,6 +57,7 @@ module.exports = () => {
       },
       plugins: [
         'expo-router',
+        'expo-font',
         [
           'expo-splash-screen',
           {
@@ -90,6 +91,7 @@ module.exports = () => {
           },
         ],
         '@react-native-community/datetimepicker',
+        'expo-web-browser',
         googleSigninPlugin,
       ],
       experiments: {
