@@ -1,20 +1,20 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import {
   ActivityIndicator,
+  Animated,
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  ScrollView,
   Text,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Colors from '@/constants/Colors';
+import { StickyFormHeader } from '@/components/StickyFormHeader';
 import { useColorScheme } from '@/components/useColorScheme';
 import { usePlaceholderTextColor } from '@/components/usePlaceholderTextColor';
 import { AppTextInput } from '@/components/AppTextInput';
@@ -28,6 +28,7 @@ import {
   setJobReminderPreference,
   type JobReminderOption,
 } from '@/lib/notifications';
+import { goBackOrReplace } from '@/lib/navigation';
 import { useAuth } from '@/providers/AuthProvider';
 
 type ClientOption = { id: string; name: string | null };
@@ -39,7 +40,7 @@ export default function EditJobScreen() {
   const { session } = useAuth();
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
-  const insets = useSafeAreaInsets();
+  const scrollY = useRef(new Animated.Value(0)).current;
 
   const userId = session?.user?.id ?? null;
   const id = typeof params.id === 'string' ? params.id : null;
@@ -48,7 +49,7 @@ export default function EditJobScreen() {
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
   const [statusValue, setStatusValue] = useState('');
-  const [statusText, setStatusText] = useState('');
+  const [pendingReason, setPendingReason] = useState('');
   const [reminderType, setReminderType] = useState<JobReminderOption>('same_day');
   const [scheduledDate, setScheduledDate] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -59,7 +60,6 @@ export default function EditJobScreen() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [headerHeight, setHeaderHeight] = useState(0);
   const placeholderTextColor = usePlaceholderTextColor(submitting);
 
   const selectedClient = useMemo(
@@ -71,6 +71,7 @@ export default function EditJobScreen() {
     () => [
       { value: 'scheduled', label: t('jobs.statuses.scheduled') },
       { value: 'in_progress', label: t('jobs.statuses.inProgress') },
+      { value: 'pending', label: t('jobs.statuses.pending') },
       { value: 'done', label: t('jobs.statuses.done') },
     ],
     [t]
@@ -88,7 +89,7 @@ export default function EditJobScreen() {
 
   const locale = i18n.language === 'sr' ? 'sr-Latn-RS' : i18n.language;
   const dateFormatter = useMemo(
-    () => new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'short', year: 'numeric' }),
+    () => new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'long', year: 'numeric' }),
     [locale]
   );
 
@@ -137,16 +138,8 @@ export default function EditJobScreen() {
       setTitle(data.title ?? '');
       setDescription(data.description ?? '');
       setPrice(data.price == null ? '' : String(data.price));
+      setPendingReason(data.pending_reason ?? '');
       setStatusValue(data.status ?? '');
-      if (data.status === 'scheduled') {
-        setStatusText(t('jobs.statuses.scheduled'));
-      } else if (data.status === 'in_progress') {
-        setStatusText(t('jobs.statuses.inProgress'));
-      } else if (data.status === 'done') {
-        setStatusText(t('jobs.statuses.done'));
-      } else {
-        setStatusText(data.status ?? '');
-      }
       setScheduledDate(data.scheduled_date ?? '');
       setClientId(data.client_id ?? null);
       setReminderType(await getJobReminderPreference(id));
@@ -161,16 +154,6 @@ export default function EditJobScreen() {
     void loadClients();
     void loadJob();
   }, [loadClients, loadJob]);
-
-  useEffect(() => {
-    if (statusValue === 'scheduled') {
-      setStatusText(t('jobs.statuses.scheduled'));
-    } else if (statusValue === 'in_progress') {
-      setStatusText(t('jobs.statuses.inProgress'));
-    } else if (statusValue === 'done') {
-      setStatusText(t('jobs.statuses.done'));
-    }
-  }, [statusValue, t]);
 
   const parseAmount = useCallback((value: string): number | null => {
     const trimmed = value.trim();
@@ -208,6 +191,7 @@ export default function EditJobScreen() {
       await updateJob(userId, id, {
         title: trimmedTitle,
         description: description.trim() || null,
+        pending_reason: pendingReason.trim() || null,
         price: numericPrice,
         status: statusValue.trim() || null,
         scheduled_date: scheduledDate.trim() || null,
@@ -234,10 +218,10 @@ export default function EditJobScreen() {
 
   const onBack = () => {
     if (!id) {
-      router.replace({ pathname: '/(tabs)/poslovi' as any });
+      goBackOrReplace(router, { pathname: '/(tabs)/poslovi' as any });
       return;
     }
-    router.replace({ pathname: '/(tabs)/posao/[id]' as any, params: { id } });
+    goBackOrReplace(router, { pathname: '/(tabs)/posao/[id]' as any, params: { id } });
   };
 
   const toggleClients = () => {
@@ -248,79 +232,82 @@ export default function EditJobScreen() {
     setClientId(null);
   };
 
-  return (
-    <KeyboardAvoidingView
-      className="flex-1 bg-[#F2F2F7] dark:bg-black"
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}>
-      <View
-        onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 20,
-          elevation: 0,
-          paddingTop: insets.top + 12,
-          paddingHorizontal: 24,
-          paddingBottom: 24,
-          backgroundColor: colorScheme === 'dark' ? '#000000' : '#F2F2F7',
-        }}>
-        <View className="flex-row items-center justify-between">
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('common.back')}
-            onPress={onBack}
-            className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
-            <Ionicons name="chevron-back" size={20} color={colors.text} />
-          </Pressable>
+  const sectionSeparatorColor = colorScheme === 'dark' ? 'rgba(84,84,88,0.38)' : 'rgba(60,60,67,0.14)';
+  const formSectionContentStyle = { marginLeft: 12, marginTop: 8 };
+  const fieldInputClassName = 'mt-2 rounded-xl bg-black/[0.035] px-0 py-0 dark:bg-white/[0.07]';
+  const descriptionInputClassName = 'min-h-[76px] rounded-xl bg-black/[0.035] px-0 py-0 dark:bg-white/[0.07]';
+  const fieldPressableClassName = 'mt-2 flex-row items-center justify-between rounded-xl bg-black/[0.035] py-1.5 dark:bg-white/[0.07]';
+  const fieldInputStyle = { height: 38, paddingHorizontal: 10, paddingVertical: 0 };
+  const fieldPressableStyle = { minHeight: 38, paddingHorizontal: 10 };
+  const descriptionInputStyle = { minHeight: 76, paddingHorizontal: 10, paddingVertical: 8 };
 
-          <Pressable
-            disabled={submitting}
-            onPress={onSave}
-            className="h-10 items-center justify-center rounded-3xl bg-[#007AFF] px-5 disabled:opacity-60 dark:bg-[#0A84FF]">
-            {submitting ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text className="text-app-body font-semibold text-white">{t('common.save')}</Text>
-            )}
-          </Pressable>
-        </View>
-
-        <Text className="mt-4 font-bold text-app-display tracking-tight text-black dark:text-white">
-          {t('jobs.edit')}
+  const renderFormSection = (title: string) => (
+    <View className="mt-5">
+      <View className="px-1">
+        <Text
+          className="text-app-row-title font-semibold"
+          style={{ color: colorScheme === 'dark' ? '#72A8FF' : '#1C60C3' }}>
+          {title}
         </Text>
       </View>
+      <View className="mt-2 h-px" style={{ backgroundColor: sectionSeparatorColor }} />
+    </View>
+  );
 
-      <ScrollView
+  return (
+    <KeyboardAvoidingView
+      className="flex-1 bg-[#F2F2F7] dark:bg-[#1D2229]"
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}>
+      <StickyFormHeader
+        title={t('jobs.edit')}
+        onBack={onBack}
+        onSave={onSave}
+        saveLabel={t('common.save')}
+        submitting={submitting}
+        scrollY={scrollY}
+      />
+
+      <Animated.ScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: 128 }}
+        contentContainerClassName="pb-32 pt-4"
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
+        )}
+        scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled">
-        <View className="px-6 pt-4">
-          <View className="overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
+        <View className="px-6">
+          <Text className="mb-1 text-[28px] font-semibold leading-[34px] text-black dark:text-white">
+            {t('jobs.edit')}
+          </Text>
+          <View>
             {loading ? (
               <View className="items-center py-6">
                 <ActivityIndicator />
               </View>
             ) : (
               <>
-                <Text className="text-app-meta font-medium text-black/60 dark:text-white/70">{t('jobs.titleLabel')}</Text>
+                {renderFormSection(t('jobs.basicSection'))}
+                <View style={formSectionContentStyle}>
+                <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">{t('jobs.titleLabel')}</Text>
                 <AppTextInput
                   value={title}
                   onChangeText={setTitle}
                   placeholder={t('jobs.titleLabel')}
                   placeholderTextColor={placeholderTextColor}
-                  className="mt-2"
+                  className={fieldInputClassName}
+                  style={fieldInputStyle}
                 />
 
-                <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">
+                <Text className="mt-4 text-app-meta-lg font-medium text-black/60 dark:text-white/70">
                   {t('jobs.clientLabel')}
                 </Text>
                 <View className="mt-2">
                   <Pressable
                     onPress={toggleClients}
-                    className="flex-row items-center justify-between rounded-3xl bg-black/5 px-4 py-3 dark:bg-white/10">
+                    className={fieldPressableClassName}
+                    style={fieldPressableStyle}>
                     <Text className="text-app-row text-black dark:text-white">
                       {selectedClient?.name || t('jobs.selectClient')}
                     </Text>
@@ -341,7 +328,7 @@ export default function EditJobScreen() {
                 </View>
 
                 {clientOpen ? (
-                  <View className="mt-3 overflow-hidden rounded-3xl border border-black/10 bg-white/80 dark:border-white/10 dark:bg-[#1C1C1E]/80">
+                  <View className="mt-3">
                     {loadingClients ? (
                       <View className="items-center py-6">
                         <ActivityIndicator />
@@ -375,8 +362,11 @@ export default function EditJobScreen() {
                     )}
                   </View>
                 ) : null}
+                </View>
 
-                <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">
+                {renderFormSection(t('jobs.scheduleSection'))}
+                <View style={formSectionContentStyle}>
+                <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">
                   {t('jobs.statusLabel')}
                 </Text>
                 <View className="mt-2 flex-row flex-wrap">
@@ -387,39 +377,43 @@ export default function EditJobScreen() {
                         key={option.value}
                         onPress={() => {
                           setStatusValue(option.value);
-                          setStatusText(option.label);
                         }}
                         className={[
                           'mr-2 mt-2 rounded-3xl px-4 py-2',
                           selected ? 'bg-[#007AFF] dark:bg-[#0A84FF]' : 'bg-black/5 dark:bg-white/10',
                         ].join(' ')}>
                         <Text
-                          className={
-                            selected ? 'text-app-meta font-semibold text-white' : 'text-app-meta text-black dark:text-white'
-                          }>
+                          className={selected ? 'text-app-meta font-semibold text-white' : 'text-app-meta text-black dark:text-white'}>
                           {option.label}
                         </Text>
                       </Pressable>
                     );
                   })}
                 </View>
-                <AppTextInput
-                  value={statusText}
-                  onChangeText={(text) => {
-                    setStatusText(text);
-                    setStatusValue(text);
-                  }}
-                  placeholder={t('jobs.statusPlaceholder')}
-                  placeholderTextColor={placeholderTextColor}
-                  className="mt-3"
-                />
 
-                <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">
+                {statusValue === 'pending' ? (
+                  <>
+                    <Text className="mt-4 text-app-meta-lg font-medium text-black/60 dark:text-white/70">
+                      {t('jobs.pendingReasonLabel')}
+                    </Text>
+                    <AppTextInput
+                      value={pendingReason}
+                      onChangeText={setPendingReason}
+                      placeholder={t('jobs.pendingReasonPlaceholder')}
+                      placeholderTextColor={placeholderTextColor}
+                      className={fieldInputClassName}
+                      style={fieldInputStyle}
+                    />
+                  </>
+                ) : null}
+
+                <Text className="mt-4 text-app-meta-lg font-medium text-black/60 dark:text-white/70">
                   {t('jobs.dateLabel')}
                 </Text>
                 <Pressable
                   onPress={() => setShowDatePicker(true)}
-                  className="mt-2 flex-row items-center justify-between rounded-3xl bg-black/5 px-4 py-3 dark:bg-white/10">
+                  className={fieldPressableClassName}
+                  style={fieldPressableStyle}>
                   <Text className="text-app-row text-black dark:text-white">
                     {displayDate || t('jobs.datePlaceholder')}
                   </Text>
@@ -444,7 +438,7 @@ export default function EditJobScreen() {
                   />
                 ) : null}
 
-                <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">
+                <Text className="mt-4 text-app-meta-lg font-medium text-black/60 dark:text-white/70">
                   {t('jobs.reminderLabel')}
                 </Text>
                 <View className="mt-2 flex-row flex-wrap">
@@ -459,19 +453,18 @@ export default function EditJobScreen() {
                           selected ? 'bg-[#007AFF] dark:bg-[#0A84FF]' : 'bg-black/5 dark:bg-white/10',
                         ].join(' ')}>
                         <Text
-                          className={
-                            selected
-                              ? 'text-app-meta font-semibold text-white'
-                              : 'text-app-meta text-black dark:text-white'
-                          }>
+                          className={selected ? 'text-app-meta font-semibold text-white' : 'text-app-meta text-black dark:text-white'}>
                           {option.label}
                         </Text>
                       </Pressable>
                     );
                   })}
                 </View>
+                </View>
 
-                <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">
+                {renderFormSection(t('jobs.financials'))}
+                <View style={formSectionContentStyle}>
+                <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">
                   {t('jobs.priceLabel')}
                 </Text>
                 <AppTextInput
@@ -480,13 +473,14 @@ export default function EditJobScreen() {
                   keyboardType="decimal-pad"
                   placeholder={t('jobs.priceLabel')}
                   placeholderTextColor={placeholderTextColor}
-                  className="mt-2"
+                  className={fieldInputClassName}
+                  style={fieldInputStyle}
                 />
                 <Text className="mt-1 text-app-meta text-black/50 dark:text-white/60">{t('jobs.amountEurNote')}</Text>
+                </View>
 
-                <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">
-                  {t('jobs.descriptionLabel')}
-                </Text>
+                {renderFormSection(t('jobs.descriptionLabel'))}
+                <View style={formSectionContentStyle}>
                 <AppTextInput
                   value={description}
                   onChangeText={setDescription}
@@ -494,15 +488,17 @@ export default function EditJobScreen() {
                   textAlignVertical="top"
                   placeholder={t('jobs.descriptionLabel')}
                   placeholderTextColor={placeholderTextColor}
-                  className="mt-2 min-h-[96px]"
+                  className={descriptionInputClassName}
+                  style={descriptionInputStyle}
                 />
+                </View>
               </>
             )}
 
             {error ? <Text className="mt-3 text-app-meta text-red-600">{error}</Text> : null}
           </View>
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
     </KeyboardAvoidingView>
   );
 }

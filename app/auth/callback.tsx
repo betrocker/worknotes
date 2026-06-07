@@ -25,7 +25,7 @@ export default function AuthCallbackScreen() {
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
-          if (!cancelled) router.replace('/(tabs)');
+          if (!cancelled) router.replace('/(tabs)' as any);
           return;
         }
 
@@ -35,7 +35,7 @@ export default function AuthCallbackScreen() {
             refresh_token: refreshToken,
           });
           if (error) throw error;
-          if (!cancelled) router.replace('/(tabs)');
+          if (!cancelled) router.replace('/(tabs)' as any);
           return;
         }
 
@@ -52,7 +52,7 @@ export default function AuthCallbackScreen() {
           if (queryCode) {
             const { error } = await supabase.auth.exchangeCodeForSession(queryCode);
             if (error) throw error;
-            if (!cancelled) router.replace('/(tabs)');
+            if (!cancelled) router.replace('/(tabs)' as any);
             return;
           }
 
@@ -62,7 +62,7 @@ export default function AuthCallbackScreen() {
               refresh_token: queryRefreshToken,
             });
             if (error) throw error;
-            if (!cancelled) router.replace('/(tabs)');
+            if (!cancelled) router.replace('/(tabs)' as any);
             return;
           }
         }
@@ -91,7 +91,7 @@ export default function AuthCallbackScreen() {
   }, [params.access_token, params.code, params.refresh_token, router]);
 
   return (
-    <View className="flex-1 items-center justify-center bg-[#F2F2F7] dark:bg-black">
+    <View className="flex-1 items-center justify-center bg-[#F2F2F7] dark:bg-[#1D2229]">
       <ActivityIndicator />
       <Text className="mt-3 text-app-meta text-black/60 dark:text-white/70">{t('authCallback.connecting')}</Text>
     </View>

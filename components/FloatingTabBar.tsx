@@ -1,236 +1,97 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { BlurView } from 'expo-blur';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { Animated, Pressable, View, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Animated, Platform, Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
+import { useTranslation } from 'react-i18next';
+import { useSegments } from 'expo-router';
 
-import Colors from '@/constants/Colors';
-import { listClientsWithDebt } from '@/lib/clients';
-import { useColorScheme } from '@/components/useColorScheme';
-import { useAuth } from '@/providers/AuthProvider';
+import { MainFloatingActions } from '@/components/MainFloatingActions';
+import { getMainFloatingActionsHidden, subscribeMainFloatingActionsHidden } from '@/lib/floating-actions-visibility';
 
-type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+const MAIN_ACTION_ROUTE_NAMES = new Set(['index', 'klijenti', 'poslovi', 'dugovanja']);
 
-const TAB_ROUTE_NAMES = new Set(['index', 'klijenti', 'poslovi', 'dugovanja', 'podesavanja']);
-
-function getIconForRoute(routeName: string, focused: boolean): IoniconName {
-  switch (routeName) {
-    case 'index':
-      return focused ? 'home' : 'home-outline';
-    case 'klijenti':
-      return focused ? 'people' : 'people-outline';
-    case 'poslovi':
-      return focused ? 'briefcase' : 'briefcase-outline';
-    case 'dugovanja':
-      return focused ? 'cash' : 'cash-outline';
-    case 'podesavanja':
-      return focused ? 'person' : 'person-outline';
-    default:
-      return focused ? 'ellipse' : 'ellipse-outline';
-  }
-}
-
-export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+export function FloatingActionOverlay() {
   const insets = useSafeAreaInsets();
-  const colorScheme = useColorScheme() ?? 'light';
-  const colors = Colors[colorScheme];
-  const { session } = useAuth();
-  const userId = session?.user?.id ?? null;
+  const { t } = useTranslation();
+  const segments = useSegments();
+  const focusedRouteName = segments[1] ?? 'index';
+  const showsActions = MAIN_ACTION_ROUTE_NAMES.has(focusedRouteName);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [backdropMounted, setBackdropMounted] = useState(false);
+  const [closeSignal, setCloseSignal] = useState(0);
+  const [actionsHidden, setActionsHidden] = useState(() => getMainFloatingActionsHidden());
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
 
-  const focusedRoute = state.routes[state.index];
-  const focusedRouteKey = focusedRoute?.key ?? null;
-  const focusedIsTab = !!focusedRoute && TAB_ROUTE_NAMES.has(focusedRoute.name);
+  const bottom = useMemo(() => Math.max(insets.bottom + 18, 24), [insets.bottom]);
 
-  const visibleRoutes = useMemo(() => {
-    return state.routes.filter((route) => TAB_ROUTE_NAMES.has(route.name));
-  }, [state.routes]);
-
-  const [barWidth, setBarWidth] = useState(0);
-  const tabCount = visibleRoutes.length;
-
-  const padding = 8;
-  const itemWidth = useMemo(() => {
-    if (!barWidth || tabCount === 0) return 0;
-    return (barWidth - padding * 2) / tabCount;
-  }, [barWidth, tabCount]);
-
-  const translateX = useRef(new Animated.Value(0)).current;
-  const [debtsBadgeCount, setDebtsBadgeCount] = useState(0);
+  const onOuterLayout = (event: LayoutChangeEvent) => {
+    setContainerWidth(event.nativeEvent.layout.width);
+  };
 
   useEffect(() => {
-    if (!itemWidth) return;
-    if (!focusedRouteKey) return;
-    if (!visibleRoutes.length) return;
-    const visibleIndex = Math.max(
-      0,
-      visibleRoutes.findIndex((route) => route.key === focusedRouteKey)
-    );
-    Animated.timing(translateX, {
-      toValue: visibleIndex * itemWidth,
-      duration: 180,
-      useNativeDriver: true,
-    }).start();
-  }, [focusedRouteKey, itemWidth, translateX, visibleRoutes]);
+    if (!showsActions) {
+      setActionsOpen(false);
+      setBackdropMounted(false);
+      backdropOpacity.setValue(0);
+    }
+  }, [backdropOpacity, showsActions]);
+
+  useEffect(() => subscribeMainFloatingActionsHidden(setActionsHidden), []);
 
   useEffect(() => {
-    if (!userId) {
-      setDebtsBadgeCount(0);
+    if (actionsOpen) {
+      setBackdropMounted(true);
+      Animated.timing(backdropOpacity, {
+        toValue: 1,
+        duration: 170,
+        useNativeDriver: true,
+      }).start();
       return;
     }
 
-    let mounted = true;
-    (async () => {
-      try {
-        const clients = await listClientsWithDebt(userId);
-        if (!mounted) return;
-        setDebtsBadgeCount(clients.filter((client) => client.debt > 0).length);
-      } catch {
-        if (!mounted) return;
-        setDebtsBadgeCount(0);
+    Animated.timing(backdropOpacity, {
+      toValue: 0,
+      duration: 150,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        setBackdropMounted(false);
       }
-    })();
+    });
+  }, [actionsOpen, backdropOpacity]);
 
-    return () => {
-      mounted = false;
-    };
-  }, [focusedRouteKey, userId]);
-
-  const onLayout = (event: LayoutChangeEvent) => {
-    setBarWidth(event.nativeEvent.layout.width);
-  };
-
-  const bottom = Math.max(insets.bottom, 12) + 8;
-  const tabBarRadius = 30;
-  if (!focusedIsTab) return null;
+  if (!showsActions) return null;
 
   return (
     <View
       pointerEvents="box-none"
-      className="absolute left-4 right-4"
-      style={{ bottom }}
-      onLayout={onLayout}>
-      <View
-        className="rounded-[30px]"
-        style={{
-          shadowColor: '#000',
-          shadowOpacity: colorScheme === 'dark' ? 0.46 : 0.3,
-          shadowRadius: 26,
-          shadowOffset: { width: 0, height: 14 },
-          elevation: 26,
-        }}>
-        <View className="overflow-hidden rounded-[30px]">
-        <View
-          className="absolute inset-0"
-          style={{
-            backgroundColor:
-              colorScheme === 'dark' ? 'rgba(28,28,30,0.78)' : 'rgba(246,246,248,0.86)',
-            borderColor: colors.tabBarBorder,
-            borderWidth: 1,
-            borderRadius: tabBarRadius,
-          }}
-        />
-
-        <BlurView
-          intensity={Platform.OS === 'ios' ? 72 : 42}
-          tint={colorScheme === 'dark' ? 'dark' : 'light'}
-          {...(Platform.OS === 'android' ? { experimentalBlurMethod: 'dimezisBlurView' as const } : {})}
-          style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
-        />
-
-        {itemWidth > 0 && (
-          <Animated.View
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              left: padding,
-              top: padding,
-              bottom: padding,
-              width: itemWidth,
-              borderRadius: tabBarRadius - padding,
-              backgroundColor: colors.tint,
-              opacity: colorScheme === 'dark' ? 0.22 : 0.14,
-              transform: [{ translateX }],
-            }}
+      className="absolute bottom-0 left-0 right-0 top-0">
+      {backdropMounted ? (
+        <Animated.View
+          className="absolute bottom-0 left-0 right-0 top-0"
+          pointerEvents={actionsOpen ? 'auto' : 'none'}
+          style={{ opacity: backdropOpacity, zIndex: 1, elevation: 1 }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('fab.close')}
+            onPress={() => setCloseSignal((value) => value + 1)}
+            className="absolute bottom-0 left-0 right-0 top-0"
+            style={{ backgroundColor: 'rgba(0,0,0,0.28)' }}
           />
-        )}
-
-        <View style={{ padding, flexDirection: 'row', alignItems: 'center' }}>
-          {visibleRoutes.map((route, index) => {
-            const { options } = descriptors[route.key];
-            const label = options.title ?? route.name;
-
-            const isFocused = focusedRouteKey === route.key;
-            const iconName = getIconForRoute(route.name, isFocused);
-            const color = isFocused ? colors.text : colors.tabIconDefault;
-            const badgeCount = route.name === 'dugovanja' ? debtsBadgeCount : 0;
-
-            const onPress = () => {
-              const event = navigation.emit({
-                type: 'tabPress',
-                target: route.key,
-                canPreventDefault: true,
-              });
-
-              if (!isFocused && !event.defaultPrevented) {
-                navigation.navigate(route.name);
-              }
-            };
-
-            const onLongPress = () => {
-              navigation.emit({
-                type: 'tabLongPress',
-                target: route.key,
-              });
-            };
-
-            return (
-              <Pressable
-                key={route.key}
-                accessibilityRole="button"
-                accessibilityState={isFocused ? { selected: true } : {}}
-                accessibilityLabel={options.tabBarAccessibilityLabel}
-                testID={options.tabBarButtonTestID}
-                onPress={onPress}
-                onLongPress={onLongPress}
-                className="flex-1 items-center justify-center py-2">
-                <View style={{ position: 'relative' }}>
-                  <Ionicons name={iconName} size={24} color={color} />
-                  {badgeCount > 0 ? (
-                    <View
-                      style={{
-                        position: 'absolute',
-                        top: -6,
-                        right: -12,
-                        minWidth: 18,
-                        height: 18,
-                        paddingHorizontal: 4,
-                        borderRadius: 999,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: '#FF453A',
-                        borderWidth: 1.5,
-                        borderColor: colorScheme === 'dark' ? 'rgba(28,28,30,0.92)' : 'rgba(255,255,255,0.95)',
-                      }}>
-                      <Text
-                        style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '700' }}
-                        numberOfLines={1}>
-                        {badgeCount > 99 ? '99+' : badgeCount}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-                <Text
-                  className={isFocused ? 'mt-1 text-app-meta font-semibold' : 'mt-1 text-app-meta font-medium'}
-                  style={{ color }}
-                  numberOfLines={1}>
-                  {String(label)}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        </View>
+        </Animated.View>
+      ) : null}
+      <View
+        pointerEvents="box-none"
+        className="absolute left-3 right-3"
+        style={{ bottom, height: 280, zIndex: 2, elevation: 2 }}
+        onLayout={onOuterLayout}>
+        <MainFloatingActions
+          focusedRouteName={focusedRouteName}
+          containerWidth={containerWidth}
+          onOpenChange={setActionsOpen}
+          closeSignal={closeSignal}
+          hidden={actionsHidden}
+        />
       </View>
     </View>
   );

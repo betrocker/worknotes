@@ -1,17 +1,23 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Easing, PanResponder, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CollapsingMainHeader, MainScreenTitle } from '@/components/CollapsingMainHeader';
+import { HeaderOverflowMenu } from '@/components/HeaderOverflowMenu';
 import Colors from '@/constants/Colors';
-import { MascotEmptyState } from '@/components/MascotEmptyState';
+import { JobStatusText } from '@/components/JobStatusText';
+import { useQuickFindSwipeDown } from '@/components/useQuickFindSwipeDown';
 import { useColorScheme } from '@/components/useColorScheme';
 import { parseDateInput } from '@/lib/date';
 import { deleteClient, getClientDetail, type ClientDetail } from '@/lib/clients';
+import { deleteJob, updateJobStatus } from '@/lib/jobs';
+import { goBackOrReplace } from '@/lib/navigation';
+import { cancelJobReminder, clearJobReminderPreference } from '@/lib/notifications';
+import { triggerSelectionHaptic } from '@/lib/haptics';
 import { useAuth } from '@/providers/AuthProvider';
 
 type TimelineEvent = {
@@ -24,6 +30,247 @@ type TimelineEvent = {
   note?: string | null;
 };
 
+type ClientJobSwipeSelectRowProps = {
+  selected: boolean;
+  selectionMode: boolean;
+  colorScheme: 'light' | 'dark';
+  subdued?: boolean;
+  children: React.ReactNode;
+  onOpen: () => void;
+  onToggleSelected: () => void;
+};
+
+const CLIENT_JOB_SELECT_SWIPE_THRESHOLD = 36;
+const CLIENT_JOB_SELECT_SWIPE_MAX = 56;
+const CLIENT_JOB_SELECT_GESTURE_START = 3;
+const CLIENT_JOB_SELECT_HORIZONTAL_BIAS = 0.72;
+
+function JobSelectionCircle({ selected, colorScheme }: { selected: boolean; colorScheme: 'light' | 'dark' }) {
+  const accent = colorScheme === 'dark' ? '#72A8FF' : '#1C60C3';
+  return (
+    <View
+      style={{
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+        borderWidth: 1.5,
+        borderColor: selected ? accent : colorScheme === 'dark' ? 'rgba(255,255,255,0.36)' : 'rgba(60,60,67,0.28)',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+      {selected ? (
+        <View
+          style={{
+            width: 11,
+            height: 11,
+            borderRadius: 5.5,
+            backgroundColor: accent,
+          }}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function ClientJobSwipeSelectRow({
+  selected,
+  selectionMode,
+  colorScheme,
+  subdued = false,
+  children,
+  onOpen,
+  onToggleSelected,
+}: ClientJobSwipeSelectRowProps) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const circleProgress = useRef(new Animated.Value(selectionMode ? 1 : 0)).current;
+  const maxSwipeDistanceRef = useRef(0);
+  const currentSwipeDistanceRef = useRef(0);
+  const suppressOpenRef = useRef(false);
+  const [swiping, setSwiping] = useState(false);
+
+  useEffect(() => {
+    Animated.spring(circleProgress, {
+      toValue: selectionMode ? 1 : 0,
+      useNativeDriver: true,
+      damping: 18,
+      stiffness: 220,
+      mass: 0.8,
+    }).start();
+  }, [circleProgress, selectionMode]);
+
+  const resetSwipe = useCallback(() => {
+    const duration = Math.min(190, Math.max(90, currentSwipeDistanceRef.current * 2.8));
+    Animated.timing(translateX, {
+      toValue: 0,
+      duration,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        setSwiping(false);
+        maxSwipeDistanceRef.current = 0;
+        currentSwipeDistanceRef.current = 0;
+      }
+    });
+  }, [translateX]);
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponderCapture: (_, gesture) =>
+          gesture.dx < -CLIENT_JOB_SELECT_GESTURE_START &&
+          Math.abs(gesture.dx) > Math.abs(gesture.dy) * CLIENT_JOB_SELECT_HORIZONTAL_BIAS,
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          gesture.dx < -CLIENT_JOB_SELECT_GESTURE_START &&
+          Math.abs(gesture.dx) > Math.abs(gesture.dy) * CLIENT_JOB_SELECT_HORIZONTAL_BIAS,
+        onPanResponderGrant: () => {
+          maxSwipeDistanceRef.current = 0;
+          currentSwipeDistanceRef.current = 0;
+          suppressOpenRef.current = false;
+          setSwiping(true);
+        },
+        onPanResponderMove: (_, gesture) => {
+          const rawNext = Math.min(0, gesture.dx);
+          const distance = Math.abs(rawNext);
+          if (distance > 6) {
+            suppressOpenRef.current = true;
+          }
+          maxSwipeDistanceRef.current = Math.max(maxSwipeDistanceRef.current, distance);
+          currentSwipeDistanceRef.current = distance;
+          const next =
+            distance > CLIENT_JOB_SELECT_SWIPE_MAX
+              ? -(CLIENT_JOB_SELECT_SWIPE_MAX + (distance - CLIENT_JOB_SELECT_SWIPE_MAX) * 0.18)
+              : rawNext;
+          translateX.setValue(next);
+        },
+        onPanResponderRelease: (_, gesture) => {
+          const shouldSelect = maxSwipeDistanceRef.current > CLIENT_JOB_SELECT_SWIPE_THRESHOLD || gesture.vx < -0.55;
+          if (shouldSelect) {
+            onToggleSelected();
+          }
+          resetSwipe();
+        },
+        onPanResponderTerminate: resetSwipe,
+        onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => true,
+      }),
+    [onToggleSelected, resetSwipe, translateX]
+  );
+
+  const circleOpacity = circleProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+  const circleScale = circleProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.86, 1],
+  });
+  const revealOpacity = translateX.interpolate({
+    inputRange: [-24, 0],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+  const revealTranslateX = translateX.interpolate({
+    inputRange: [-CLIENT_JOB_SELECT_SWIPE_MAX, 0],
+    outputRange: [0, 16],
+    extrapolate: 'clamp',
+  });
+  const revealScale = translateX.interpolate({
+    inputRange: [-CLIENT_JOB_SELECT_SWIPE_MAX, -16, 0],
+    outputRange: [1, 0.92, 0.86],
+    extrapolate: 'clamp',
+  });
+  const selectedRowBackground = colorScheme === 'dark' ? 'rgba(47, 105, 190, 0.26)' : '#D5E5FF';
+  const activeRowBackground = colorScheme === 'dark' ? '#30333A' : '#E4E6EA';
+  const movingRowBackground = swiping ? activeRowBackground : 'transparent';
+  const revealBackgroundColor = colorScheme === 'dark' ? '#315FAD' : '#1C60C3';
+
+  return (
+    <Animated.View
+      {...panResponder.panHandlers}
+      className="flex-row items-center"
+      style={{
+        marginVertical: 1,
+        borderRadius: 12,
+      }}>
+      {selected ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: -12,
+            right: -12,
+            bottom: 0,
+            borderRadius: 12,
+            backgroundColor: selectedRowBackground,
+          }}
+        />
+      ) : null}
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          bottom: 0,
+          width: 78,
+          paddingRight: 10,
+          borderRadius: 12,
+          backgroundColor: revealBackgroundColor,
+          opacity: revealOpacity,
+          alignItems: 'flex-end',
+          justifyContent: 'center',
+          transform: [{ translateX: revealTranslateX }, { scale: revealScale }],
+        }}>
+        <Ionicons name="checkbox-outline" size={22} color="#FFFFFF" />
+      </Animated.View>
+      <Animated.View
+        className="flex-1 flex-row items-center"
+        style={{
+          marginHorizontal: -8,
+          paddingHorizontal: 8,
+          paddingVertical: 6,
+          borderRadius: 12,
+          backgroundColor: movingRowBackground,
+          opacity: subdued ? 0.58 : 1,
+          transform: [{ translateX }],
+        }}>
+        <Pressable
+          accessibilityRole="link"
+          onPress={() => {
+            if (suppressOpenRef.current) {
+              suppressOpenRef.current = false;
+              return;
+            }
+            onOpen();
+          }}
+          className="flex-1">
+          {children}
+        </Pressable>
+
+        <Animated.View
+          style={{
+            width: selectionMode ? 34 : 0,
+            opacity: circleOpacity,
+            alignItems: 'flex-end',
+            transform: [{ scale: circleScale }],
+          }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected }}
+            disabled={!selectionMode}
+            onPress={onToggleSelected}
+            hitSlop={8}
+            className="items-end justify-center">
+            <JobSelectionCircle selected={selected} colorScheme={colorScheme} />
+          </Pressable>
+        </Animated.View>
+      </Animated.View>
+    </Animated.View>
+  );
+}
+
 export default function ClientDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
@@ -32,6 +279,9 @@ export default function ClientDetailScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const insets = useSafeAreaInsets();
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const quickFindSwipe = useQuickFindSwipeDown();
+  const selectionBarProgress = useRef(new Animated.Value(0)).current;
 
   const userId = session?.user?.id ?? null;
   const id = typeof params.id === 'string' ? params.id : null;
@@ -39,12 +289,12 @@ export default function ClientDetailScreen() {
   const [client, setClient] = useState<ClientDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [timelineRange, setTimelineRange] = useState<'30' | '90' | 'all'>('30');
-  const [headerHeight, setHeaderHeight] = useState(0);
+  const [showAllActivities, setShowAllActivities] = useState(false);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
   const locale = i18n.language === 'sr' ? 'sr-Latn-RS' : i18n.language;
   const dateFormatter = useMemo(
-    () => new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'short', year: 'numeric' }),
+    () => new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'long', year: 'numeric' }),
     [locale]
   );
   const moneyFormatter = useMemo(
@@ -81,6 +331,18 @@ export default function ClientDetailScreen() {
     }, [load])
   );
 
+  useEffect(() => {
+    setShowAllActivities(false);
+    setSelectedJobId(null);
+  }, [id]);
+
+  const formatDateInput = useCallback((date: Date) => {
+    const yyyy = String(date.getFullYear());
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }, []);
+
   const formatDate = useCallback(
     (value: string | null) => {
       if (!value) return '—';
@@ -89,6 +351,23 @@ export default function ClientDetailScreen() {
       return dateFormatter.format(parsed);
     },
     [dateFormatter]
+  );
+
+  const formatListDate = useCallback((value: string | null) => {
+    if (!value) return null;
+    const parsed = parseDateInput(value);
+    if (!parsed) return value;
+    return `${parsed.getDate()}. ${parsed.getMonth() + 1}.`;
+  }, []);
+
+  const getStatusLabel = useCallback(
+    (status: string | null | undefined) => {
+      if (status === 'done') return t('jobs.statuses.done');
+      if (status === 'in_progress') return t('jobs.statuses.inProgress');
+      if (status === 'pending') return t('jobs.statuses.pending');
+      return t('jobs.statuses.scheduled');
+    },
+    [t]
   );
 
   const timeline = useMemo<TimelineEvent[]>(() => {
@@ -148,25 +427,16 @@ export default function ClientDetailScreen() {
     });
   }, [client?.jobs, t]);
 
-  const filteredTimeline = useMemo(() => {
-    if (timelineRange === 'all') return timeline;
-    const days = timelineRange === '30' ? 30 : 90;
-    const cutoff = new Date();
-    cutoff.setHours(0, 0, 0, 0);
-    cutoff.setDate(cutoff.getDate() - days);
-    const cutoffTs = cutoff.getTime();
-    return timeline.filter((event) => {
-      if (!event.date) return false;
-      const ts = parseDateInput(event.date)?.getTime() ?? Number.NaN;
-      return !Number.isNaN(ts) && ts >= cutoffTs;
-    });
-  }, [timeline, timelineRange]);
+  const visibleTimeline = useMemo(
+    () => (showAllActivities ? timeline : timeline.slice(0, 10)),
+    [showAllActivities, timeline]
+  );
 
   const groupedTimeline = useMemo(() => {
     const groups: { key: string; label: string; items: TimelineEvent[] }[] = [];
     const indexByKey = new Map<string, number>();
 
-    filteredTimeline.forEach((event) => {
+    visibleTimeline.forEach((event) => {
       const parsed = parseDateInput(event.date);
       let key = 'no-date';
       let label = '—';
@@ -184,20 +454,7 @@ export default function ClientDetailScreen() {
     });
 
     return groups;
-  }, [filteredTimeline, monthFormatter]);
-
-  const openDebtJobs = useMemo(
-    () =>
-      [...(client?.jobs ?? [])]
-        .filter((job) => job.debt > 0)
-        .sort((a, b) => {
-          if (b.debt !== a.debt) return b.debt - a.debt;
-          const aTime = parseDateInput(a.scheduled_date ?? a.created_at)?.getTime() ?? 0;
-          const bTime = parseDateInput(b.scheduled_date ?? b.created_at)?.getTime() ?? 0;
-          return bTime - aTime;
-        }),
-    [client?.jobs]
-  );
+  }, [visibleTimeline, monthFormatter]);
 
   const sortedJobs = useMemo(
     () =>
@@ -209,8 +466,30 @@ export default function ClientDetailScreen() {
     [client?.jobs]
   );
 
+  const selectedJob = useMemo(
+    () => sortedJobs.find((job) => job.id === selectedJobId) ?? null,
+    [selectedJobId, sortedJobs]
+  );
+  const selectionMode = Boolean(selectedJob);
+
+  useEffect(() => {
+    Animated.spring(selectionBarProgress, {
+      toValue: selectionMode ? 1 : 0,
+      useNativeDriver: true,
+      damping: 18,
+      stiffness: 210,
+      mass: 0.82,
+    }).start();
+  }, [selectionBarProgress, selectionMode]);
+
+  useEffect(() => {
+    if (selectedJobId && !selectedJob) {
+      setSelectedJobId(null);
+    }
+  }, [selectedJob, selectedJobId]);
+
   const onBack = () => {
-    router.replace({ pathname: '/(tabs)/klijenti' as any });
+    goBackOrReplace(router, { pathname: '/(tabs)/klijenti' as any });
   };
 
   const onDelete = () => {
@@ -237,6 +516,92 @@ export default function ClientDetailScreen() {
     router.push({ pathname: '/(tabs)/klijent/[id]/edit' as any, params: { id } });
   };
 
+  const openJob = useCallback(
+    (jobId: string) => {
+      router.push({ pathname: '/(tabs)/posao/[id]' as any, params: { id: jobId } });
+    },
+    [router]
+  );
+
+  const toggleSelectedJob = useCallback((jobId: string) => {
+    triggerSelectionHaptic();
+    setSelectedJobId((current) => (current === jobId ? null : jobId));
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setSelectedJobId(null);
+  }, []);
+
+  const onChargeSelected = useCallback(() => {
+    if (!selectedJob || !id) return;
+    const jobId = selectedJob.id;
+    clearSelection();
+    router.push({
+      pathname: '/(tabs)/posao/[id]/payment/new' as any,
+      params: { id: jobId, returnTo: 'client', clientId: id },
+    });
+  }, [clearSelection, id, router, selectedJob]);
+
+  const onFinishSelected = useCallback(() => {
+    if (!userId || !selectedJob) return;
+
+    const previousClient = client;
+    const today = formatDateInput(new Date());
+    const jobId = selectedJob.id;
+    setClient((current) =>
+      current
+        ? {
+            ...current,
+            jobs: current.jobs.map((job) =>
+              job.id === jobId ? { ...job, status: 'done', completed_at: job.completed_at ?? today } : job
+            ),
+          }
+        : current
+    );
+    clearSelection();
+
+    void (async () => {
+      try {
+        await cancelJobReminder(jobId);
+        await updateJobStatus(userId, jobId, 'done');
+        await load();
+      } catch (e: unknown) {
+        setClient(previousClient);
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    })();
+  }, [clearSelection, client, formatDateInput, load, selectedJob, userId]);
+
+  const onDeleteSelected = useCallback(() => {
+    if (!userId || !selectedJob) return;
+    Alert.alert(t('jobs.deleteConfirmTitle'), t('jobs.deleteConfirmMessage'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('jobs.delete'),
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            const previousClient = client;
+            const jobId = selectedJob.id;
+            setClient((current) =>
+              current ? { ...current, jobs: current.jobs.filter((job) => job.id !== jobId) } : current
+            );
+            clearSelection();
+            try {
+              await cancelJobReminder(jobId);
+              await clearJobReminderPreference(jobId);
+              await deleteJob(userId, jobId);
+              await load();
+            } catch (e: unknown) {
+              setClient(previousClient);
+              setError(e instanceof Error ? e.message : String(e));
+            }
+          })();
+        },
+      },
+    ]);
+  }, [clearSelection, client, load, selectedJob, t, userId]);
+
   const clientMetaText = useMemo(() => {
     if (client?.phone && client?.address) return `${client.phone} • ${client.address}`;
     if (client?.phone) return client.phone;
@@ -244,12 +609,73 @@ export default function ClientDetailScreen() {
     return t('clients.contact');
   }, [client?.address, client?.phone, t]);
 
+  const sectionSeparatorColor = colorScheme === 'dark' ? 'rgba(84,84,88,0.38)' : 'rgba(60,60,67,0.14)';
+  const primaryActionColor = colorScheme === 'dark' ? '#0A84FF' : '#1C60C3';
+
+  const renderSectionHeader = (title: string) => (
+    <View className="mt-5">
+      <View className="px-1">
+        <Text
+          className="text-app-row-title font-semibold"
+          style={{ color: colorScheme === 'dark' ? '#72A8FF' : '#1C60C3' }}>
+          {title}
+        </Text>
+      </View>
+      <View className="mt-2 h-px" style={{ backgroundColor: sectionSeparatorColor }} />
+    </View>
+  );
+
   return (
-    <View className="flex-1 bg-[#F2F2F7] dark:bg-black">
-      <ScrollView
-        className="flex-1 bg-[#F2F2F7] dark:bg-black"
-        contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: 128 }}>
+    <View className="flex-1 bg-[#F2F2F7] dark:bg-[#1D2229]">
+      <CollapsingMainHeader
+        title={client?.name || t('tabs.clients')}
+        iconName="person-outline"
+        scrollY={scrollY}
+        left={
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('common.back')}
+            onPress={onBack}
+            hitSlop={8}
+            className="h-11 w-11 items-center justify-center">
+            <Ionicons name="chevron-back" size={25} color="#717983" />
+          </Pressable>
+        }
+        right={
+          <HeaderOverflowMenu
+            accessibilityLabel={t('common.more')}
+            actions={[
+              { label: t('clients.edit'), iconName: 'create-outline', onPress: onEdit },
+              { label: t('clients.delete'), iconName: 'trash-outline', onPress: onDelete, destructive: true },
+            ]}
+          />
+        }
+      />
+
+      <Animated.ScrollView
+        className="flex-1 bg-[#F2F2F7] dark:bg-[#1D2229]"
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+          useNativeDriver: true,
+          listener: quickFindSwipe.onScroll,
+        })}
+        {...quickFindSwipe.touchHandlers}
+        refreshControl={quickFindSwipe.refreshControl}
+        scrollEventThrottle={16}
+        contentContainerStyle={{ paddingBottom: 128 }}>
       <View className="px-6 pt-4">
+        <MainScreenTitle
+          title={client?.name || t('tabs.clients')}
+          iconName="person-outline"
+          scrollY={scrollY}
+        />
+        <Text className="-mt-4 mb-1 px-1 text-app-subtitle text-black/60 dark:text-white/70">
+          {clientMetaText}
+        </Text>
+        {client?.note?.trim() ? (
+          <View className="mt-2 px-1">
+            <Text className="text-app-body italic text-black/80 dark:text-white/85">{client.note.trim()}</Text>
+          </View>
+        ) : null}
         {error ? <Text className="mb-3 text-app-meta text-red-600">{error}</Text> : null}
 
         {loading ? (
@@ -257,211 +683,100 @@ export default function ClientDetailScreen() {
             <ActivityIndicator />
           </View>
         ) : !client ? (
-          <MascotEmptyState title={t('clients.emptyTitle')} body={t('clients.emptyBody')} compact />
+          <Text className="px-4 py-6 text-center text-app-meta-lg italic text-black/55 dark:text-white/60">
+            {t('clients.emptyTitle')}
+          </Text>
         ) : (
           <>
-            <View className="overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
-              <Text className="mb-4 text-app-section font-extrabold text-[#1C2745] dark:text-white">
-                {t('clients.overviewTitle')}
-              </Text>
-              <View className="flex-row items-center justify-between">
-                <Text className="text-app-meta-lg text-black/70 dark:text-white/80">
-                  {t('clients.jobsCount')}: <Text className="font-semibold text-black dark:text-white">{client.jobs.length}</Text>
-                </Text>
-                {client.total_debt > 0 ? (
-                  <Text className="text-app-meta-lg text-red-600 dark:text-red-400">
-                    {t('clients.debt')}: <Text className="font-semibold">{moneyFormatter.format(client.total_debt)}</Text>
-                  </Text>
-                ) : (
-                  <Text className="text-app-meta-lg font-semibold text-[#2E9F5A] dark:text-[#5BC980]">{t('clients.noDebt')}</Text>
-                )}
-              </View>
-
-              <View className="mt-2 flex-row items-center justify-between">
-                <Text className="text-app-meta-lg text-black/70 dark:text-white/80">{t('jobs.totalPaid')}</Text>
-                <Text className="text-app-meta-lg font-semibold text-black dark:text-white">{moneyFormatter.format(client.total_paid)}</Text>
-              </View>
-
-              {client.address ? (
-                <View className="mt-2 flex-row items-center">
-                  <Ionicons name="location-outline" size={16} color={colors.secondaryText} />
-                  <Text className="ml-2 text-app-meta-lg text-black/65 dark:text-white/75">{client.address}</Text>
-                </View>
-              ) : null}
-            </View>
-
-            {client.note?.trim() ? (
-              <View className="mt-3 overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
-                <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">{t('clients.noteLabel')}</Text>
-                <Text className="mt-2 text-app-body text-black/80 dark:text-white/85">{client.note.trim()}</Text>
-              </View>
-            ) : null}
-
-            {client.total_debt > 0 ? (
-                <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
-                  <Text className="mb-4 text-app-section font-extrabold text-[#1C2745] dark:text-white">
-                    {t('clients.debtsHistory')}
-                  </Text>
-                  {openDebtJobs.length === 0 ? (
-                    <MascotEmptyState title={t('clients.noOpenDebtTitle')} body={t('clients.noOpenDebtBody')} compact />
-                  ) : (
-                    openDebtJobs.map((job, index) => (
-                      <Pressable
-                        key={job.id}
-                        onPress={() => router.push({ pathname: '/(tabs)/posao/[id]' as any, params: { id: job.id } })}
-                        className={index > 0 ? 'pt-4' : ''}>
-                        <View className={index > 0 ? 'mt-4' : ''}>
-                          {index > 0 ? (
-                            <View
-                              style={{
-                                position: 'absolute',
-                                top: -16,
-                                left: 0,
-                                right: 0,
-                                height: 1,
-                                backgroundColor:
-                                  colorScheme === 'dark'
-                                    ? 'rgba(255,255,255,0.04)'
-                                    : 'rgba(60,60,67,0.08)',
-                              }}
-                            />
-                          ) : null}
-                          <View className="flex-row items-start justify-between">
-                            <View className="mr-3 flex-1">
-                              <Text className="text-app-row font-bold text-[#1C2745] dark:text-white" numberOfLines={1}>
-                                {job.title || t('jobs.untitled')}
-                              </Text>
-                              <View className="mt-1 flex-row items-center">
-                                <Ionicons name="calendar-outline" size={14} color={colors.secondaryText} />
-                                <Text className="ml-2 text-app-meta-lg text-black/60 dark:text-white/70">
-                                  {formatDate(job.scheduled_date)}
-                                </Text>
-                                <Text className="mx-2 text-app-meta-lg text-black/30 dark:text-white/30">•</Text>
-                                <Text className="text-app-meta-lg text-black/60 dark:text-white/70">
-                                  {job.status === 'done' ? t('jobs.statuses.done') : job.status === 'in_progress' ? t('jobs.statuses.inProgress') : t('jobs.statuses.scheduled')}
-                                </Text>
-                              </View>
-                            </View>
-                            <View className="items-end">
-                              <Text className="text-app-row-lg font-extrabold text-[#C84D4D] dark:text-[#FF8A8A]">
-                                {moneyFormatter.format(job.debt)}
-                              </Text>
-                              <Text className="mt-1 text-app-meta-lg text-black/45 dark:text-white/55">
-                                {t('clients.debt')}
-                              </Text>
-                            </View>
-                          </View>
-
-                          <View className="mt-3 flex-row items-center justify-between">
-                            <Text className="text-app-meta-lg text-black/55 dark:text-white/65">
-                              {t('jobs.priceLabel')}: <Text className="font-semibold text-black dark:text-white">{moneyFormatter.format(job.price ?? 0)}</Text>
-                            </Text>
-                            <Text className="text-app-meta-lg text-black/55 dark:text-white/65">
-                              {t('jobs.totalPaid')}: <Text className="font-semibold text-black dark:text-white">{moneyFormatter.format(job.paid)}</Text>
-                            </Text>
-                          </View>
-                        </View>
-                      </Pressable>
-                    ))
-                  )}
-                </View>
-            ) : null}
-
-            <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
-              <Text className="mb-4 text-app-section font-extrabold text-[#1C2745] dark:text-white">
-                {t('clients.jobsCount')}
-              </Text>
+            {renderSectionHeader(t('clients.jobsCount'))}
+            <View style={{ marginLeft: 12, marginTop: 8 }}>
               {sortedJobs.length === 0 ? (
-                <MascotEmptyState title={t('clients.noActiveJobs')} compact />
+                <Text className="px-4 py-3 text-center text-app-meta-lg italic text-black/55 dark:text-white/60">
+                  {t('clients.noActiveJobs')}
+                </Text>
               ) : (
-                sortedJobs.map((job, index) => (
-                  <Pressable
-                    key={job.id}
-                    onPress={() => router.push({ pathname: '/(tabs)/posao/[id]' as any, params: { id: job.id } })}
-                    className={index > 0 ? 'pt-4' : ''}>
-                    <View className={index > 0 ? 'mt-4' : ''}>
-                      {index > 0 ? (
-                        <View
-                          style={{
-                            position: 'absolute',
-                            top: -16,
-                            left: 0,
-                            right: 0,
-                            height: 1,
-                            backgroundColor:
-                              colorScheme === 'dark'
-                                ? 'rgba(255,255,255,0.04)'
-                                : 'rgba(60,60,67,0.08)',
-                          }}
-                        />
-                      ) : null}
-                      <View className="flex-row items-start justify-between">
-                        <View className="mr-3 flex-1">
-                          <Text className="text-app-row font-bold text-[#1C2745] dark:text-white" numberOfLines={1}>
-                            {job.title || t('jobs.untitled')}
-                          </Text>
-                          <View className="mt-1 flex-row items-center">
-                            <Text className="text-app-meta-lg text-black/60 dark:text-white/70">
-                              {formatDate(job.scheduled_date)}
+                sortedJobs.map((job, index) => {
+                  const paid = job.paid ?? 0;
+                  const price = job.price ?? 0;
+                  const debt = job.debt ?? Math.max(price - paid, 0);
+                  const tip = Math.max(paid - price, 0);
+                  const isPaidWithTip = paid > price;
+                  const isPaidInFull = paid >= price;
+                  const isCompleted = job.status === 'done';
+
+                  return (
+                    <View
+                      key={job.id}
+                      className={index > 0 ? 'mt-1' : ''}>
+                      <ClientJobSwipeSelectRow
+                        selected={selectedJobId === job.id}
+                        selectionMode={selectionMode}
+                        colorScheme={colorScheme}
+                        subdued={isCompleted}
+                        onOpen={() => openJob(job.id)}
+                        onToggleSelected={() => toggleSelectedJob(job.id)}>
+                        <View className="flex-row items-center justify-between">
+                          <View className="mr-3 flex-1">
+                            <Text className="text-app-row text-[#1C2745] dark:text-white" numberOfLines={1}>
+                              {job.title || t('jobs.untitled')}
                             </Text>
-                            <Text className="mx-2 text-app-meta-lg text-black/30 dark:text-white/30">•</Text>
-                            <Text className="text-app-meta-lg text-black/60 dark:text-white/70">
-                              {job.status === 'done'
-                                ? t('jobs.statuses.done')
-                                : job.status === 'in_progress'
-                                  ? t('jobs.statuses.inProgress')
-                                  : t('jobs.statuses.scheduled')}
-                            </Text>
+                            <View style={{ marginTop: -1, flexDirection: 'row', alignItems: 'center' }}>
+                              <Text className="text-app-meta-lg text-black/60 dark:text-white/70">
+                                {formatDate(job.scheduled_date)}
+                              </Text>
+                              <Text className="mx-2 text-app-meta-lg text-black/25 dark:text-white/30">•</Text>
+                              {isPaidWithTip ? (
+                                <Text
+                                  className="text-app-meta-lg text-[#2E9F5A] dark:text-[#5BC980]"
+                                  numberOfLines={1}
+                                  style={{ flexShrink: 1 }}>
+                                  {t('clients.jobPaidWithTip', { tip: moneyFormatter.format(tip) })}
+                                </Text>
+                              ) : isPaidInFull ? (
+                                <Text
+                                  className="text-app-meta-lg text-[#2E9F5A] dark:text-[#5BC980]"
+                                  numberOfLines={1}
+                                  style={{ flexShrink: 1 }}>
+                                  {t('clients.jobPaidFull')}
+                                </Text>
+                              ) : paid === 0 ? (
+                                <Text
+                                  className="text-app-meta-lg text-red-600 dark:text-red-400"
+                                  numberOfLines={1}
+                                  style={{ flexShrink: 1 }}>
+                                  {t('clients.jobDebtAmount', { debt: moneyFormatter.format(debt) })}
+                                </Text>
+                              ) : (
+                                <Text
+                                  className="text-app-meta-lg text-red-600 dark:text-red-400"
+                                  numberOfLines={1}
+                                  style={{ flexShrink: 1 }}>
+                                  {t('clients.jobRemainingAmount', { amount: moneyFormatter.format(debt) })}
+                                </Text>
+                              )}
+                            </View>
                           </View>
+                          <JobStatusText label={getStatusLabel(job.status)} status={job.status} />
                         </View>
-                        <View className="items-end">
-                          <Text className="text-app-meta-lg font-semibold text-black dark:text-white">
-                            {moneyFormatter.format(job.price ?? 0)}
-                          </Text>
-                        </View>
-                      </View>
+                      </ClientJobSwipeSelectRow>
                     </View>
-                  </Pressable>
-                ))
+                  );
+                })
               )}
             </View>
 
-            <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
-              <Text className="text-app-section font-extrabold text-[#1C2745] dark:text-white">{t('clients.timelineTitle')}</Text>
-              <View className="mt-3 flex-row">
-                {[
-                  { key: '30' as const, label: t('clients.timelineFilters.last30') },
-                  { key: '90' as const, label: t('clients.timelineFilters.last90') },
-                  { key: 'all' as const, label: t('clients.timelineFilters.all') },
-                ].map((chip) => {
-                  const selected = timelineRange === chip.key;
-                  return (
-                    <Pressable
-                      key={chip.key}
-                      onPress={() => setTimelineRange(chip.key)}
-                      className={[
-                        'mr-2 rounded-3xl px-4 py-2',
-                        selected
-                          ? 'bg-[#2F7BF6]'
-                          : 'border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70',
-                      ].join(' ')}>
-                      <Text className={selected ? 'text-app-meta font-semibold text-white' : 'text-app-meta text-black/70 dark:text-white/80'}>
-                        {chip.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+            {renderSectionHeader(t('clients.timelineTitle'))}
+            <View style={{ marginLeft: 12, marginTop: 8 }}>
               {groupedTimeline.length === 0 ? (
-                <View className="mt-3">
-                  <MascotEmptyState title={t('clients.timelineEmpty')} compact />
-                </View>
+                <Text className="px-4 py-3 text-center text-app-meta-lg italic text-black/55 dark:text-white/60">
+                  {t('clients.timelineEmpty')}
+                </Text>
               ) : (
                 <View className="mt-3">
                 {groupedTimeline.map((group, groupIndex) => (
                   <View
                     key={group.key}
-                    className={groupIndex > 0 ? 'mt-4 border-t border-black/10 pt-4 dark:border-white/10' : ''}>
+                    className={groupIndex > 0 ? 'mt-5' : ''}>
                     <Text className="text-app-meta-lg font-semibold uppercase tracking-[0.6px] text-black/45 dark:text-white/55">
                       {group.label}
                     </Text>
@@ -470,8 +785,8 @@ export default function ClientDetailScreen() {
                         <View
                           key={event.id}
                           className={[
-                            'flex-row items-start justify-between',
-                            index < group.items.length - 1 ? 'mb-3 border-b border-black/10 pb-3 dark:border-white/10' : '',
+                            'flex-row items-start justify-between pl-3',
+                            index < group.items.length - 1 ? 'mb-3' : '',
                           ].join(' ')}>
                           <Pressable
                             onPress={() =>
@@ -479,30 +794,26 @@ export default function ClientDetailScreen() {
                             }
                             className="mr-3 flex-1">
                             <View className="flex-row items-center">
-                              <Ionicons
-                                name={
-                                  event.type === 'payment'
-                                    ? 'wallet-outline'
-                                    : event.type === 'completed'
-                                      ? 'checkmark-circle-outline'
-                                      : event.type === 'scheduled'
-                                        ? 'calendar-outline'
-                                        : 'briefcase-outline'
-                                }
-                                size={16}
-                                color={colors.secondaryText}
-                              />
-                              <Text className="ml-2 text-app-meta-lg text-black/60 dark:text-white/70">{formatDate(event.date)}</Text>
+                              {event.date ? (
+                                <Text
+                                  style={{
+                                    marginRight: 5,
+                                    color: colorScheme === 'dark' ? '#72A8FF' : '#1C60C3',
+                                    fontSize: 12,
+                                  }}>
+                                  {formatListDate(event.date)}
+                                </Text>
+                              ) : null}
+                              <Text className="flex-1 text-app-meta-lg text-black/80 dark:text-white/85" numberOfLines={1}>
+                                {event.type === 'payment'
+                                  ? `${t('clients.timelinePayment')}: ${event.title}`
+                                  : event.type === 'completed'
+                                    ? `${t('clients.timelineJobCompleted')}: ${event.title}`
+                                    : event.type === 'scheduled'
+                                      ? `${t('clients.timelineJobScheduled')}: ${event.title}`
+                                      : `${t('clients.timelineJobCreated')}: ${event.title}`}
+                              </Text>
                             </View>
-                            <Text className="text-app-body text-black/80 dark:text-white/85" numberOfLines={1}>
-                              {event.type === 'payment'
-                                ? `${t('clients.timelinePayment')}: ${event.title}`
-                                : event.type === 'completed'
-                                  ? `${t('clients.timelineJobCompleted')}: ${event.title}`
-                                  : event.type === 'scheduled'
-                                    ? `${t('clients.timelineJobScheduled')}: ${event.title}`
-                                    : `${t('clients.timelineJobCreated')}: ${event.title}`}
-                            </Text>
                             {event.note?.trim() ? (
                               <Text className="mt-0.5 text-app-meta-lg text-black/55 dark:text-white/65" numberOfLines={2}>
                                 {event.note.trim()}
@@ -510,7 +821,7 @@ export default function ClientDetailScreen() {
                             ) : null}
                           </Pressable>
                           {event.type === 'payment' ? (
-                            <Text className="pt-0.5 text-app-body font-semibold text-black dark:text-white">
+                            <Text className="pt-0.5 text-app-meta-lg text-black/70 dark:text-white/80">
                               {moneyFormatter.format(event.amount ?? 0)}
                             </Text>
                           ) : null}
@@ -519,66 +830,130 @@ export default function ClientDetailScreen() {
                     </View>
                   </View>
                 ))}
+                {timeline.length > visibleTimeline.length ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setShowAllActivities(true)}
+                    style={{ alignSelf: 'flex-start', marginLeft: -12, marginTop: 12, paddingVertical: 4 }}>
+                    <Text className="text-app-subtitle font-semibold" style={{ color: colors.secondaryText }}>
+                      {t('clients.viewAllActivities')}
+                    </Text>
+                  </Pressable>
+                ) : null}
                 </View>
               )}
             </View>
           </>
         )}
       </View>
-      </ScrollView>
+      </Animated.ScrollView>
 
-      <View
-        onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}
+      <Animated.View
+        pointerEvents={selectionMode ? 'auto' : 'none'}
         style={{
           position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 30,
-          elevation: 12,
-          backgroundColor: colors.background,
+          top: Math.max(insets.top + 8, 18),
+          right: 20,
+          zIndex: 70,
+          elevation: 0,
+          opacity: selectionBarProgress,
+          transform: [
+            {
+              translateY: selectionBarProgress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-10, 0],
+              }),
+            },
+          ],
         }}>
-        <View className="px-6 pb-6" style={{ paddingTop: insets.top + 12 }}>
-          <View className="flex-row items-center justify-between">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('common.close')}
+          onPress={clearSelection}
+          style={{
+            minHeight: 38,
+            borderRadius: 19,
+            borderWidth: 1,
+            borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.24)' : 'rgba(255,255,255,0.68)',
+            backgroundColor: primaryActionColor,
+            shadowOpacity: 0,
+            elevation: 0,
+            paddingHorizontal: 14,
+            flexDirection: 'row',
+            alignItems: 'center',
+          }}>
+          <Text className="text-app-subtitle font-semibold" style={{ color: '#FFFFFF' }}>
+            {t('common.close')}
+          </Text>
+        </Pressable>
+      </Animated.View>
+
+      <Animated.View
+        pointerEvents={selectionMode ? 'auto' : 'none'}
+        style={{
+          position: 'absolute',
+          left: 24,
+          right: 24,
+          bottom: Math.max(insets.bottom + 18, 24),
+          zIndex: 60,
+          elevation: 0,
+          opacity: selectionBarProgress,
+          transform: [
+            {
+              translateY: selectionBarProgress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [24, 0],
+              }),
+            },
+          ],
+        }}>
+        <View
+          style={{
+            minHeight: 48,
+            borderRadius: 24,
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.24)',
+            backgroundColor: 'rgba(56,64,76,0.9)',
+            shadowOpacity: 0,
+            elevation: 0,
+            paddingHorizontal: 14,
+            flexDirection: 'row',
+            alignItems: 'center',
+          }}>
+          <View className="flex-1 flex-row items-center justify-between">
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={t('common.back')}
-              onPress={onBack}
-              hitSlop={8}
-              className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
-              <Ionicons name="chevron-back" size={20} color={colors.text} />
+              accessibilityLabel={t('jobs.charge')}
+              onPress={onChargeSelected}
+              className="min-h-[42px] flex-1 flex-row items-center justify-center rounded-full px-1">
+              <Ionicons name="cash-outline" size={17} color="#FFFFFF" />
+              <Text className="ml-1.5 text-app-row-lg font-semibold" style={{ color: '#FFFFFF' }} numberOfLines={1}>
+                {t('jobs.charge')}
+              </Text>
             </Pressable>
-
-            <View className="flex-row items-center">
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('clients.edit')}
-                onPress={onEdit}
-                hitSlop={8}
-                className="mr-3 h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
-                <FontAwesome name="pencil" size={16} color={colors.text} />
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('clients.delete')}
-                onPress={onDelete}
-                hitSlop={8}
-                className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
-                <Ionicons name="trash" size={18} color="#FF3B30" />
-              </Pressable>
-            </View>
-          </View>
-
-          <Text className="mt-4 font-bold text-app-display tracking-tight text-black dark:text-white">
-            {client?.name || '-'}
-          </Text>
-          <View className="mt-1 flex-row items-center">
-            <Text className="text-app-subtitle text-black/60 dark:text-white/70">
-              {clientMetaText}
-            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('jobs.finish')}
+              onPress={onFinishSelected}
+              className="min-h-[42px] flex-1 flex-row items-center justify-center rounded-full px-1">
+              <Ionicons name="checkmark-done-outline" size={17} color="#FFFFFF" />
+              <Text className="ml-1.5 text-app-row-lg font-semibold" style={{ color: '#FFFFFF' }} numberOfLines={1}>
+                {t('jobs.finish')}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('jobs.deleteShort')}
+              onPress={onDeleteSelected}
+              className="min-h-[42px] flex-1 flex-row items-center justify-center rounded-full px-1">
+              <Ionicons name="trash-outline" size={17} color="#FFFFFF" />
+              <Text className="ml-1.5 text-app-row-lg font-semibold" style={{ color: '#FFFFFF' }} numberOfLines={1}>
+                {t('jobs.deleteShort')}
+              </Text>
+            </Pressable>
           </View>
         </View>
-      </View>
+      </Animated.View>
     </View>
   );
 }

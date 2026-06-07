@@ -1,26 +1,30 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  ScrollView,
   Text,
   View,
 } from 'react-native';
 
 import { StickyFormHeader } from '@/components/StickyFormHeader';
+import { useColorScheme } from '@/components/useColorScheme';
 import { AppTextInput } from '@/components/AppTextInput';
 import { getExpenseById, updateExpense, deleteExpense } from '@/lib/job-finance';
+import { goBackOrReplace } from '@/lib/navigation';
 
 export default function EditExpenseScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string; expenseId?: string }>();
   const { t } = useTranslation();
+  const colorScheme = useColorScheme() ?? 'light';
+  const scrollY = useRef(new Animated.Value(0)).current;
 
   const jobId = typeof params.id === 'string' ? params.id : null;
   const expenseId = typeof params.expenseId === 'string' ? params.expenseId : null;
@@ -105,18 +109,41 @@ export default function EditExpenseScreen() {
   };
 
   const onBack = () => {
-    router.replace({ pathname: '/(tabs)/posao/[id]' as any, params: { id: jobId } });
+    goBackOrReplace(router, { pathname: '/(tabs)/posao/[id]' as any, params: { id: jobId } });
   };
+
+  const sectionSeparatorColor = colorScheme === 'dark' ? 'rgba(84,84,88,0.38)' : 'rgba(60,60,67,0.14)';
+  const formSectionContentStyle = { marginLeft: 12, marginTop: 8 };
+  const fieldInputClassName = 'mt-2 rounded-xl bg-black/[0.035] px-0 py-0 dark:bg-white/[0.07]';
+  const fieldInputStyle = { height: 38, paddingHorizontal: 10, paddingVertical: 0 };
+
+  const renderFormSection = (title: string) => (
+    <View className="mt-5">
+      <View className="px-1">
+        <Text
+          className="text-app-row-title font-semibold"
+          style={{ color: colorScheme === 'dark' ? '#72A8FF' : '#1C60C3' }}>
+          {title}
+        </Text>
+      </View>
+      <View className="mt-2 h-px" style={{ backgroundColor: sectionSeparatorColor }} />
+    </View>
+  );
 
   return (
     <KeyboardAvoidingView
-      className="flex-1 bg-[#F2F2F7] dark:bg-black"
+      className="flex-1 bg-[#F2F2F7] dark:bg-[#1D2229]"
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}>
-      <ScrollView
+      <Animated.ScrollView
         stickyHeaderIndices={[0]}
         className="flex-1"
         contentContainerClassName="pb-32"
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
+        )}
+        scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled">
         <StickyFormHeader
           title={t('jobs.editExpense')}
@@ -124,13 +151,14 @@ export default function EditExpenseScreen() {
           onSave={onSave}
           saveLabel={t('common.save')}
           submitting={submitting}
+          scrollY={scrollY}
           right={
             <View className="mr-3">
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={t('jobs.deleteExpense')}
                 onPress={onDelete}
-                className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
+                className="h-10 w-10 items-center justify-center">
                 <Ionicons name="trash" size={18} color="#FF3B30" />
               </Pressable>
             </View>
@@ -138,14 +166,19 @@ export default function EditExpenseScreen() {
         />
 
         <View className="px-6">
-          <View className="overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
+          <Text className="mb-1 text-[28px] font-semibold leading-[34px] text-black dark:text-white">
+            {t('jobs.editExpense')}
+          </Text>
+          <View>
             {loading ? (
               <View className="items-center py-6">
                 <ActivityIndicator />
               </View>
             ) : (
               <>
-                <Text className="text-app-meta font-medium text-black/60 dark:text-white/70">
+                {renderFormSection(t('jobs.financials'))}
+                <View style={formSectionContentStyle}>
+                <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">
                   {t('jobs.expenseAmountLabel')}
                 </Text>
                 <AppTextInput
@@ -153,26 +186,32 @@ export default function EditExpenseScreen() {
                   onChangeText={setAmount}
                   keyboardType="decimal-pad"
                   placeholder={t('jobs.expenseAmountLabel')}
-                  className="mt-2"
+                  className={fieldInputClassName}
+                  style={fieldInputStyle}
                 />
                 <Text className="mt-1 text-app-meta text-black/50 dark:text-white/60">{t('jobs.amountEurNote')}</Text>
+                </View>
 
-                <Text className="mt-4 text-app-meta font-medium text-black/60 dark:text-white/70">
+                {renderFormSection(t('jobs.descriptionLabel'))}
+                <View style={formSectionContentStyle}>
+                <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">
                   {t('jobs.expenseTitleLabel')}
                 </Text>
                 <AppTextInput
                   value={title}
                   onChangeText={setTitle}
                   placeholder={t('jobs.expenseTitleLabel')}
-                  className="mt-2"
+                  className={fieldInputClassName}
+                  style={fieldInputStyle}
                 />
+                </View>
               </>
             )}
 
             {error ? <Text className="mt-3 text-app-meta text-red-600">{error}</Text> : null}
           </View>
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
     </KeyboardAvoidingView>
   );
 }

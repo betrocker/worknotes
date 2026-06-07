@@ -8,7 +8,7 @@ export default function NotFoundScreen() {
   return (
     <>
       <Stack.Screen options={{ title: t('notFound.title') }} />
-      <View className="flex-1 items-center justify-center bg-[#F2F2F7] px-5 dark:bg-black">
+      <View className="flex-1 items-center justify-center bg-[#F2F2F7] px-5 dark:bg-[#1D2229]">
         <Text className="text-app-section font-bold text-black dark:text-white">
           {t('notFound.message')}
         </Text>

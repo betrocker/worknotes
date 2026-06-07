@@ -1,21 +1,318 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Animated, FlatList, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Easing, Modal, PanResponder, Platform, Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Colors from '@/constants/Colors';
-import { MascotEmptyState } from '@/components/MascotEmptyState';
-import { LargeHeader } from '@/components/LargeHeader';
-import { AppSearchInput } from '@/components/AppSearchInput';
+import { CollapsingMainHeader, MainScreenTitle } from '@/components/CollapsingMainHeader';
+import { useQuickFindSwipeDown } from '@/components/useQuickFindSwipeDown';
 import { useColorScheme } from '@/components/useColorScheme';
 import { parseDateInput } from '@/lib/date';
-import { listJobs, updateJobStatus, type JobListItem } from '@/lib/jobs';
-import { cancelJobReminder, getJobReminderPreference, scheduleJobReminder } from '@/lib/notifications';
+import { deleteJob, listJobs, updateJobScheduledDate, updateJobStatus, type JobListItem } from '@/lib/jobs';
+import { setMainFloatingActionsHidden } from '@/lib/floating-actions-visibility';
+import { goBackOrReplace } from '@/lib/navigation';
+import { triggerSelectionHaptic } from '@/lib/haptics';
+import {
+  cancelJobReminder,
+  clearJobReminderPreference,
+  getJobReminderPreference,
+  scheduleJobReminder,
+} from '@/lib/notifications';
 import { useAuth } from '@/providers/AuthProvider';
+
+type SectionKey = 'active' | 'pending' | 'scheduled' | 'done' | 'archived';
+
+type JobSwipeSelectRowProps = {
+  item: JobListItem;
+  selected: boolean;
+  selectionMode: boolean;
+  colors: typeof Colors.light;
+  colorScheme: 'light' | 'dark';
+  pendingReasonColor: string;
+  debtLabel: string;
+  untitledLabel: string;
+  noClientLabel: string;
+  formatDate: (value: string | null) => string;
+  formatPrice: (value: number | null) => string | null;
+  onOpen: (item: JobListItem) => void;
+  onToggleSelected: (item: JobListItem) => void;
+};
+
+const JOB_SELECT_SWIPE_THRESHOLD = 36;
+const JOB_SELECT_SWIPE_MAX = 56;
+const JOB_SELECT_GESTURE_START = 3;
+const JOB_SELECT_HORIZONTAL_BIAS = 0.72;
+
+function JobSelectionCircle({ selected, colorScheme }: { selected: boolean; colorScheme: 'light' | 'dark' }) {
+  const accent = colorScheme === 'dark' ? '#72A8FF' : '#1C60C3';
+  return (
+    <View
+      style={{
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+        borderWidth: 1.5,
+        borderColor: selected ? accent : colorScheme === 'dark' ? 'rgba(255,255,255,0.36)' : 'rgba(60,60,67,0.28)',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+      {selected ? (
+        <View
+          style={{
+            width: 11,
+            height: 11,
+            borderRadius: 5.5,
+            backgroundColor: accent,
+          }}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function JobSwipeSelectRow({
+  item,
+  selected,
+  selectionMode,
+  colors,
+  colorScheme,
+  pendingReasonColor,
+  debtLabel,
+  untitledLabel,
+  noClientLabel,
+  formatDate,
+  formatPrice,
+  onOpen,
+  onToggleSelected,
+}: JobSwipeSelectRowProps) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const circleProgress = useRef(new Animated.Value(selectionMode ? 1 : 0)).current;
+  const maxSwipeDistanceRef = useRef(0);
+  const currentSwipeDistanceRef = useRef(0);
+  const suppressOpenRef = useRef(false);
+  const [swiping, setSwiping] = useState(false);
+
+  useEffect(() => {
+    Animated.spring(circleProgress, {
+      toValue: selectionMode ? 1 : 0,
+      useNativeDriver: true,
+      damping: 18,
+      stiffness: 220,
+      mass: 0.8,
+    }).start();
+  }, [circleProgress, selectionMode]);
+
+  const resetSwipe = useCallback(() => {
+    const duration = Math.min(190, Math.max(90, currentSwipeDistanceRef.current * 2.8));
+    Animated.timing(translateX, {
+      toValue: 0,
+      duration,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        setSwiping(false);
+        maxSwipeDistanceRef.current = 0;
+        currentSwipeDistanceRef.current = 0;
+      }
+    });
+  }, [translateX]);
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponderCapture: (_, gesture) =>
+          gesture.dx < -JOB_SELECT_GESTURE_START &&
+          Math.abs(gesture.dx) > Math.abs(gesture.dy) * JOB_SELECT_HORIZONTAL_BIAS,
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          gesture.dx < -JOB_SELECT_GESTURE_START &&
+          Math.abs(gesture.dx) > Math.abs(gesture.dy) * JOB_SELECT_HORIZONTAL_BIAS,
+        onPanResponderGrant: () => {
+          maxSwipeDistanceRef.current = 0;
+          currentSwipeDistanceRef.current = 0;
+          suppressOpenRef.current = false;
+          setSwiping(true);
+        },
+        onPanResponderMove: (_, gesture) => {
+          const rawNext = Math.min(0, gesture.dx);
+          const distance = Math.abs(rawNext);
+          if (distance > 6) {
+            suppressOpenRef.current = true;
+          }
+          maxSwipeDistanceRef.current = Math.max(maxSwipeDistanceRef.current, distance);
+          currentSwipeDistanceRef.current = distance;
+          const next =
+            distance > JOB_SELECT_SWIPE_MAX
+              ? -(JOB_SELECT_SWIPE_MAX + (distance - JOB_SELECT_SWIPE_MAX) * 0.18)
+              : rawNext;
+          translateX.setValue(next);
+        },
+        onPanResponderRelease: (_, gesture) => {
+          const shouldSelect = maxSwipeDistanceRef.current > JOB_SELECT_SWIPE_THRESHOLD || gesture.vx < -0.55;
+          if (shouldSelect) {
+            onToggleSelected(item);
+          }
+          resetSwipe();
+        },
+        onPanResponderTerminate: resetSwipe,
+        onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => true,
+      }),
+    [item, onToggleSelected, resetSwipe, translateX]
+  );
+
+  const debt = item.debt > 0 ? formatPrice(item.debt) : null;
+  const pendingReason = item.status === 'pending' ? item.pending_reason?.trim() : null;
+
+  const circleOpacity = circleProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+  const circleScale = circleProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.86, 1],
+  });
+  const revealOpacity = translateX.interpolate({
+    inputRange: [-24, 0],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+  const revealTranslateX = translateX.interpolate({
+    inputRange: [-JOB_SELECT_SWIPE_MAX, 0],
+    outputRange: [0, 16],
+    extrapolate: 'clamp',
+  });
+  const revealScale = translateX.interpolate({
+    inputRange: [-JOB_SELECT_SWIPE_MAX, -16, 0],
+    outputRange: [1, 0.92, 0.86],
+    extrapolate: 'clamp',
+  });
+  const selectedRowBackground = colorScheme === 'dark' ? 'rgba(47, 105, 190, 0.26)' : '#D5E5FF';
+  const activeRowBackground = colorScheme === 'dark' ? '#30333A' : '#E4E6EA';
+  const movingRowBackground = swiping ? activeRowBackground : 'transparent';
+  const revealBackgroundColor = colorScheme === 'dark' ? '#315FAD' : '#1C60C3';
+
+  return (
+    <Animated.View
+      {...panResponder.panHandlers}
+      className="flex-row items-center"
+      style={{
+        marginVertical: 1,
+        borderRadius: 12,
+      }}>
+      {selected ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: -12,
+            right: -12,
+            bottom: 0,
+            borderRadius: 12,
+            backgroundColor: selectedRowBackground,
+          }}
+        />
+      ) : null}
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          bottom: 0,
+          width: 78,
+          paddingRight: 10,
+          borderRadius: 12,
+          backgroundColor: revealBackgroundColor,
+          opacity: revealOpacity,
+          alignItems: 'flex-end',
+          justifyContent: 'center',
+          transform: [{ translateX: revealTranslateX }, { scale: revealScale }],
+        }}>
+        <Ionicons name="checkbox-outline" size={22} color="#FFFFFF" />
+      </Animated.View>
+      <Animated.View
+        className="flex-1 flex-row items-center"
+        style={{
+          marginHorizontal: -8,
+          paddingHorizontal: 8,
+          paddingVertical: 5,
+          borderRadius: 12,
+          backgroundColor: movingRowBackground,
+          transform: [{ translateX }],
+        }}>
+        <Pressable
+          accessibilityRole="link"
+          onPress={() => {
+            if (suppressOpenRef.current) {
+              suppressOpenRef.current = false;
+              return;
+            }
+            onOpen(item);
+          }}
+          className="flex-1">
+        <View className="flex-1 flex-row items-center">
+        <View className="flex-1 pr-3">
+          <Text style={{ color: colors.text, fontSize: 16, fontWeight: '400' }} numberOfLines={1}>
+            {item.title || untitledLabel}
+          </Text>
+          <View style={{ marginTop: -1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
+            <Text style={{ color: colors.secondaryText, fontSize: 12 }} numberOfLines={1}>
+              {item.client?.name || noClientLabel}
+            </Text>
+            <Text style={{ marginHorizontal: 5, color: colors.secondaryText, fontSize: 12 }}>•</Text>
+            <Text style={{ color: colors.secondaryText, fontSize: 12 }} numberOfLines={1}>
+              {formatDate(item.scheduled_date)}
+            </Text>
+            {pendingReason ? (
+              <>
+                <Text style={{ marginHorizontal: 5, color: colors.secondaryText, fontSize: 12 }}>•</Text>
+                <Text style={{ color: pendingReasonColor, fontSize: 12 }} numberOfLines={1}>
+                  {pendingReason}
+                </Text>
+              </>
+            ) : null}
+          </View>
+        </View>
+        {debt ? (
+          <View className="items-end">
+            <Text style={{ color: colorScheme === 'dark' ? '#FF8A8A' : '#C84D4D', fontSize: 12 }} numberOfLines={1}>
+              {debtLabel}
+            </Text>
+            <Text style={{ color: colorScheme === 'dark' ? '#FF8A8A' : '#C84D4D', fontSize: 13 }} numberOfLines={1}>
+              {debt}
+            </Text>
+          </View>
+        ) : null}
+        </View>
+        </Pressable>
+
+        <Animated.View
+          style={{
+            width: selectionMode ? 34 : 0,
+            opacity: circleOpacity,
+            alignItems: 'flex-end',
+            transform: [{ scale: circleScale }],
+          }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected }}
+            disabled={!selectionMode}
+            onPress={() => onToggleSelected(item)}
+            hitSlop={8}
+            className="items-end justify-center">
+            <JobSelectionCircle selected={selected} colorScheme={colorScheme} />
+          </Pressable>
+        </Animated.View>
+      </Animated.View>
+    </Animated.View>
+  );
+}
 
 function getSerbianPluralForm(count: number) {
   const abs = Math.abs(count);
@@ -27,6 +324,11 @@ function getSerbianPluralForm(count: number) {
   return 'other';
 }
 
+function getJobSortTime(job: JobListItem) {
+  const value = job.completed_at ?? job.scheduled_date ?? job.created_at;
+  return parseDateInput(value)?.getTime() ?? new Date(value ?? 0).getTime();
+}
+
 export default function PosloviScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ filter?: string }>();
@@ -35,37 +337,80 @@ export default function PosloviScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const quickFindSwipe = useQuickFindSwipeDown();
+  const pendingReasonColor = colorScheme === 'dark' ? '#FFBF7A' : '#C26A1A';
+  const secondaryLinkColor = colors.secondaryText;
+  const primaryActionColor = colorScheme === 'dark' ? '#72A8FF' : '#1C60C3';
+  const sectionSeparatorColor = colorScheme === 'dark' ? 'rgba(84,84,88,0.38)' : 'rgba(60,60,67,0.14)';
+  const isDark = colorScheme === 'dark';
+  const modalWidth = Math.max(280, Math.round(windowWidth * 0.8));
+  const modalMaxHeight = Math.max(340, Math.min(500, Math.round(windowHeight * 0.72)));
+  const modalBackgroundColor = isDark ? Colors.dark.menuSurface : '#FFFFFF';
+  const modalBorderColor = isDark ? 'rgba(255,255,255,0.18)' : 'rgba(60,60,67,0.12)';
+  const modalBackdropColor = isDark ? 'rgba(0,0,0,0.42)' : 'rgba(16,24,40,0.22)';
 
   const userId = session?.user?.id ?? null;
 
   const [items, setItems] = useState<JobListItem[]>([]);
-  const [filter, setFilter] = useState<'all' | 'active' | 'done' | 'scheduled' | 'archived'>('all');
-  const [query, setQuery] = useState('');
+  const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
+  const [postponeJob, setPostponeJob] = useState<JobListItem | null>(null);
+  const [postponeDraftDate, setPostponeDraftDate] = useState(new Date());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [segmentWidth, setSegmentWidth] = useState(0);
-  const [listViewportHeight, setListViewportHeight] = useState(0);
-  const [listContentHeight, setListContentHeight] = useState(0);
-  const [listCanScroll, setListCanScroll] = useState(false);
-  const [showScrollHint, setShowScrollHint] = useState(false);
-  const segmentTranslateX = React.useRef(new Animated.Value(0)).current;
+  const [expandedSections, setExpandedSections] = useState<Record<SectionKey, boolean>>({
+    active: false,
+    pending: false,
+    scheduled: false,
+    done: false,
+    archived: false,
+  });
+
+  const selectionMode = selectedJobIds.length > 0;
+  const selectedJobIdSet = useMemo(() => new Set(selectedJobIds), [selectedJobIds]);
+  const selectedJobs = useMemo(
+    () => items.filter((item) => selectedJobIdSet.has(item.id)),
+    [items, selectedJobIdSet]
+  );
+  const singleSelectedJob = selectedJobs.length === 1 ? selectedJobs[0] : null;
+  const canUseSingleJobActions = Boolean(singleSelectedJob);
+  const selectionBarProgress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const nextFilter = params.filter;
+    setSelectedJobIds((current) => current.filter((jobId) => items.some((item) => item.id === jobId)));
+  }, [items]);
+
+  useEffect(() => {
+    Animated.spring(selectionBarProgress, {
+      toValue: selectionMode ? 1 : 0,
+      useNativeDriver: true,
+      damping: 18,
+      stiffness: 220,
+      mass: 0.82,
+    }).start();
+  }, [selectionBarProgress, selectionMode]);
+
+  useEffect(() => {
+    setMainFloatingActionsHidden(selectionMode);
+    return () => setMainFloatingActionsHidden(false);
+  }, [selectionMode]);
+
+  useEffect(() => {
     if (
-      nextFilter === 'all' ||
-      nextFilter === 'active' ||
-      nextFilter === 'done' ||
-      nextFilter === 'scheduled' ||
-      nextFilter === 'archived'
+      params.filter === 'active' ||
+      params.filter === 'pending' ||
+      params.filter === 'scheduled' ||
+      params.filter === 'done' ||
+      params.filter === 'archived'
     ) {
-      setFilter(nextFilter);
+      setExpandedSections((prev) => ({ ...prev, [params.filter as SectionKey]: true }));
     }
   }, [params.filter]);
 
   const locale = i18n.language === 'sr' ? 'sr-Latn-RS' : i18n.language;
   const dateFormatter = useMemo(
-    () => new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'short', year: 'numeric' }),
+    () => new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'long', year: 'numeric' }),
     [locale]
   );
 
@@ -89,30 +434,46 @@ export default function PosloviScreen() {
     }, [load])
   );
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const result = items.filter((job) => {
-      if (filter === 'archived') {
-        if (!job.archived_at) return false;
-      } else if (job.archived_at) {
-        return false;
-      }
-      if (filter === 'active' && job.status !== 'in_progress') return false;
-      if (filter === 'done' && job.status !== 'done') return false;
-      if (filter === 'scheduled' && job.status !== 'scheduled') return false;
-      if (!q) return true;
-      const title = (job.title ?? '').toLowerCase();
-      const description = (job.description ?? '').toLowerCase();
-      const status = (job.status ?? '').toLowerCase();
-      const clientName = (job.client?.name ?? '').toLowerCase();
-      return title.includes(q) || description.includes(q) || status.includes(q) || clientName.includes(q);
-    });
-    return result.sort((a, b) => {
-      const aTime = new Date(a.created_at ?? 0).getTime();
-      const bTime = new Date(b.created_at ?? 0).getTime();
-      return bTime - aTime;
-    });
-  }, [items, query, filter]);
+  const sortedItems = useMemo(
+    () => [...items].sort((a, b) => getJobSortTime(b) - getJobSortTime(a)),
+    [items]
+  );
+
+  const sections = useMemo(
+    () => [
+      {
+        key: 'active' as const,
+        title: t('jobs.filters.active'),
+        empty: t('jobs.sectionEmpty.active'),
+        jobs: sortedItems.filter((job) => !job.archived_at && job.status === 'in_progress'),
+      },
+      {
+        key: 'pending' as const,
+        title: t('jobs.filters.pending'),
+        empty: t('jobs.sectionEmpty.pending'),
+        jobs: sortedItems.filter((job) => !job.archived_at && job.status === 'pending'),
+      },
+      {
+        key: 'scheduled' as const,
+        title: t('jobs.filters.scheduled'),
+        empty: t('jobs.sectionEmpty.scheduled'),
+        jobs: sortedItems.filter((job) => !job.archived_at && job.status === 'scheduled'),
+      },
+      {
+        key: 'done' as const,
+        title: t('jobs.filters.done'),
+        empty: t('jobs.sectionEmpty.done'),
+        jobs: sortedItems.filter((job) => !job.archived_at && job.status === 'done'),
+      },
+      {
+        key: 'archived' as const,
+        title: t('jobs.filters.archived'),
+        empty: t('jobs.sectionEmpty.archived'),
+        jobs: sortedItems.filter((job) => Boolean(job.archived_at)),
+      },
+    ],
+    [sortedItems, t]
+  );
 
   const formatDate = useCallback(
     (value: string | null) => {
@@ -124,78 +485,20 @@ export default function PosloviScreen() {
     [dateFormatter, t]
   );
 
-  const formatStatus = useCallback(
-    (value: string | null) => {
-      if (!value) return t('jobs.statusUnknown');
-      if (value === 'scheduled') return t('jobs.statuses.scheduled');
-      if (value === 'in_progress') return t('jobs.statuses.inProgress');
-      if (value === 'done') return t('jobs.statuses.done');
-      return value.replace(/_/g, ' ');
-    },
-    [t]
-  );
-
-  const getStatusChipStyle = useCallback((value: string | null) => {
-    if (value === 'scheduled') {
-      return {
-        bg: 'border border-[#1C4FD7]/25 bg-transparent dark:border-[#8FB2FF]/35',
-        text: 'text-[#1C4FD7] dark:text-[#8FB2FF]',
-      };
-    }
-    if (value === 'in_progress') {
-      return {
-        bg: 'border border-[#B65B00]/25 bg-transparent dark:border-[#FFB067]/35',
-        text: 'text-[#B65B00] dark:text-[#FFB067]',
-      };
-    }
-    if (value === 'done') {
-      return {
-        bg: 'border border-[#1F7A4D]/25 bg-transparent dark:border-[#79D39A]/35',
-        text: 'text-[#1F7A4D] dark:text-[#79D39A]',
-      };
-    }
-    return {
-      bg: 'border border-black/10 bg-transparent dark:border-white/12',
-      text: 'text-black/60 dark:text-white/70',
-    };
+  const formatDateInput = useCallback((date: Date) => {
+    const yyyy = String(date.getFullYear());
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
   }, []);
 
-  const nextStatus = useCallback((value: string | null) => {
-    if (value === 'scheduled') return 'in_progress';
-    if (value === 'in_progress') return 'done';
-    return 'scheduled';
+  const shiftPostponeDraftDate = useCallback((days: number) => {
+    setPostponeDraftDate((current) => {
+      const next = new Date(current);
+      next.setDate(next.getDate() + days);
+      return next;
+    });
   }, []);
-
-  const onToggleStatus = useCallback(
-    async (job: JobListItem) => {
-      if (!userId) return;
-      const next = nextStatus(job.status);
-      setItems((prev) =>
-        prev.map((item) => (item.id === job.id ? { ...item, status: next } : item))
-      );
-      try {
-        await updateJobStatus(userId, job.id, next);
-        if (next === 'scheduled' && job.scheduled_date) {
-          const reminderType = await getJobReminderPreference(job.id);
-          await scheduleJobReminder({
-            jobId: job.id,
-            title: job.title || t('jobs.untitled'),
-            scheduledDate: job.scheduled_date,
-            reminderType,
-            clientName: job.client?.name ?? null,
-          });
-        } else {
-          await cancelJobReminder(job.id);
-        }
-      } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : String(e));
-        setItems((prev) =>
-          prev.map((item) => (item.id === job.id ? { ...item, status: job.status } : item))
-        );
-      }
-    },
-    [nextStatus, t, userId]
-  );
 
   const formatPrice = useCallback(
     (value: number | null) => {
@@ -209,14 +512,6 @@ export default function PosloviScreen() {
     [locale]
   );
 
-  const onAdd = () => {
-    router.push({ pathname: '/(tabs)/posao/new' as any });
-  };
-
-  const activeJobsCount = useMemo(
-    () => items.filter((job) => !job.archived_at && job.status === 'in_progress').length,
-    [items]
-  );
   const formatJobsShortLabel = useCallback(
     (count: number) => {
       if (i18n.language === 'sr') {
@@ -227,6 +522,7 @@ export default function PosloviScreen() {
     },
     [i18n.language, t]
   );
+
   const formatActiveShortLabel = useCallback(
     (count: number) => {
       if (i18n.language === 'sr') {
@@ -237,313 +533,560 @@ export default function PosloviScreen() {
     },
     [i18n.language, t]
   );
+
+  const formatSeeMoreLabel = useCallback(
+    (count: number) => {
+      if (i18n.language === 'sr') {
+        const form = getSerbianPluralForm(count);
+        return t(`jobs.seeMoreForms.${form}`, { count });
+      }
+      return t(count === 1 ? 'jobs.seeMoreForms.one' : 'jobs.seeMoreForms.other', { count });
+    },
+    [i18n.language, t]
+  );
+
+  const formatShowAllLabel = useCallback(
+    (count: number) => {
+      if (i18n.language === 'sr') {
+        const form = getSerbianPluralForm(count);
+        return t(`jobs.showAllForms.${form}`, { count });
+      }
+      return t(count === 1 ? 'jobs.showAllForms.one' : 'jobs.showAllForms.other', { count });
+    },
+    [i18n.language, t]
+  );
+
+  const activeJobsCount = useMemo(
+    () => items.filter((job) => !job.archived_at && job.status === 'in_progress').length,
+    [items]
+  );
   const jobsSubtitle = `${formatJobsShortLabel(items.filter((job) => !job.archived_at).length)} • ${formatActiveShortLabel(activeJobsCount)}`;
 
-  const jobFilters = useMemo(
-    () => [
-      { key: 'all' as const, label: t('jobs.filters.all') },
-      { key: 'active' as const, label: t('jobs.filters.active') },
-      { key: 'done' as const, label: t('jobs.filters.done') },
-      { key: 'scheduled' as const, label: t('jobs.filters.scheduled') },
-    ],
-    [t]
+  const openJob = useCallback(
+    (item: JobListItem) => {
+      router.push({ pathname: '/(tabs)/posao/[id]' as any, params: { id: item.id } });
+    },
+    [router]
   );
 
-  const activeFilterIndex = Math.max(
-    0,
-    jobFilters.findIndex((chip) => chip.key === filter)
+  const toggleSelectedJob = useCallback((item: JobListItem) => {
+    triggerSelectionHaptic();
+    setSelectedJobIds((current) =>
+      current.includes(item.id) ? current.filter((jobId) => jobId !== item.id) : [...current, item.id]
+    );
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setSelectedJobIds([]);
+  }, []);
+
+  const onFinishSelected = useCallback(() => {
+    if (!userId || selectedJobs.length === 0) return;
+    const previousItems = items;
+    const selectedIds = new Set(selectedJobs.map((item) => item.id));
+    const today = formatDateInput(new Date());
+    setItems((current) =>
+      current.map((item) =>
+        selectedIds.has(item.id)
+          ? { ...item, status: 'done', completed_at: item.completed_at ?? today }
+          : item
+      )
+    );
+    clearSelection();
+
+    void (async () => {
+      try {
+        await Promise.all(
+          selectedJobs.map(async (item) => {
+            await cancelJobReminder(item.id);
+            await updateJobStatus(userId, item.id, 'done');
+          })
+        );
+        await load();
+      } catch (e: unknown) {
+        setItems(previousItems);
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    })();
+  }, [clearSelection, formatDateInput, items, load, selectedJobs, userId]);
+
+  const closePostponePicker = useCallback(() => {
+    setPostponeJob(null);
+  }, []);
+
+  const applyPostponeDate = useCallback(
+    (job: JobListItem, date: Date) => {
+      if (!userId) return;
+      const nextDate = formatDateInput(date);
+      const previousItems = items;
+      setPostponeJob(null);
+      setItems((current) =>
+        current.map((item) => (item.id === job.id ? { ...item, scheduled_date: nextDate } : item))
+      );
+      clearSelection();
+
+      void (async () => {
+        try {
+          await updateJobScheduledDate(userId, job.id, nextDate);
+          if (job.status === 'scheduled') {
+            const reminderType = await getJobReminderPreference(job.id);
+            await scheduleJobReminder({
+              jobId: job.id,
+              title: job.title || t('jobs.untitled'),
+              scheduledDate: nextDate,
+              reminderType,
+              clientName: job.client?.name ?? null,
+            });
+          }
+          await load();
+        } catch (e: unknown) {
+          setItems(previousItems);
+          setError(e instanceof Error ? e.message : String(e));
+        }
+      })();
+    },
+    [clearSelection, formatDateInput, items, load, t, userId]
   );
 
-  useEffect(() => {
-    if (!segmentWidth) return;
-    Animated.timing(segmentTranslateX, {
-      toValue: activeFilterIndex * segmentWidth,
-      duration: 180,
-      useNativeDriver: true,
-    }).start();
-  }, [activeFilterIndex, segmentTranslateX, segmentWidth]);
+  const onPostponeSelected = useCallback(() => {
+    if (!singleSelectedJob) return;
+    const initialDate = parseDateInput(singleSelectedJob.scheduled_date) ?? new Date();
+    setPostponeDraftDate(initialDate);
+    setPostponeJob(singleSelectedJob);
+  }, [singleSelectedJob]);
+
+  const confirmPostponeDate = useCallback(() => {
+      const job = postponeJob;
+      if (!job) return;
+      applyPostponeDate(job, postponeDraftDate);
+    },
+    [applyPostponeDate, postponeDraftDate, postponeJob]
+  );
+
+  const onDeleteSelected = useCallback(() => {
+    if (!userId || selectedJobs.length === 0) return;
+    Alert.alert(t('jobs.deleteConfirmTitle'), t('jobs.deleteConfirmMessage'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('jobs.delete'),
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            const previousItems = items;
+            const selectedIds = new Set(selectedJobs.map((item) => item.id));
+            setItems((current) => current.filter((item) => !selectedIds.has(item.id)));
+            clearSelection();
+            try {
+              await Promise.all(
+                selectedJobs.map(async (item) => {
+                  await cancelJobReminder(item.id);
+                  await clearJobReminderPreference(item.id);
+                  await deleteJob(userId, item.id);
+                })
+              );
+              await load();
+            } catch (e: unknown) {
+              setItems(previousItems);
+              setError(e instanceof Error ? e.message : String(e));
+            }
+          })();
+        },
+      },
+    ]);
+  }, [clearSelection, items, load, selectedJobs, t, userId]);
+
+  const renderJobRow = (item: JobListItem) => (
+    <JobSwipeSelectRow
+      key={item.id}
+      item={item}
+      selected={selectedJobIdSet.has(item.id)}
+      selectionMode={selectionMode}
+      colors={colors}
+      colorScheme={colorScheme}
+      pendingReasonColor={pendingReasonColor}
+      debtLabel={t('jobs.debtLabel')}
+      untitledLabel={t('jobs.untitled')}
+      noClientLabel={t('jobs.noClient')}
+      formatDate={formatDate}
+      formatPrice={formatPrice}
+      onOpen={openJob}
+      onToggleSelected={toggleSelectedJob}
+    />
+  );
+
+  const renderSection = (section: (typeof sections)[number]) => {
+    const expanded = expandedSections[section.key];
+    const summaryOnly = section.key === 'done' || section.key === 'archived';
+    const visibleJobs = expanded ? section.jobs : summaryOnly ? [] : section.jobs.slice(0, 3);
+    const remainingCount = Math.max(section.jobs.length - visibleJobs.length, 0);
+
+    return (
+      <View key={section.key} style={{ marginBottom: 22 }}>
+        <Text
+          className="text-app-row-title font-semibold"
+          style={{ color: colorScheme === 'dark' ? '#72A8FF' : '#1C60C3' }}>
+          {section.title}
+        </Text>
+        <View
+          className="mt-2 h-px"
+          style={{ backgroundColor: sectionSeparatorColor }}
+        />
+        <View style={{ marginLeft: 12, marginTop: 8 }}>
+          {visibleJobs.length > 0 ? (
+            visibleJobs.map((item) => renderJobRow(item))
+          ) : section.jobs.length === 0 ? (
+            <Text className="py-3 text-app-meta italic text-black/55 dark:text-white/60">{section.empty}</Text>
+          ) : (
+            <View className="h-2" />
+          )}
+          {remainingCount > 0 || (summaryOnly && expanded && section.jobs.length > 0) ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() =>
+                setExpandedSections((prev) => ({
+                  ...prev,
+                  [section.key]: summaryOnly ? !prev[section.key] : true,
+                }))
+              }
+              className="self-start py-2">
+              <Text className="text-app-subtitle font-semibold" style={{ color: secondaryLinkColor }}>
+                {summaryOnly && expanded
+                  ? t('jobs.hideList')
+                  : summaryOnly
+                    ? formatShowAllLabel(remainingCount)
+                    : formatSeeMoreLabel(remainingCount)}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+    );
+  };
 
   return (
-    <View className="flex-1 bg-[#F2F2F7] dark:bg-black">
-      <LargeHeader
+    <View className="flex-1" style={{ backgroundColor: colors.background }}>
+      <CollapsingMainHeader
         title={t('tabs.jobs')}
-        subtitle={jobsSubtitle}
+        iconName="briefcase-outline"
+        scrollY={scrollY}
+        left={
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('common.back')}
+            onPress={() => goBackOrReplace(router, '/(tabs)' as any)}
+            hitSlop={8}
+            className="h-11 w-11 items-center justify-center">
+            <Ionicons name="chevron-back" size={25} color="#717983" />
+          </Pressable>
+        }
         right={
           <View className="flex-row items-center">
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={t('jobs.filters.archived')}
-              onPress={() => setFilter('archived')}
-              className={[
-                'mr-3 h-10 w-10 items-center justify-center rounded-3xl border',
-                filter === 'archived'
-                  ? 'border-[#007AFF] bg-[#E8F0FF] dark:border-[#0A84FF] dark:bg-[#1E2A44]'
-                  : 'border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70',
-              ].join(' ')}>
-              <Ionicons name="archive-outline" size={18} color={filter === 'archived' ? '#007AFF' : colors.text} />
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
               accessibilityLabel={t('jobs.calendarTitle')}
               onPress={() => router.push('/(tabs)/posao/kalendar')}
-              className="mr-3 h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
-              <Ionicons name="calendar-outline" size={18} color={colors.text} />
+              className="mr-3 h-10 w-10 items-center justify-center">
+              <Ionicons name="calendar-outline" size={18} color="#717983" />
             </Pressable>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={t('jobs.add')}
-              onPress={onAdd}
-              className="mr-3 h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
-              <Ionicons name="add" size={22} color={colors.text} />
+              accessibilityLabel={t('tabs.profile')}
+              onPress={() => router.push('/(tabs)/podesavanja' as any)}
+              hitSlop={8}
+              style={{
+                width: 38,
+                height: 38,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+              <Ionicons name="person-outline" size={20} color="#717983" />
             </Pressable>
           </View>
         }
       />
 
-      <View className="flex-1 px-6 pt-3">
-        <AppSearchInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder={t('jobs.searchPlaceholder')}
-        />
-
-        <View
-          className="mt-3 flex-row rounded-[18px] p-0.5"
-          style={{ backgroundColor: colorScheme === 'dark' ? '#141416' : '#ECECF0' }}>
-          {segmentWidth > 0 ? (
-            <Animated.View
-              pointerEvents="none"
-              style={{
-                position: 'absolute',
-                top: 2,
-                bottom: 2,
-                left: 2,
-                width: segmentWidth,
-                borderRadius: 14,
-                backgroundColor: colorScheme === 'dark' ? '#2C2C2E' : '#FFFFFF',
-                shadowColor: '#000000',
-                shadowOpacity: colorScheme === 'dark' ? 0.18 : 0.08,
-                shadowRadius: 6,
-                shadowOffset: { width: 0, height: 2 },
-                elevation: 2,
-                transform: [{ translateX: segmentTranslateX }],
-              }}
-            />
-          ) : null}
-          {jobFilters.map((chip) => {
-            const selected = filter === chip.key;
-            return (
-              <Pressable
-                key={chip.key}
-                onPress={() => setFilter(chip.key)}
-                className="flex-1 rounded-[14px] px-3 py-2"
-                onLayout={(event) => {
-                  const width = event.nativeEvent.layout.width;
-                  if (!segmentWidth && width > 0) {
-                    setSegmentWidth(width);
-                  }
-                }}>
-                <Text
-                  className={selected ? 'text-app-meta-lg font-semibold' : 'text-app-meta-lg'}
-                  style={{
-                    textAlign: 'center',
-                    color: selected
-                      ? colors.text
-                      : colorScheme === 'dark'
-                        ? 'rgba(255,255,255,0.68)'
-                        : 'rgba(0,0,0,0.58)',
-                  }}>
-                  {chip.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+      <Animated.ScrollView
+        className="flex-1 px-6"
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true, listener: quickFindSwipe.onScroll }
+        )}
+        {...quickFindSwipe.touchHandlers}
+        refreshControl={quickFindSwipe.refreshControl}
+        scrollEventThrottle={16}
+        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 12) + 112 }}>
+        <MainScreenTitle title={t('tabs.jobs')} iconName="briefcase-outline" scrollY={scrollY} />
+        <Text className="-mt-4 mb-4 text-app-subtitle text-black/60 dark:text-white/70">
+          {jobsSubtitle}
+        </Text>
 
         {error ? <Text className="mt-3 text-app-meta text-red-600">{error}</Text> : null}
 
+        {loading ? (
+          <View className="items-center py-8">
+            <ActivityIndicator />
+          </View>
+        ) : (
+          <View className="mt-6">
+            {sections.map(renderSection)}
+          </View>
+        )}
+      </Animated.ScrollView>
+
+      <Modal
+        visible={Boolean(postponeJob)}
+        transparent
+        animationType="fade"
+        onRequestClose={closePostponePicker}>
         <View
-          className="mt-4 flex-1 overflow-hidden rounded-[24px]"
           style={{
-            backgroundColor: colorScheme === 'dark' ? '#1C1C1E' : '#FFFFFF',
-            marginBottom: Math.max(insets.bottom, 12) + 96,
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: modalBackdropColor,
           }}>
-          {loading ? (
-            <View className="items-center py-6">
-              <ActivityIndicator />
-            </View>
-          ) : (
-            <FlatList
-              className="flex-1"
-              data={filtered}
-              keyExtractor={(item) => item.id}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 80 }}
-              onLayout={(event) => {
-                const visibleHeight = event.nativeEvent.layout.height;
-                setListViewportHeight(visibleHeight);
-                const canScroll = listContentHeight > visibleHeight + 92;
-                setListCanScroll(canScroll);
-                setShowScrollHint(canScroll);
-              }}
-              onContentSizeChange={(_, contentHeight) => {
-                setListContentHeight(contentHeight);
-                const canScroll = contentHeight > listViewportHeight + 92;
-                setListCanScroll(canScroll);
-                setShowScrollHint(canScroll);
-              }}
-              onScroll={(event) => {
-                const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-                const remaining = contentSize.height - (contentOffset.y + layoutMeasurement.height);
-                const canScroll = contentSize.height > layoutMeasurement.height + 92;
-                setListCanScroll(canScroll);
-                setShowScrollHint(canScroll && remaining > 92);
-              }}
-              scrollEventThrottle={16}
-              ListEmptyComponent={() => (
-                <MascotEmptyState
-                  title={filter === 'archived' ? t('jobs.emptyArchivedTitle') : t('jobs.emptyTitle')}
-                  body={filter === 'archived' ? t('jobs.emptyArchivedBody') : t('jobs.emptyBody')}
-                  actionLabel={filter === 'archived' ? undefined : t('jobs.add')}
-                  onAction={filter === 'archived' ? undefined : onAdd}
-                  imageSize={164}
-                  compact
-                  centeredAction={filter !== 'archived'}
-                />
-              )}
-              ListHeaderComponent={filtered.length > 0 ? <View className="h-3" /> : null}
-              ListFooterComponent={filtered.length > 0 ? <View className="h-3" /> : null}
-              renderItem={({ item, index }) => {
-                const price = formatPrice(item.price);
-                const isArchived = Boolean(item.archived_at);
-                return (
-                  <Pressable
-                    onPress={() => router.push({ pathname: '/(tabs)/posao/[id]' as any, params: { id: item.id } })}
-                    className="bg-white px-4 py-4 dark:bg-[#1C1C1E]"
-                    style={{
-                      borderTopWidth: index > 0 ? 1 : 0,
-                      borderTopColor: 'transparent',
-                    }}>
-                    <View>
-                      {index > 0 ? (
-                        <View
-                          style={{
-                            position: 'absolute',
-                            top: -16,
-                            left: 4,
-                            right: 4,
-                            height: 1,
-                            backgroundColor:
-                              colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(60,60,67,0.08)',
-                          }}
-                        />
-                      ) : null}
-
-                    <View className="flex-row items-start justify-between">
-                      <View className="flex-1 pr-3">
-                        <View className="flex-row items-center">
-                        {isArchived ? (
-                          <View className="mr-2 h-7 w-7 items-center justify-center rounded-full bg-[#F1F4FB] dark:bg-white/10">
-                            <Ionicons name="archive-outline" size={14} color={colors.secondaryText} />
-                          </View>
-                        ) : null}
-                        <Text className="flex-1 text-app-row-lg font-bold text-[#1C2745] dark:text-white" numberOfLines={1}>
-                          {item.title || t('jobs.untitled')}
-                        </Text>
-                        </View>
-
-                        <View className="mt-0.5 flex-row items-center">
-                          <Text className="text-app-meta-lg text-black/60 dark:text-white/70" numberOfLines={1}>
-                            {formatDate(item.scheduled_date)}
-                          </Text>
-                          <Text className="mx-2 text-black/35 dark:text-white/35">•</Text>
-                          <Text className="flex-1 text-app-meta-lg text-black/60 dark:text-white/70" numberOfLines={1}>
-                            {item.client?.name || t('jobs.noClient')}
-                          </Text>
-                        </View>
-                      </View>
-
-                      <View className="items-end">
-                        <Pressable
-                          onPress={(event) => {
-                            event.stopPropagation();
-                            if (isArchived) return;
-                            void onToggleStatus(item);
-                          }}
-                          disabled={isArchived}
-                          className={[
-                            'rounded-full px-3 py-1',
-                            isArchived ? 'border border-black/10 bg-transparent dark:border-white/12' : getStatusChipStyle(item.status).bg,
-                          ].join(' ')}>
-                          <Text
-                            className={[
-                              'text-app-meta font-semibold',
-                              isArchived ? 'text-[#6C789A] dark:text-white/70' : getStatusChipStyle(item.status).text,
-                            ].join(' ')}>
-                            {isArchived ? t('jobs.archived') : formatStatus(item.status)}
-                          </Text>
-                        </Pressable>
-                        {price ? (
-                          <Text className="mt-1 text-app-meta-lg font-semibold text-black dark:text-white" numberOfLines={1}>
-                            {price}
-                          </Text>
-                        ) : null}
-                      </View>
-                    </View>
-
-                    {item.description ? (
-                      <View className="mt-1">
-                        <Text
-                          className="text-app-meta-lg text-black/55 dark:text-white/65"
-                          numberOfLines={2}>
-                          {item.description}
-                        </Text>
-                      </View>
-                    ) : null}
-                    </View>
-                  </Pressable>
-                );
-              }}
-            />
-          )}
-          {!loading && listCanScroll && showScrollHint ? (
-            <>
-              <LinearGradient
-                pointerEvents="none"
-                colors={
-                  colorScheme === 'dark'
-                    ? (['rgba(28,28,30,0)', 'rgba(28,28,30,0.78)', 'rgba(28,28,30,0.98)'] as const)
-                    : (['rgba(255,255,255,0)', 'rgba(255,255,255,0.78)', 'rgba(255,255,255,0.98)'] as const)
-                }
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  height: 46,
-                }}
-              />
-              <View
-                pointerEvents="none"
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  right: 0,
-                  bottom: 8,
-                  alignItems: 'center',
-                }}>
-                <View
-                  className="h-6 w-6 items-center justify-center rounded-full"
-                  style={{
-                    backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(60,60,67,0.08)',
-                  }}>
-                  <Ionicons name="chevron-down" size={14} color={colors.secondaryText} />
-                </View>
+          <Pressable onPress={closePostponePicker} className="absolute inset-0" />
+          <View
+            style={{
+              width: modalWidth,
+              maxHeight: modalMaxHeight,
+              borderRadius: 30,
+              borderWidth: 1,
+              borderColor: modalBorderColor,
+              overflow: 'hidden',
+              backgroundColor: modalBackgroundColor,
+            }}>
+            <View style={{ height: 64, backgroundColor: modalBackgroundColor }}>
+              <View className="h-full flex-row items-center justify-between px-4">
+                <View className="h-9 w-9" />
+                <Text className="flex-1 text-center text-app-row-title font-semibold" style={{ color: colors.text }} numberOfLines={1}>
+                  {t('jobs.postpone')}
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('common.close')}
+                  onPress={closePostponePicker}
+                  hitSlop={8}
+                  className="h-9 w-9 items-center justify-center rounded-full"
+                  style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(60,60,67,0.08)' }}>
+                  <Ionicons name="close" size={19} color={colors.text} />
+                </Pressable>
               </View>
-            </>
-          ) : null}
+            </View>
+
+            <View className="px-4 pb-5">
+              <Text className="mb-3 text-center text-app-meta-lg" style={{ color: colors.secondaryText }} numberOfLines={1}>
+                {postponeJob?.title || t('jobs.untitled')}
+              </Text>
+              <View className="overflow-hidden rounded-[16px]" style={{ backgroundColor: isDark ? colors.elevatedSurface : '#F2F4F7' }}>
+                {Platform.OS === 'ios' ? (
+                  <DateTimePicker
+                    value={postponeDraftDate}
+                    mode="date"
+                    display="inline"
+                    onChange={(event, selectedDate) => {
+                      if (event.type === 'dismissed') {
+                        closePostponePicker();
+                        return;
+                      }
+                      if (selectedDate) {
+                        setPostponeDraftDate(selectedDate);
+                      }
+                    }}
+                  />
+                ) : (
+                  <View className="px-3 py-4">
+                    <View className="flex-row items-center justify-between">
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={t('jobs.previousWeek')}
+                        onPress={() => shiftPostponeDraftDate(-7)}
+                        className="h-10 w-10 items-center justify-center rounded-full"
+                        style={{ backgroundColor: modalBackgroundColor }}>
+                        <Text className="text-app-meta font-semibold" style={{ color: colors.text }}>
+                          -7
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={t('jobs.previousDay')}
+                        onPress={() => shiftPostponeDraftDate(-1)}
+                        className="h-10 w-10 items-center justify-center rounded-full"
+                        style={{ backgroundColor: modalBackgroundColor }}>
+                        <Ionicons name="chevron-back" size={18} color={colors.text} />
+                      </Pressable>
+                      <View className="mx-2 flex-1 items-center">
+                        <Text className="text-center text-app-row-title font-semibold" style={{ color: colors.text }}>
+                          {dateFormatter.format(postponeDraftDate)}
+                        </Text>
+                      </View>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={t('jobs.nextDay')}
+                        onPress={() => shiftPostponeDraftDate(1)}
+                        className="h-10 w-10 items-center justify-center rounded-full"
+                        style={{ backgroundColor: modalBackgroundColor }}>
+                        <Ionicons name="chevron-forward" size={18} color={colors.text} />
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={t('jobs.nextWeek')}
+                        onPress={() => shiftPostponeDraftDate(7)}
+                        className="h-10 w-10 items-center justify-center rounded-full"
+                        style={{ backgroundColor: modalBackgroundColor }}>
+                        <Text className="text-app-meta font-semibold" style={{ color: colors.text }}>
+                          +7
+                        </Text>
+                      </Pressable>
+                    </View>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={t('jobs.today')}
+                      onPress={() => setPostponeDraftDate(new Date())}
+                      className="mt-4 min-h-[38px] items-center justify-center rounded-[16px]"
+                      style={{ backgroundColor: modalBackgroundColor }}>
+                      <Text className="text-app-row font-medium" style={{ color: colors.text }}>
+                        {t('jobs.today')}
+                      </Text>
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            <View className="mt-4 flex-row items-center justify-end">
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('common.cancel')}
+                onPress={closePostponePicker}
+                className="min-h-[38px] justify-center rounded-[16px] px-4"
+                style={{ backgroundColor: isDark ? colors.elevatedSurface : '#F2F4F7' }}>
+                <Text className="text-app-row font-medium" style={{ color: colors.text }}>
+                  {t('common.cancel')}
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('common.save')}
+                onPress={confirmPostponeDate}
+                className="ml-2 min-h-[38px] justify-center rounded-[16px] px-5"
+                style={{ backgroundColor: primaryActionColor }}>
+                <Text className="text-app-row font-medium" style={{ color: '#FFFFFF' }}>
+                  {t('common.save')}
+                </Text>
+              </Pressable>
+            </View>
+            </View>
+          </View>
         </View>
-      </View>
+      </Modal>
+
+      <Animated.View
+        pointerEvents={selectionMode ? 'auto' : 'none'}
+        style={{
+          position: 'absolute',
+          top: Math.max(insets.top + 8, 18),
+          right: 20,
+          zIndex: 70,
+          elevation: 0,
+          opacity: selectionBarProgress,
+          transform: [
+            {
+              translateY: selectionBarProgress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-10, 0],
+              }),
+            },
+          ],
+        }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('common.close')}
+          onPress={clearSelection}
+          style={{
+            minHeight: 38,
+            borderRadius: 19,
+            borderWidth: 1,
+            borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.24)' : 'rgba(255,255,255,0.68)',
+            backgroundColor: primaryActionColor,
+            shadowOpacity: 0,
+            elevation: 0,
+            paddingHorizontal: 14,
+            flexDirection: 'row',
+            alignItems: 'center',
+          }}>
+          <Text className="text-app-subtitle font-semibold" style={{ color: '#FFFFFF' }}>
+            {t('common.close')}
+          </Text>
+        </Pressable>
+      </Animated.View>
+
+      <Animated.View
+        pointerEvents={selectionMode ? 'auto' : 'none'}
+        style={{
+          position: 'absolute',
+          left: 24,
+          right: 24,
+          bottom: Math.max(insets.bottom + 18, 24),
+          zIndex: 60,
+          elevation: 0,
+          opacity: selectionBarProgress,
+          transform: [
+            {
+              translateY: selectionBarProgress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [24, 0],
+              }),
+            },
+          ],
+        }}>
+        <View
+          style={{
+            minHeight: 48,
+            borderRadius: 24,
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.24)',
+            backgroundColor: 'rgba(56,64,76,0.9)',
+            shadowOpacity: 0,
+            elevation: 0,
+            paddingHorizontal: 14,
+            flexDirection: 'row',
+            alignItems: 'center',
+          }}>
+          <View className="flex-1 flex-row items-center justify-between">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('jobs.finish')}
+              onPress={onFinishSelected}
+              className="min-h-[42px] flex-1 flex-row items-center justify-center rounded-full px-1">
+              <Ionicons name="checkmark-done-outline" size={17} color="#FFFFFF" />
+              <Text className="ml-1.5 text-app-row-lg font-semibold" style={{ color: '#FFFFFF' }} numberOfLines={1}>
+                {t('jobs.finish')}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('jobs.postpone')}
+              disabled={!canUseSingleJobActions}
+              onPress={onPostponeSelected}
+              className="min-h-[42px] flex-1 flex-row items-center justify-center rounded-full px-1 disabled:opacity-35">
+              <Ionicons name="time-outline" size={17} color="#FFFFFF" />
+              <Text className="ml-1.5 text-app-row-lg font-semibold" style={{ color: '#FFFFFF' }} numberOfLines={1}>
+                {t('jobs.postpone')}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('jobs.deleteShort')}
+              onPress={onDeleteSelected}
+              className="min-h-[42px] flex-1 flex-row items-center justify-center rounded-full px-1">
+              <Ionicons name="trash-outline" size={17} color="#FFFFFF" />
+              <Text className="ml-1.5 text-app-row-lg font-semibold" style={{ color: '#FFFFFF' }} numberOfLines={1}>
+                {t('jobs.deleteShort')}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Animated.View>
     </View>
   );
 }

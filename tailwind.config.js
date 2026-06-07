@@ -12,6 +12,7 @@ module.exports = {
         xl: ['1.3125rem', { lineHeight: '1.875rem' }], // 21px
         'app-display': ['2rem', { lineHeight: '2.375rem' }], // 32/38
         'app-section': ['1.25rem', { lineHeight: '1.625rem' }], // 20/26
+        'app-row-title': ['1.125rem', { lineHeight: '1.5rem' }], // 18/24
         'app-row': ['1rem', { lineHeight: '1.375rem' }], // 16/22
         'app-row-lg': ['1.1875rem', { lineHeight: '1.625rem' }], // 19/26
         'app-meta-lg': ['0.875rem', { lineHeight: '1.25rem' }], // 14/20

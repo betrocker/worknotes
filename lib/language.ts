@@ -29,6 +29,9 @@ export function guessInitialLanguage(): AppLanguage {
     const first = locales[0];
     const locale = (first?.languageTag ?? first?.languageCode ?? '').toLowerCase();
     if (locale.startsWith('sr')) return 'sr';
+    if (locale.startsWith('de')) return 'de';
+    if (locale.startsWith('fr')) return 'fr';
+    if (locale.startsWith('es')) return 'es';
   } catch {
     // ignore
   }
@@ -36,6 +39,9 @@ export function guessInitialLanguage(): AppLanguage {
   try {
     const locale = Intl.DateTimeFormat().resolvedOptions().locale?.toLowerCase() ?? '';
     if (locale.startsWith('sr')) return 'sr';
+    if (locale.startsWith('de')) return 'de';
+    if (locale.startsWith('fr')) return 'fr';
+    if (locale.startsWith('es')) return 'es';
   } catch {
     // ignore
   }

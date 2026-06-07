@@ -1,5 +1,4 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
 import * as Print from 'expo-print';
 import { File, Paths } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
@@ -12,24 +11,30 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Easing,
   FlatList,
   Image,
   Keyboard,
   KeyboardAvoidingView,
-  Linking,
+  type LayoutChangeEvent,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   Share,
   ScrollView,
   Text,
+  TextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppTextInput } from '@/components/AppTextInput';
+import { CollapsingMainHeader, MainScreenTitle } from '@/components/CollapsingMainHeader';
+import { HeaderOverflowMenu } from '@/components/HeaderOverflowMenu';
+import { JobDetailFloatingActions, type JobDetailFloatingAction } from '@/components/JobDetailFloatingActions';
 import Colors from '@/constants/Colors';
+import { useQuickFindSwipeDown } from '@/components/useQuickFindSwipeDown';
 import { useColorScheme } from '@/components/useColorScheme';
 import { parseDateInput } from '@/lib/date';
 import { generateInvoicePdf } from '@/lib/invoice';
@@ -51,10 +56,435 @@ import {
   type JobReminderOption,
 } from '@/lib/notifications';
 import { getUserDisplayName } from '@/lib/user';
+import { goBackOrReplace } from '@/lib/navigation';
 import { useAuth } from '@/providers/AuthProvider';
 
+type InvoiceItemSwipeRowProps = {
+  item: JobInvoiceItemRow;
+  index: number;
+  locale: string;
+  colors: typeof Colors.light;
+  colorScheme: 'light' | 'dark';
+  formatPrice: (value: number | null) => string;
+  unitLabel: string;
+  untitledLabel: string;
+  onEdit: (item: JobInvoiceItemRow) => void;
+  onDelete: (item: JobInvoiceItemRow) => void;
+  isSwipeOpen: boolean;
+  onSwipeOpen: (itemId: string) => void;
+  onSwipeClose: (itemId: string) => void;
+};
+
+type InvoiceItemInlineFormRowProps = {
+  marginTop?: number;
+  title: string;
+  quantity: string;
+  unitPrice: string;
+  titlePlaceholder: string;
+  quantityPlaceholder: string;
+  unitPricePlaceholder: string;
+  colors: typeof Colors.light;
+  colorScheme: 'light' | 'dark';
+  closing: boolean;
+  submitting: boolean;
+  onBlurAway: () => void;
+  onChangeTitle: (value: string) => void;
+  onChangeQuantity: (value: string) => void;
+  onChangeUnitPrice: (value: string) => void;
+  onLayout?: (event: LayoutChangeEvent) => void;
+  onSubmit: () => void;
+};
+
+const INVOICE_ITEM_ACTION_WIDTH = 78;
+const INVOICE_ITEM_ACTION_STRETCH = 12;
+const INVOICE_ITEM_ROW_GAP = 4;
+
+function InvoiceItemInlineFormRow({
+  marginTop = 0,
+  title,
+  quantity,
+  unitPrice,
+  titlePlaceholder,
+  quantityPlaceholder,
+  unitPricePlaceholder,
+  colors,
+  colorScheme,
+  closing,
+  submitting,
+  onBlurAway,
+  onChangeTitle,
+  onChangeQuantity,
+  onChangeUnitPrice,
+  onLayout,
+  onSubmit,
+}: InvoiceItemInlineFormRowProps) {
+  const presence = useRef(new Animated.Value(0)).current;
+  const titleInputRef = useRef<TextInput>(null);
+  const quantityInputRef = useRef<TextInput>(null);
+  const unitPriceInputRef = useRef<TextInput>(null);
+  const blurAwayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearBlurAwayTimer = useCallback(() => {
+    if (blurAwayTimerRef.current) {
+      clearTimeout(blurAwayTimerRef.current);
+      blurAwayTimerRef.current = null;
+    }
+  }, []);
+
+  const handleInputFocus = useCallback(() => {
+    clearBlurAwayTimer();
+  }, [clearBlurAwayTimer]);
+
+  const handleInputBlur = useCallback(() => {
+    clearBlurAwayTimer();
+    blurAwayTimerRef.current = setTimeout(() => {
+      const anyInputFocused =
+        titleInputRef.current?.isFocused() ||
+        quantityInputRef.current?.isFocused() ||
+        unitPriceInputRef.current?.isFocused();
+
+      if (!anyInputFocused) {
+        onBlurAway();
+      }
+    }, 80);
+  }, [clearBlurAwayTimer, onBlurAway]);
+
+  useEffect(() => {
+    Animated.timing(presence, {
+      toValue: closing ? 0 : 1,
+      duration: closing ? 105 : 130,
+      easing: closing ? Easing.in(Easing.quad) : Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [closing, presence]);
+
+  useEffect(() => {
+    const focusTimer = setTimeout(() => {
+      titleInputRef.current?.focus();
+    }, 45);
+    return () => clearTimeout(focusTimer);
+  }, []);
+
+  useEffect(() => clearBlurAwayTimer, [clearBlurAwayTimer]);
+
+  return (
+    <Animated.View
+      onLayout={onLayout}
+      className="flex-row items-center overflow-hidden rounded-2xl"
+      style={{
+        marginTop,
+        backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.07)' : '#D5E5FF',
+        opacity: presence,
+        transform: [
+          {
+            translateY: presence.interpolate({
+              inputRange: [0, 1],
+              outputRange: [-3, 0],
+            }),
+          },
+          {
+            scale: presence.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.985, 1],
+            }),
+          },
+        ],
+      }}>
+      <TextInput
+        ref={titleInputRef}
+        value={title}
+        onChangeText={onChangeTitle}
+        placeholder={titlePlaceholder}
+        placeholderTextColor={colors.secondaryText}
+        returnKeyType="next"
+        submitBehavior="submit"
+        editable={!submitting}
+        onFocus={handleInputFocus}
+        onBlur={handleInputBlur}
+        onSubmitEditing={() => quantityInputRef.current?.focus()}
+        className="h-12 flex-[1.9] px-3 text-app-row text-black dark:text-white"
+      />
+      <View className="h-7 w-px bg-black/10 dark:bg-white/12" />
+      <TextInput
+        ref={quantityInputRef}
+        value={quantity}
+        onChangeText={onChangeQuantity}
+        placeholder={quantityPlaceholder}
+        placeholderTextColor={colors.secondaryText}
+        keyboardType="decimal-pad"
+        returnKeyType="next"
+        submitBehavior="submit"
+        editable={!submitting}
+        onFocus={handleInputFocus}
+        onBlur={handleInputBlur}
+        onSubmitEditing={() => unitPriceInputRef.current?.focus()}
+        className="h-12 flex-[0.72] px-2 text-center text-app-row text-black dark:text-white"
+      />
+      <View className="h-7 w-px bg-black/10 dark:bg-white/12" />
+      <TextInput
+        ref={unitPriceInputRef}
+        value={unitPrice}
+        onChangeText={onChangeUnitPrice}
+        placeholder={unitPricePlaceholder}
+        placeholderTextColor={colors.secondaryText}
+        keyboardType="decimal-pad"
+        returnKeyType="done"
+        submitBehavior="submit"
+        editable={!submitting}
+        onFocus={handleInputFocus}
+        onBlur={handleInputBlur}
+        onSubmitEditing={onSubmit}
+        className="h-12 flex-[1.05] px-3 text-right text-app-row text-black dark:text-white"
+      />
+    </Animated.View>
+  );
+}
+
+function InvoiceItemSwipeRow({
+  item,
+  index,
+  locale,
+  colors,
+  colorScheme,
+  formatPrice,
+  unitLabel,
+  untitledLabel,
+  onEdit,
+  onDelete,
+  isSwipeOpen,
+  onSwipeOpen,
+  onSwipeClose,
+}: InvoiceItemSwipeRowProps) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const collapse = useRef(new Animated.Value(1)).current;
+  const startXRef = useRef(0);
+  const openRef = useRef(false);
+  const [rowHeight, setRowHeight] = useState(0);
+  const [deleting, setDeleting] = useState(false);
+
+  const closeSwipe = useCallback((notifyParent = true) => {
+    openRef.current = false;
+    if (notifyParent) {
+      onSwipeClose(item.id);
+    }
+    Animated.spring(translateX, {
+      toValue: 0,
+      useNativeDriver: true,
+      damping: 14,
+      stiffness: 150,
+      mass: 0.82,
+    }).start();
+  }, [item.id, onSwipeClose, translateX]);
+
+  const openSwipe = useCallback(() => {
+    openRef.current = true;
+    onSwipeOpen(item.id);
+    Animated.spring(translateX, {
+      toValue: -INVOICE_ITEM_ACTION_WIDTH,
+      useNativeDriver: true,
+      damping: 9,
+      stiffness: 135,
+      mass: 0.78,
+    }).start();
+  }, [item.id, onSwipeOpen, translateX]);
+
+  useEffect(() => {
+    if (!isSwipeOpen && openRef.current) {
+      closeSwipe(false);
+    }
+  }, [closeSwipe, isSwipeOpen]);
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          Math.abs(gesture.dx) > 10 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.35,
+        onPanResponderGrant: () => {
+          startXRef.current = openRef.current ? -INVOICE_ITEM_ACTION_WIDTH : 0;
+          if (!openRef.current) {
+            onSwipeOpen(item.id);
+          }
+        },
+        onPanResponderMove: (_, gesture) => {
+          const rawNext = startXRef.current + gesture.dx;
+          const maxOpen = -(INVOICE_ITEM_ACTION_WIDTH + INVOICE_ITEM_ACTION_STRETCH);
+          const next =
+            rawNext < -INVOICE_ITEM_ACTION_WIDTH
+              ? Math.max(maxOpen, -INVOICE_ITEM_ACTION_WIDTH + (rawNext + INVOICE_ITEM_ACTION_WIDTH) * 0.32)
+              : Math.max(-INVOICE_ITEM_ACTION_WIDTH, Math.min(0, rawNext));
+          translateX.setValue(next);
+        },
+        onPanResponderRelease: (_, gesture) => {
+          const next = startXRef.current + gesture.dx;
+          if (next < -INVOICE_ITEM_ACTION_WIDTH / 2 || gesture.vx < -0.5) {
+            openSwipe();
+          } else {
+            closeSwipe();
+          }
+        },
+        onPanResponderTerminate: () => closeSwipe(),
+      }),
+    [closeSwipe, item.id, onSwipeOpen, openSwipe, translateX]
+  );
+
+  const onDeletePress = useCallback(() => {
+    if (deleting) return;
+    onSwipeClose(item.id);
+    setDeleting(true);
+    Animated.parallel([
+      Animated.timing(translateX, {
+        toValue: -INVOICE_ITEM_ACTION_WIDTH,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+      Animated.timing(collapse, {
+        toValue: 0,
+        duration: 220,
+        useNativeDriver: false,
+      }),
+    ]).start(() => onDelete(item));
+  }, [collapse, deleting, item, onDelete, onSwipeClose, translateX]);
+
+  const actionTranslateX = translateX.interpolate({
+    inputRange: [-INVOICE_ITEM_ACTION_WIDTH, 0],
+    outputRange: [0, 20],
+    extrapolate: 'clamp',
+  });
+  const actionOpacity = translateX.interpolate({
+    inputRange: [-INVOICE_ITEM_ACTION_WIDTH, -28, 0],
+    outputRange: [1, 0.6, 0],
+    extrapolate: 'clamp',
+  });
+  const swipeBackgroundOpacity = translateX.interpolate({
+    inputRange: [-INVOICE_ITEM_ACTION_WIDTH, -54, -34, 0],
+    outputRange: [1, 1, 0, 0],
+    extrapolate: 'clamp',
+  });
+  const rowSwipeBackgroundOpacity = translateX.interpolate({
+    inputRange: [-INVOICE_ITEM_ACTION_WIDTH, -34, 0],
+    outputRange: [1, 0.36, 0],
+    extrapolate: 'clamp',
+  });
+  const textCounterTranslateX = translateX.interpolate({
+    inputRange: [-INVOICE_ITEM_ACTION_WIDTH, 0],
+    outputRange: [64, 0],
+    extrapolate: 'clamp',
+  });
+  const rowAnimatedStyle = rowHeight
+    ? {
+        height: collapse.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, rowHeight],
+        }),
+        opacity: collapse,
+      }
+    : { opacity: collapse };
+  const rowSwipeBackgroundColor = colorScheme === 'dark' ? '#2A3038' : '#D5E5FF';
+  const editIconColor = colorScheme === 'dark' ? '#8FADE7' : '#315FAD';
+  const deleteIconColor = colorScheme === 'dark' ? '#E08A84' : '#B5413A';
+
+  return (
+    <Animated.View
+      style={[
+        rowAnimatedStyle,
+        {
+          overflow: deleting ? 'hidden' : 'visible',
+          marginTop: index > 0 ? INVOICE_ITEM_ROW_GAP : 0,
+        },
+      ]}>
+      <View
+        onLayout={(event) => {
+          if (!rowHeight) setRowHeight(event.nativeEvent.layout.height);
+        }}>
+        <Animated.View
+          style={{
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            bottom: 0,
+            left: 0,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            borderRadius: 16,
+            backgroundColor: 'transparent',
+            opacity: swipeBackgroundOpacity,
+            overflow: 'hidden',
+          }}>
+          <Animated.View
+            style={{
+              width: INVOICE_ITEM_ACTION_WIDTH,
+              flexDirection: 'row',
+              justifyContent: 'flex-end',
+              opacity: actionOpacity,
+              transform: [{ translateX: actionTranslateX }],
+            }}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Edit"
+              onPress={() => {
+                onSwipeClose(item.id);
+                onEdit(item);
+              }}
+              className="mr-1 h-12 w-9 items-center justify-center">
+              <Ionicons name="create-outline" size={19} color={editIconColor} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Delete"
+              onPress={onDeletePress}
+              disabled={deleting}
+              className="h-12 w-9 items-center justify-center disabled:opacity-50">
+              <Ionicons name="trash-outline" size={19} color={deleteIconColor} />
+            </Pressable>
+          </Animated.View>
+        </Animated.View>
+
+        <Animated.View
+          {...panResponder.panHandlers}
+          style={{
+            transform: [{ translateX }],
+            borderRadius: 16,
+            paddingVertical: 6,
+            paddingLeft: 8,
+            paddingRight: 0,
+          }}>
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 0,
+              right: -8,
+              bottom: 0,
+              left: 0,
+              borderRadius: 16,
+              backgroundColor: rowSwipeBackgroundColor,
+              opacity: rowSwipeBackgroundOpacity,
+            }}
+          />
+          <View className="flex-row items-start justify-between">
+            <View className="mr-3 flex-1">
+              <Animated.View style={{ transform: [{ translateX: textCounterTranslateX }] }}>
+                <Text numberOfLines={1} style={{ color: colors.text, fontSize: 15, fontWeight: '400', lineHeight: 21 }}>
+                  {item.title || untitledLabel}
+                </Text>
+                <Text numberOfLines={1} className="text-app-meta-lg text-black/60 dark:text-white/70">
+                  {(item.quantity ?? 0).toLocaleString(locale)} {item.unit || unitLabel} x{' '}
+                  {formatPrice(item.unit_price ?? 0)}
+                </Text>
+              </Animated.View>
+            </View>
+            <Text className="self-center text-app-row text-right" style={{ color: colors.text }}>
+              {formatPrice(item.total ?? 0)}
+            </Text>
+          </View>
+        </Animated.View>
+      </View>
+    </Animated.View>
+  );
+}
+
 export default function JobDetailScreen() {
-  const IMAGE_PREVIEW_LIMIT = 6;
   const GRID_GAP = 8;
 
   const router = useRouter();
@@ -64,8 +494,10 @@ export default function JobDetailScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const insets = useSafeAreaInsets();
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const quickFindSwipe = useQuickFindSwipeDown();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
-  const thumbSize = Math.floor((screenWidth - 48 - 32 - GRID_GAP * 2) / 3);
+  const thumbSize = Math.floor((screenWidth - 48 - 12 - GRID_GAP * 3) / 4);
 
   const userId = session?.user?.id ?? null;
   const id = typeof params.id === 'string' ? params.id : null;
@@ -75,41 +507,38 @@ export default function JobDetailScreen() {
   const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
   const [invoiceItems, setInvoiceItems] = useState<JobInvoiceItemRow[]>([]);
   const [images, setImages] = useState<JobImageRow[]>([]);
-  const [pendingImages, setPendingImages] = useState<{ uri: string; kind: JobImageKind; key: string }[]>([]);
+  const [pendingImages, setPendingImages] = useState<{ uri: string; key: string }[]>([]);
   const [reminderType, setReminderType] = useState<JobReminderOption>('same_day');
   const [uploadProgress, setUploadProgress] = useState<{
-    kind: JobImageKind;
     done: number;
     total: number;
   } | null>(null);
-  const [previewKind, setPreviewKind] = useState<JobImageKind | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [previewIndex, setPreviewIndex] = useState(0);
   const [androidZoom, setAndroidZoom] = useState(1);
-  const [itemModalOpen, setItemModalOpen] = useState(false);
+  const [itemFormOpen, setItemFormOpen] = useState(false);
+  const [itemFormClosing, setItemFormClosing] = useState(false);
+  const [optimisticCreatedItemId, setOptimisticCreatedItemId] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<JobInvoiceItemRow | null>(null);
   const [itemTitle, setItemTitle] = useState('');
   const [itemUnit, setItemUnit] = useState('');
-  const [itemQuantity, setItemQuantity] = useState('1');
+  const [itemQuantity, setItemQuantity] = useState('');
   const [itemUnitPrice, setItemUnitPrice] = useState('');
   const [itemSubmitting, setItemSubmitting] = useState(false);
-  const [selectedImageKind, setSelectedImageKind] = useState<JobImageKind | null>(null);
+  const [openInvoiceItemSwipeId, setOpenInvoiceItemSwipeId] = useState<string | null>(null);
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
-  const [expandedImageSections, setExpandedImageSections] = useState<Record<JobImageKind, boolean>>({
-    before: false,
-    after: false,
-  });
-  const [invoiceSubmitting, setInvoiceSubmitting] = useState(false);
+  const [, setInvoiceSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [headerHeight, setHeaderHeight] = useState(0);
-  const [quickActionsY, setQuickActionsY] = useState(0);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [itemModalHeight, setItemModalHeight] = useState(0);
   const mainScrollRef = useRef<ScrollView>(null);
+  const invoiceItemsContainerYRef = useRef(0);
+  const invoiceItemFormYRef = useRef(0);
+  const hasLoadedRef = useRef(false);
 
   const locale = i18n.language === 'sr' ? 'sr-Latn-RS' : i18n.language;
   const dateFormatter = useMemo(
-    () => new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'short', year: 'numeric' }),
+    () => new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'long', year: 'numeric' }),
     [locale]
   );
 
@@ -129,11 +558,17 @@ export default function JobDetailScreen() {
       hideSub.remove();
     };
   }, []);
+
+  useEffect(() => {
+    hasLoadedRef.current = false;
+    setLoading(true);
+  }, [id]);
+
   const imageDateTimeFormatter = useMemo(
     () =>
       new Intl.DateTimeFormat(locale, {
         day: '2-digit',
-        month: 'short',
+        month: 'long',
         year: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
@@ -143,7 +578,9 @@ export default function JobDetailScreen() {
 
   const load = useCallback(async () => {
     if (!userId || !id) return;
-    setLoading(true);
+    if (!hasLoadedRef.current) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const data = await getJobById(userId, id);
@@ -162,6 +599,7 @@ export default function JobDetailScreen() {
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
+      hasLoadedRef.current = true;
       setLoading(false);
     }
   }, [id, userId]);
@@ -173,7 +611,7 @@ export default function JobDetailScreen() {
   );
 
   const onBack = () => {
-    router.replace({ pathname: '/(tabs)/poslovi' as any });
+    goBackOrReplace(router, { pathname: '/(tabs)/poslovi' as any });
   };
 
   const onEdit = () => {
@@ -276,6 +714,7 @@ export default function JobDetailScreen() {
       if (!value) return t('jobs.statusUnknown');
       if (value === 'scheduled') return t('jobs.statuses.scheduled');
       if (value === 'in_progress') return t('jobs.statuses.inProgress');
+      if (value === 'pending') return t('jobs.statuses.pending');
       if (value === 'done') return t('jobs.statuses.done');
       return value.replace(/_/g, ' ');
     },
@@ -309,9 +748,9 @@ export default function JobDetailScreen() {
       if (!value) return null;
       const parsed = parseDateInput(value);
       if (!parsed) return value;
-      return dateFormatter.format(parsed);
+      return `${parsed.getDate()}. ${parsed.getMonth() + 1}.`;
     },
-    [dateFormatter]
+    []
   );
 
   const formatImageDateTime = useCallback(
@@ -345,27 +784,15 @@ export default function JobDetailScreen() {
     if (!job?.price) return null;
     return Math.max(job.price - totalPaid, 0);
   }, [job?.price, totalPaid]);
-  const beforeImages = useMemo(
-    () => images.filter((item) => (item.kind ?? 'before') === 'before'),
-    [images]
-  );
-  const afterImages = useMemo(
-    () => images.filter((item) => item.kind === 'after'),
-    [images]
-  );
-  const pendingBeforeImages = useMemo(
-    () => pendingImages.filter((item) => item.kind === 'before'),
-    [pendingImages]
-  );
-  const pendingAfterImages = useMemo(
-    () => pendingImages.filter((item) => item.kind === 'after'),
-    [pendingImages]
+  const imageCarouselItems = useMemo(
+    () => [
+      ...images.map((item, index) => ({ type: 'saved' as const, item, index })),
+      ...pendingImages.map((item) => ({ type: 'pending' as const, item })),
+    ],
+    [images, pendingImages]
   );
   const hasInvoiceItems = invoiceItems.length > 0;
-  const previewImages = useMemo(
-    () => (previewKind === 'after' ? afterImages : previewKind === 'before' ? beforeImages : []),
-    [afterImages, beforeImages, previewKind]
-  );
+  const previewImages = images;
   const previewImage = previewImages[previewIndex] ?? null;
   const previewTopInset = insets.top + (Platform.OS === 'android'
     ? previewImage?.created_at
@@ -376,56 +803,7 @@ export default function JobDetailScreen() {
       : 68);
   const previewBottomInset = insets.bottom + 40;
   const previewContentHeight = Math.max(screenHeight - previewTopInset - previewBottomInset, 220);
-  const itemSheetKeyboardOffset = 0;
-  const itemModalAvailableHeight = itemModalHeight || screenHeight;
-  const itemSheetMaxHeight = Math.max(
-    280,
-    Math.min(itemModalAvailableHeight - insets.top - 16, screenHeight - keyboardHeight - insets.top - 24)
-  );
-
-  const phone = job?.client?.phone ?? null;
-  const phoneDigits = phone ? phone.replace(/[^\d+]/g, '') : null;
   const userMeta = (session?.user?.user_metadata as Record<string, unknown> | undefined) ?? undefined;
-
-  const [customMessage, setCustomMessage] = useState('');
-
-  const openUrl = useCallback(
-    async (url: string) => {
-      try {
-        const supported = await Linking.canOpenURL(url);
-        if (!supported) {
-          setError(t('jobs.actionNotSupported'));
-          return;
-        }
-        await Linking.openURL(url);
-      } catch {
-        setError(t('jobs.actionFailed'));
-      }
-    },
-    [t]
-  );
-
-  const onCall = useCallback(() => {
-    if (!phoneDigits) return;
-    void openUrl(`tel:${phoneDigits}`);
-  }, [openUrl, phoneDigits]);
-
-  const onSms = useCallback(() => {
-      if (!phoneDigits) return;
-      const message = customMessage.trim();
-      if (!message) return;
-      const separator = Platform.OS === 'ios' ? '&' : '?';
-      const url = `sms:${phoneDigits}${separator}body=${encodeURIComponent(message)}`;
-      void openUrl(url);
-    }, [customMessage, openUrl, phoneDigits]);
-
-  const onViber = useCallback(() => {
-      if (!phoneDigits) return;
-      const message = customMessage.trim();
-      if (!message) return;
-      const url = `viber://chat?number=${encodeURIComponent(phoneDigits)}&text=${encodeURIComponent(message)}`;
-      void openUrl(url);
-    }, [customMessage, openUrl, phoneDigits]);
 
   const onShareInvoice = useCallback(async () => {
     if (!job || !userId) return;
@@ -478,7 +856,7 @@ export default function JobDetailScreen() {
           name:
             typeof userMeta?.company_name === 'string' && userMeta.company_name.trim()
               ? userMeta.company_name
-              : getUserDisplayName(session?.user, 'Tefter'),
+              : getUserDisplayName(session?.user, 'eTefter'),
           phone: typeof userMeta?.company_phone === 'string' ? userMeta.company_phone : null,
           address: typeof userMeta?.company_address === 'string' ? userMeta.company_address : null,
           pib: typeof userMeta?.company_pib === 'string' ? userMeta.company_pib : null,
@@ -544,32 +922,75 @@ export default function JobDetailScreen() {
     setEditingItem(null);
     setItemTitle('');
     setItemUnit('');
-    setItemQuantity('1');
+    setItemQuantity('');
     setItemUnitPrice('');
   }, []);
 
-  const openNewItemModal = useCallback(() => {
+  const scrollToInvoiceItemForm = useCallback(() => {
+    const formY = invoiceItemFormYRef.current || invoiceItemsContainerYRef.current;
+    const targetY = Math.max(formY - (insets.top + 72), 0);
+    mainScrollRef.current?.scrollTo({ y: targetY, animated: true });
+  }, [insets.top]);
+
+  const openNewItemForm = useCallback(() => {
     resetItemForm();
     if (!hasInvoiceItems && job?.price) {
       setItemUnitPrice(String(job.price));
     }
-    setItemModalOpen(true);
+    setError(null);
+    setOpenInvoiceItemSwipeId(null);
+    setItemFormClosing(false);
+    setItemFormOpen(true);
   }, [hasInvoiceItems, job?.price, resetItemForm]);
 
-  const openEditItemModal = useCallback((item: JobInvoiceItemRow) => {
+  const openEditItemForm = useCallback((item: JobInvoiceItemRow) => {
     setEditingItem(item);
     setItemTitle(item.title ?? '');
     setItemUnit(item.unit ?? '');
     setItemQuantity(String(item.quantity ?? 1));
     setItemUnitPrice(String(item.unit_price ?? 0));
-    setItemModalOpen(true);
+    setError(null);
+    setOpenInvoiceItemSwipeId(null);
+    setItemFormClosing(false);
+    setItemFormOpen(true);
   }, []);
 
-  const closeItemModal = useCallback(() => {
-    setItemModalOpen(false);
-    setItemSubmitting(false);
-    resetItemForm();
+  const onOpenInvoiceItemSwipe = useCallback((itemId: string) => {
+    setOpenInvoiceItemSwipeId(itemId);
+  }, []);
+
+  const onCloseInvoiceItemSwipe = useCallback((itemId: string) => {
+    setOpenInvoiceItemSwipeId((current) => (current === itemId ? null : current));
+  }, []);
+
+  const closeItemFormWithFade = useCallback(() => {
+    setItemFormClosing(true);
+    Keyboard.dismiss();
+    setTimeout(() => {
+      setItemFormOpen(false);
+      setItemFormClosing(false);
+      setItemSubmitting(false);
+      resetItemForm();
+    }, 115);
   }, [resetItemForm]);
+
+  const onInvoiceItemFormBlurAway = useCallback(() => {
+    if (!itemFormOpen || itemFormClosing || itemSubmitting) return;
+    setError(null);
+    closeItemFormWithFade();
+  }, [closeItemFormWithFade, itemFormClosing, itemFormOpen, itemSubmitting]);
+
+  useEffect(() => {
+    if (!itemFormOpen || editingItem || itemFormClosing) return;
+
+    const firstTimer = setTimeout(scrollToInvoiceItemForm, 60);
+    const secondTimer = setTimeout(scrollToInvoiceItemForm, 260);
+
+    return () => {
+      clearTimeout(firstTimer);
+      clearTimeout(secondTimer);
+    };
+  }, [editingItem, itemFormClosing, itemFormOpen, keyboardHeight, scrollToInvoiceItemForm]);
 
   const onSubmitInvoiceItem = useCallback(async () => {
     if (!userId || !id) return;
@@ -577,6 +998,7 @@ export default function JobDetailScreen() {
     const title = itemTitle.trim();
     const quantity = Number(itemQuantity.replace(',', '.'));
     const unitPrice = Number(itemUnitPrice.replace(',', '.'));
+    const unit = itemUnit.trim() || null;
 
     if (!title) {
       setError(t('jobs.invoiceItemsTitleRequired'));
@@ -593,59 +1015,93 @@ export default function JobDetailScreen() {
 
     setItemSubmitting(true);
     setError(null);
+    const previousItems = invoiceItems;
+    const total = Math.round(quantity * unitPrice * 100) / 100;
+    const optimisticId = editingItem?.id ?? `optimistic-${Date.now()}`;
+    const optimisticItem: JobInvoiceItemRow = {
+      id: optimisticId,
+      job_id: id,
+      user_id: userId,
+      title,
+      unit,
+      quantity,
+      unit_price: unitPrice,
+      total,
+      position: editingItem?.position ?? ((invoiceItems[0]?.position ?? 1) - 1),
+      created_at: editingItem?.created_at ?? new Date().toISOString(),
+    };
+
+    if (editingItem) {
+      setInvoiceItems((prev) =>
+        prev.map((item) => (item.id === editingItem.id ? { ...item, ...optimisticItem, id: item.id } : item))
+      );
+    } else {
+      setOptimisticCreatedItemId(optimisticId);
+      setInvoiceItems((prev) => [optimisticItem, ...prev]);
+    }
+    closeItemFormWithFade();
+
     try {
       if (editingItem) {
         await updateJobInvoiceItem(editingItem.id, id, {
           title,
-          unit: itemUnit.trim() || null,
+          unit,
           quantity,
           unit_price: unitPrice,
         });
       } else {
         await createJobInvoiceItem(userId, id, {
           title,
-          unit: itemUnit.trim() || null,
+          unit,
           quantity,
           unit_price: unitPrice,
         });
       }
-      closeItemModal();
       await load();
+      setOptimisticCreatedItemId(null);
     } catch (e: unknown) {
+      setInvoiceItems(previousItems);
+      setOptimisticCreatedItemId(null);
       setError(e instanceof Error ? e.message : String(e));
       setItemSubmitting(false);
     }
-  }, [userId, id, itemTitle, itemQuantity, itemUnitPrice, t, editingItem, itemUnit, closeItemModal, load]);
+  }, [
+    userId,
+    id,
+    itemTitle,
+    itemQuantity,
+    itemUnitPrice,
+    itemUnit,
+    t,
+    invoiceItems,
+    editingItem,
+    closeItemFormWithFade,
+    load,
+  ]);
 
   const onDeleteInvoiceItem = useCallback(
     (item: JobInvoiceItemRow) => {
       if (!id) return;
-      Alert.alert(t('jobs.invoiceItemsDeleteTitle'), t('jobs.invoiceItemsDeleteMessage'), [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('common.delete'),
-          style: 'destructive',
-          onPress: () => {
-            void (async () => {
-              try {
-                setError(null);
-                await deleteJobInvoiceItem(item.id, id);
-                await load();
-              } catch (e: unknown) {
-                setError(e instanceof Error ? e.message : String(e));
-              }
-            })();
-          },
-        },
-      ]);
+      setOpenInvoiceItemSwipeId((current) => (current === item.id ? null : current));
+      setInvoiceItems((prev) => prev.filter((invoiceItem) => invoiceItem.id !== item.id));
+      void (async () => {
+        try {
+          setError(null);
+          await deleteJobInvoiceItem(item.id, id);
+        } catch (e: unknown) {
+          setError(e instanceof Error ? e.message : String(e));
+          await load();
+        }
+      })();
     },
-    [id, load, t]
+    [id, load]
   );
 
   const onPickImages = useCallback(
-    (kind: JobImageKind, source: 'camera' | 'library') => {
+    (source: 'camera' | 'library') => {
       if (!userId || !id) return;
       const run = async () => {
+        const imageKind: JobImageKind = 'before';
         try {
           if (source === 'camera') {
             const permission = await ImagePicker.requestCameraPermissionsAsync();
@@ -655,7 +1111,7 @@ export default function JobDetailScreen() {
             }
           }
 
-          setUploadProgress({ kind, done: 0, total: 0 });
+          setUploadProgress({ done: 0, total: 0 });
           setError(null);
 
           const result =
@@ -677,11 +1133,10 @@ export default function JobDetailScreen() {
           let failedCount = 0;
           const pending = result.assets.map((asset, index) => ({
             uri: asset.uri,
-            kind,
-            key: `${kind}-${Date.now()}-${index}`,
+            key: `image-${Date.now()}-${index}`,
           }));
           setPendingImages((prev) => [...prev, ...pending]);
-          setUploadProgress({ kind, done: 0, total: result.assets.length });
+          setUploadProgress({ done: 0, total: result.assets.length });
           for (let index = 0; index < result.assets.length; index += 1) {
             const asset = result.assets[index];
             try {
@@ -689,14 +1144,14 @@ export default function JobDetailScreen() {
                 userId,
                 jobId: id,
                 uri: asset.uri,
-                kind,
+                kind: imageKind,
               });
               uploaded.push(item);
             } catch {
               failedCount += 1;
             } finally {
               setPendingImages((prev) => prev.filter((pendingItem) => pendingItem.key !== pending[index]?.key));
-              setUploadProgress({ kind, done: index + 1, total: result.assets.length });
+              setUploadProgress({ done: index + 1, total: result.assets.length });
             }
           }
 
@@ -716,7 +1171,7 @@ export default function JobDetailScreen() {
             );
           }
         } catch (e: unknown) {
-          setPendingImages((prev) => prev.filter((item) => item.kind !== kind));
+          setPendingImages([]);
           setError(e instanceof Error ? e.message : String(e));
         } finally {
           setUploadProgress(null);
@@ -729,11 +1184,11 @@ export default function JobDetailScreen() {
   );
 
   const onOpenAddPhoto = useCallback(
-    (kind: JobImageKind) => {
+    () => {
       Alert.alert(t('jobs.chooseSourceTitle'), t('jobs.chooseSourceMessage'), [
         { text: t('common.cancel'), style: 'cancel' },
-        { text: t('jobs.photoGallery'), onPress: () => onPickImages(kind, 'library') },
-        { text: t('jobs.photoCamera'), onPress: () => onPickImages(kind, 'camera') },
+        { text: t('jobs.photoGallery'), onPress: () => onPickImages('library') },
+        { text: t('jobs.photoCamera'), onPress: () => onPickImages('camera') },
       ]);
     },
     [onPickImages, t]
@@ -750,15 +1205,12 @@ export default function JobDetailScreen() {
           try {
             await deleteJobImage(previewImage.id, previewImage.storage_path);
             const nextImages = images.filter((item) => item.id !== previewImage.id);
-            const nextPreviewImages = nextImages.filter((item) =>
-              previewKind === 'after' ? item.kind === 'after' : (item.kind ?? 'before') === 'before'
-            );
             setImages(nextImages);
-            if (nextPreviewImages.length === 0) {
-              setPreviewKind(null);
+            if (nextImages.length === 0) {
+              setPreviewOpen(false);
               setPreviewIndex(0);
             } else {
-              setPreviewIndex((current) => Math.min(current, nextPreviewImages.length - 1));
+              setPreviewIndex((current) => Math.min(current, nextImages.length - 1));
             }
           } catch (e: unknown) {
             setError(e instanceof Error ? e.message : String(e));
@@ -766,39 +1218,28 @@ export default function JobDetailScreen() {
         },
       },
     ]);
-  }, [images, previewImage, previewKind, t]);
+  }, [images, previewImage, t]);
 
-  const onOpenPreview = useCallback((kind: JobImageKind, index: number) => {
-    setPreviewKind(kind);
+  const onOpenPreview = useCallback((index: number) => {
+    setPreviewOpen(true);
     setPreviewIndex(index);
   }, []);
 
   const clearImageSelection = useCallback(() => {
-    setSelectedImageKind(null);
     setSelectedImageIds([]);
   }, []);
 
-  const toggleImageSelection = useCallback((kind: JobImageKind, id: string) => {
-    if (selectedImageKind && selectedImageKind !== kind) {
-      setSelectedImageKind(kind);
-      setSelectedImageIds([id]);
-      return;
-    }
-    setSelectedImageKind(kind);
+  const toggleImageSelection = useCallback((id: string) => {
     setSelectedImageIds((prev) => {
       if (prev.includes(id)) {
-        const next = prev.filter((item) => item !== id);
-        if (next.length === 0) {
-          setSelectedImageKind(null);
-        }
-        return next;
+        return prev.filter((item) => item !== id);
       }
       return [...prev, id];
     });
-  }, [selectedImageKind]);
+  }, []);
 
   const onClosePreview = useCallback(() => {
-    setPreviewKind(null);
+    setPreviewOpen(false);
     setPreviewIndex(0);
     setAndroidZoom(1);
   }, []);
@@ -864,24 +1305,20 @@ export default function JobDetailScreen() {
     }
   }, [downloadImageToCache, t]);
 
-  const onShareImageSection = useCallback(
-    async (kind: JobImageKind, items: JobImageRow[]) => {
-      const urls = items.map((item) => item.image_url).filter(Boolean) as string[];
-      if (urls.length === 0) return;
-      const sectionLabel = kind === 'before' ? t('jobs.imageBefore') : t('jobs.imageAfter');
-      try {
-        await Share.share({
-          message: [sectionLabel, ...urls].join('\n'),
-        });
-      } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : String(e));
-      }
-    },
-    [t]
-  );
+  const onShareAllImages = useCallback(async () => {
+    const urls = images.map((item) => item.image_url).filter(Boolean) as string[];
+    if (urls.length === 0) return;
+    try {
+      await Share.share({
+        message: [t('jobs.images'), ...urls].join('\n'),
+      });
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, [images, t]);
 
   const onShareSelectedImages = useCallback(
-    async (kind: JobImageKind, items: JobImageRow[]) => {
+    async (items: JobImageRow[]) => {
       const selectedItems = items.filter((item) => selectedImageIds.includes(item.id));
       if (selectedItems.length === 0) return;
       try {
@@ -890,9 +1327,8 @@ export default function JobDetailScreen() {
         } else {
           const urls = selectedItems.map((item) => item.image_url).filter(Boolean) as string[];
           if (urls.length === 0) return;
-          const sectionLabel = kind === 'before' ? t('jobs.imageBefore') : t('jobs.imageAfter');
           await Share.share({
-            message: [sectionLabel, ...urls].join('\n'),
+            message: [t('jobs.images'), ...urls].join('\n'),
           });
         }
       } catch (e: unknown) {
@@ -940,260 +1376,289 @@ export default function JobDetailScreen() {
     setAndroidZoom(1);
   }, []);
 
-  const toggleImageSection = useCallback((kind: JobImageKind) => {
-    setExpandedImageSections((prev) => ({
-      ...prev,
-      [kind]: !prev[kind],
-    }));
-  }, []);
+  const sectionSeparatorColor = colorScheme === 'dark' ? 'rgba(84,84,88,0.38)' : 'rgba(60,60,67,0.14)';
+  const secondaryLinkColor = colorScheme === 'dark' ? '#9DBDFF' : '#315FBA';
 
-  const renderImageSection = useCallback(
-    (
-      kind: JobImageKind,
-      items: JobImageRow[],
-      pending: { uri: string; kind: JobImageKind; key: string }[]
-    ) => {
-      const expanded = expandedImageSections[kind];
-      const selectionMode = selectedImageKind === kind && selectedImageIds.length > 0;
-      const selectionCount = selectionMode
-        ? items.filter((item) => selectedImageIds.includes(item.id)).length
-        : 0;
-      const allItems = [...pending, ...items];
-      const hasOverflow = allItems.length > IMAGE_PREVIEW_LIMIT;
-      const visibleItems = expanded ? items : items.slice(0, IMAGE_PREVIEW_LIMIT);
-      const remainingSlots = Math.max(IMAGE_PREVIEW_LIMIT - visibleItems.length, 0);
-      const visiblePending = expanded ? pending : pending.slice(0, remainingSlots);
-
-      return (
-      <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
-        <View className="flex-row items-center justify-between">
-          <Text className="text-app-section font-extrabold text-[#1C2745] dark:text-white">
-            {selectionMode
-              ? t('jobs.imageSelectedCount', { count: selectionCount })
-              : `${kind === 'before' ? t('jobs.imageBefore') : t('jobs.imageAfter')} (${allItems.length})`}
-          </Text>
-          <View className="flex-row items-center">
-            {selectionMode ? (
-              <>
-                <Pressable
-                  onPress={() => {
-                    void onShareSelectedImages(kind, items);
-                  }}
-                  className="mr-2 h-10 w-10 items-center justify-center rounded-3xl bg-black/5 dark:bg-white/10">
-                  <Ionicons name="share-social-outline" size={18} color={colors.text} />
-                </Pressable>
-                <Pressable
-                  onPress={() => onDeleteSelectedImages(items)}
-                  className="mr-2 h-10 w-10 items-center justify-center rounded-3xl bg-[#FDEBEE] dark:bg-[#3A1F24]">
-                  <Ionicons name="trash-outline" size={18} color="#FF3B30" />
-                </Pressable>
-                <Pressable
-                  onPress={clearImageSelection}
-                  className="h-10 w-10 items-center justify-center rounded-3xl bg-black/5 dark:bg-white/10">
-                  <Ionicons name="close" size={18} color={colors.text} />
-                </Pressable>
-              </>
-            ) : (
-              <>
-                {hasOverflow ? (
-                  <Pressable
-                    onPress={() => toggleImageSection(kind)}
-                    className="mr-2 rounded-3xl bg-black/5 px-3 py-2 dark:bg-white/10">
-                    <Text className="text-app-meta-lg font-semibold text-black/70 dark:text-white/80">
-                      {expanded ? t('jobs.showLessPhotos') : t('jobs.showAllPhotos')}
-                    </Text>
-                  </Pressable>
-                ) : null}
-                {items.length > 0 ? (
-                  <Pressable
-                    onPress={() => {
-                      void onShareImageSection(kind, items);
-                    }}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('jobs.imageShareAllAction')}
-                    className="mr-2 h-10 w-10 items-center justify-center rounded-3xl bg-black/5 dark:bg-white/10">
-                    <Ionicons name="share-social-outline" size={18} color={colors.text} />
-                  </Pressable>
-                ) : null}
-                <Pressable
-                  onPress={() => onOpenAddPhoto(kind)}
-                  disabled={uploadProgress?.kind === kind}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('jobs.addPhoto')}
-                  className="h-10 w-10 items-center justify-center rounded-3xl bg-[#E8F0FF] disabled:opacity-60 dark:bg-[#1E2A44]">
-                  {uploadProgress?.kind === kind ? (
-                    <ActivityIndicator size="small" color={colors.text} />
-                  ) : (
-                    <Ionicons name="add" size={20} color={colors.text} />
-                  )}
-                </Pressable>
-              </>
-            )}
-          </View>
-        </View>
-
-        {uploadProgress?.kind === kind ? (
-          <Text className="mt-2 text-app-meta-lg font-medium text-black/55 dark:text-white/65">
-            {t('jobs.uploadingPhotos', {
-              done: uploadProgress.done,
-              total: uploadProgress.total,
-            })}
-          </Text>
-        ) : null}
-
-        {items.length === 0 && pending.length === 0 ? (
-          <Text className="mt-3 text-app-meta-lg text-black/60 dark:text-white/70">
-            {kind === 'before' ? t('jobs.noBeforeImages') : t('jobs.noAfterImages')}
-          </Text>
-        ) : (
-          <View className="mt-3 flex-row flex-wrap">
-            {visibleItems.map((item, index) => (
-              <Pressable
-                key={item.id}
-                onPress={() => {
-                  if (selectionMode) {
-                    toggleImageSelection(kind, item.id);
-                  } else {
-                    onOpenPreview(kind, index);
-                  }
-                }}
-                onLongPress={() => {
-                  if (selectionMode) {
-                    toggleImageSelection(kind, item.id);
-                  } else {
-                    toggleImageSelection(kind, item.id);
-                  }
-                }}
-                style={{ marginRight: index % 3 === 2 ? 0 : 8, marginBottom: 8 }}>
-                <View>
-                  <Image
-                    source={{ uri: item.image_url ?? undefined }}
-                    style={{ width: thumbSize, height: thumbSize, borderRadius: 18, backgroundColor: colorScheme === 'dark' ? '#2C2C2E' : '#E9EEF8' }}
-                  />
-                  {selectionMode ? (
-                    <View
-                      className={`absolute inset-0 rounded-[18px] ${selectedImageIds.includes(item.id) ? 'bg-[#1A4FE0]/28' : 'bg-black/12'}`}
-                    />
-                  ) : null}
-                  {selectionMode ? (
-                    <View className="absolute right-2 top-2 h-6 w-6 items-center justify-center rounded-full bg-black/55">
-                      <Ionicons
-                        name={selectedImageIds.includes(item.id) ? 'checkmark-circle' : 'ellipse-outline'}
-                        size={18}
-                        color="white"
-                      />
-                    </View>
-                  ) : null}
-                </View>
-              </Pressable>
-            ))}
-            {visiblePending.map((item, index) => (
-              <View
-                key={item.key}
-                style={{ marginRight: (index + visibleItems.length) % 3 === 2 ? 0 : 8, marginBottom: 8 }}
-                className="overflow-hidden rounded-2xl">
-                <Image
-                  source={{ uri: item.uri }}
-                  style={{ width: thumbSize, height: thumbSize, backgroundColor: colorScheme === 'dark' ? '#2C2C2E' : '#E9EEF8', opacity: 0.55 }}
-                />
-                <View className="absolute inset-0 items-center justify-center bg-black/20">
-                  <ActivityIndicator size="small" color="#fff" />
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
+  const renderSectionHeader = useCallback((title: string, action?: React.ReactNode) => (
+    <View className="mt-5">
+      <View className="flex-row items-center justify-between px-1">
+        <Text
+          className="text-app-row-title font-semibold"
+          style={{ color: colorScheme === 'dark' ? '#72A8FF' : '#1C60C3' }}>
+          {title}
+        </Text>
+        {action ? <View className="ml-3 flex-row items-center">{action}</View> : null}
       </View>
+      <View className="mt-2 h-px" style={{ backgroundColor: sectionSeparatorColor }} />
+    </View>
+  ), [colorScheme, sectionSeparatorColor]);
+
+  const renderImagesSection = useCallback(() => {
+    const selectionMode = selectedImageIds.length > 0;
+    const selectedItems = images.filter((item) => selectedImageIds.includes(item.id));
+    const selectionCount = selectedItems.length;
+    const title = selectionMode
+      ? t('jobs.imageSelectedCount', { count: selectionCount })
+      : `${t('jobs.images')} (${imageCarouselItems.length})`;
+    const carouselThumbSize = Math.max(68, thumbSize);
+    const actions = (
+      <>
+        {selectionMode ? (
+          <>
+            <Pressable
+              onPress={() => {
+                void onShareSelectedImages(images);
+              }}
+              className="mr-2 h-10 w-10 items-center justify-center">
+              <Ionicons name="share-social-outline" size={18} color={colors.text} />
+            </Pressable>
+            <Pressable
+              onPress={() => onDeleteSelectedImages(images)}
+              className="mr-2 h-10 w-10 items-center justify-center">
+              <Ionicons name="trash-outline" size={18} color="#FF3B30" />
+            </Pressable>
+            <Pressable
+              onPress={clearImageSelection}
+              className="h-10 w-10 items-center justify-center">
+              <Ionicons name="close" size={18} color={colors.text} />
+            </Pressable>
+          </>
+        ) : null}
+      </>
     );
-    },
-    [
-      colorScheme,
-      colors.text,
-      expandedImageSections,
-      clearImageSelection,
-      thumbSize,
-      onDeleteSelectedImages,
-      onOpenAddPhoto,
-      onShareImageSection,
-      onShareSelectedImages,
-      onOpenPreview,
-      selectedImageIds,
-      selectedImageKind,
-      t,
-      toggleImageSelection,
-      toggleImageSection,
-      uploadProgress,
-    ]
+
+    return (
+      <>
+        {renderSectionHeader(title, actions)}
+        <View style={{ marginTop: 8 }}>
+          {uploadProgress ? (
+            <Text className="ml-3 mt-2 text-app-meta-lg font-medium text-black/55 dark:text-white/65">
+              {t('jobs.uploadingPhotos', {
+                done: uploadProgress.done,
+                total: uploadProgress.total,
+              })}
+            </Text>
+          ) : null}
+
+          {imageCarouselItems.length === 0 ? (
+            <Text className="mt-3 px-4 text-center text-app-meta-lg italic text-black/60 dark:text-white/70">
+              {t('jobs.noImages')}
+            </Text>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingLeft: 12, paddingRight: 24, paddingTop: 12 }}>
+              {imageCarouselItems.map((entry) => {
+                const selected = entry.type === 'saved' && selectedImageIds.includes(entry.item.id);
+
+                if (entry.type === 'pending') {
+                  return (
+                    <View
+                      key={entry.item.key}
+                      style={{ marginRight: GRID_GAP, width: carouselThumbSize, height: carouselThumbSize }}
+                      className="overflow-hidden rounded-2xl">
+                      <Image
+                        source={{ uri: entry.item.uri }}
+                        style={{
+                          width: carouselThumbSize,
+                          height: carouselThumbSize,
+                          backgroundColor: colorScheme === 'dark' ? '#2C2C2E' : '#E9EEF8',
+                          opacity: 0.55,
+                        }}
+                      />
+                      <View className="absolute inset-0 items-center justify-center bg-black/20">
+                        <ActivityIndicator size="small" color="#fff" />
+                      </View>
+                    </View>
+                  );
+                }
+
+                return (
+                  <Pressable
+                    key={entry.item.id}
+                    onPress={() => {
+                      if (selectionMode) {
+                        toggleImageSelection(entry.item.id);
+                      } else {
+                        onOpenPreview(entry.index);
+                      }
+                    }}
+                    onLongPress={() => toggleImageSelection(entry.item.id)}
+                    style={{ marginRight: GRID_GAP }}>
+                    <View>
+                      <Image
+                        source={{ uri: entry.item.image_url ?? undefined }}
+                        style={{
+                          width: carouselThumbSize,
+                          height: carouselThumbSize,
+                          borderRadius: 18,
+                          backgroundColor: colorScheme === 'dark' ? '#2C2C2E' : '#E9EEF8',
+                        }}
+                      />
+                      {selectionMode ? (
+                        <View
+                          className={`absolute inset-0 rounded-[18px] ${selected ? 'bg-[#1A4FE0]/28' : 'bg-black/12'}`}
+                        />
+                      ) : null}
+                      {selectionMode ? (
+                        <View className="absolute right-2 top-2 h-6 w-6 items-center justify-center rounded-full bg-black/55">
+                          <Ionicons
+                            name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+                            size={18}
+                            color="white"
+                          />
+                        </View>
+                      ) : null}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          )}
+        </View>
+      </>
+    );
+  }, [
+    clearImageSelection,
+    colorScheme,
+    colors.text,
+    imageCarouselItems,
+    images,
+    onDeleteSelectedImages,
+    onOpenPreview,
+    onShareSelectedImages,
+    renderSectionHeader,
+    selectedImageIds,
+    t,
+    thumbSize,
+    toggleImageSelection,
+    uploadProgress,
+  ]);
+
+  const openNewPayment = useCallback(() => {
+    if (!id) return;
+    router.push({
+      pathname: '/(tabs)/posao/[id]/payment/new' as any,
+      params: { id, returnTo: 'job' },
+    });
+  }, [id, router]);
+
+  const openNewExpense = useCallback(() => {
+    if (!id) return;
+    router.push({ pathname: '/(tabs)/posao/[id]/expense/new' as any, params: { id } });
+  }, [id, router]);
+
+  const floatingActions = useMemo<JobDetailFloatingAction[]>(
+    () => [
+      {
+        key: 'invoice-item',
+        label: t('fab.invoiceItem'),
+        sublabel: t('fab.invoiceItemHint'),
+        icon: 'document-text-outline',
+        color: '#3C69D9',
+        backgroundColor: colorScheme === 'dark' ? 'rgba(58,105,217,0.18)' : 'rgba(60,105,217,0.12)',
+        onPress: openNewItemForm,
+      },
+      {
+        key: 'payment',
+        label: t('fab.payment'),
+        sublabel: t('fab.paymentHint'),
+        icon: 'wallet-outline',
+        color: '#4CBF60',
+        backgroundColor: colorScheme === 'dark' ? 'rgba(76,191,96,0.20)' : 'rgba(76,191,96,0.12)',
+        onPress: openNewPayment,
+      },
+      {
+        key: 'expense',
+        label: t('fab.expense'),
+        sublabel: t('fab.expenseHint'),
+        icon: 'receipt-outline',
+        color: '#FD2D65',
+        backgroundColor: colorScheme === 'dark' ? 'rgba(253,45,101,0.18)' : 'rgba(253,45,101,0.12)',
+        onPress: openNewExpense,
+      },
+      {
+        key: 'photo',
+        label: t('fab.photo'),
+        sublabel: t('fab.photoHint'),
+        icon: 'image-outline',
+        color: '#4DB1A6',
+        backgroundColor: colorScheme === 'dark' ? 'rgba(77,177,166,0.20)' : 'rgba(77,177,166,0.12)',
+        onPress: onOpenAddPhoto,
+      },
+    ],
+    [colorScheme, onOpenAddPhoto, openNewExpense, openNewItemForm, openNewPayment, t]
   );
 
   return (
     <>
-      <View className="flex-1 bg-[#F2F2F7] dark:bg-black">
-        <View
-          onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20, backgroundColor: colors.background }}>
-          <View className="px-6 pb-6" style={{ paddingTop: insets.top + 12 }}>
-          <View className="flex-row items-center justify-between">
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('common.back')}
-            onPress={onBack}
-            className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
-            <Ionicons name="chevron-back" size={20} color={colors.text} />
-          </Pressable>
-
-          <View className="flex-row items-center">
+      <View className="flex-1 bg-[#F2F2F7] dark:bg-[#1D2229]">
+        <CollapsingMainHeader
+          title={job?.title || t('jobs.untitled')}
+          iconName="briefcase-outline"
+          scrollY={scrollY}
+          left={
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={t('jobs.edit')}
-              onPress={onEdit}
-              className="mr-3 h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
-              <FontAwesome name="pencil" size={16} color={colors.text} />
+              accessibilityLabel={t('common.back')}
+              onPress={onBack}
+              className="h-11 w-11 items-center justify-center">
+              <Ionicons name="chevron-back" size={25} color="#717983" />
             </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('jobs.delete')}
-              onPress={onDelete}
-              className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
-              <Ionicons name="trash" size={18} color="#FF3B30" />
-            </Pressable>
-          </View>
-        </View>
-
-          <Text className="mt-4 font-bold text-app-display tracking-tight text-black dark:text-white">
-            {job?.title || t('jobs.untitled')}
-          </Text>
-          <View className="mt-1 flex-row items-center">
-            <Ionicons name="person-outline" size={17} color={colors.secondaryText} />
-            <Text className="ml-2 text-app-subtitle text-black/60 dark:text-white/70">
-              {job?.client?.name || t('jobs.noClient')}
-            </Text>
-          </View>
-          {job?.archived_at ? (
-            <View className="mt-3 self-start rounded-full bg-[#F1F4FB] px-3 py-1.5 dark:bg-white/10">
-              <Text className="text-app-meta font-bold text-[#6C789A] dark:text-white/80">
-                {t('jobs.archived')}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-        </View>
+          }
+          right={
+            <HeaderOverflowMenu
+              accessibilityLabel={t('common.more')}
+              actions={[
+                { label: t('jobs.edit'), iconName: 'create-outline', onPress: onEdit },
+                { label: t('jobs.invoice.shareAction'), iconName: 'document-text-outline', onPress: () => { void onShareInvoice(); } },
+                { label: t('jobs.imageShareAllAction'), iconName: 'images-outline', onPress: () => { void onShareAllImages(); } },
+                { label: t('jobs.delete'), iconName: 'trash-outline', onPress: onDelete, destructive: true },
+              ]}
+            />
+          }
+        />
 
       <KeyboardAvoidingView
         className="flex-1"
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}>
-      <ScrollView
+        <Animated.ScrollView
         ref={mainScrollRef}
-        className="flex-1 bg-[#F2F2F7] dark:bg-black"
+        className="flex-1 bg-[#F2F2F7] dark:bg-[#1D2229]"
+        keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: 128 + keyboardHeight }}>
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+          useNativeDriver: true,
+          listener: quickFindSwipe.onScroll,
+        })}
+        {...quickFindSwipe.touchHandlers}
+        refreshControl={quickFindSwipe.refreshControl}
+        scrollEventThrottle={16}
+        contentContainerStyle={{ paddingBottom: 192 + keyboardHeight }}>
       <View className="px-6 pt-4">
-        <View className="overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
-          <Text className="mb-4 text-app-section font-extrabold text-[#1C2745] dark:text-white">
-            {t('jobs.overviewTitle')}
+        <MainScreenTitle
+          title={job?.title || t('jobs.untitled')}
+          iconName="briefcase-outline"
+          scrollY={scrollY}
+        />
+        <View className="-mt-4 mb-1 flex-row items-center px-1">
+          <Ionicons name="person-outline" size={16} color={colors.secondaryText} />
+          <Text className="ml-1.5 text-app-subtitle text-black/60 dark:text-white/70">
+            {job?.client?.name || t('jobs.noClient')}
           </Text>
-          {loading ? (
+        </View>
+        {job?.archived_at ? (
+          <View className="mb-1 ml-1 mt-2 self-start">
+            <Text className="text-app-meta text-[#6C789A] dark:text-white/80">
+              {t('jobs.archived')}
+            </Text>
+          </View>
+        ) : null}
+        {renderSectionHeader(t('jobs.overviewTitle'))}
+        <View style={{ marginLeft: 12, marginTop: 8 }}>
+          {loading && !job ? (
             <View className="items-center py-6">
               <ActivityIndicator />
             </View>
@@ -1203,9 +1668,7 @@ export default function JobDetailScreen() {
                 <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">{t('jobs.dateLabel')}</Text>
                 <Text className="text-app-row text-black dark:text-white">{formatDate(job.scheduled_date)}</Text>
               </View>
-              <View className="my-3 h-px bg-black/10 dark:bg-white/10" />
-
-              <View className="flex-row items-center justify-between">
+              <View className="mt-2 flex-row items-center justify-between">
                 <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">{t('jobs.statusLabel')}</Text>
                 <View className="flex-row items-center">
                   <Text className="text-app-row text-black dark:text-white">
@@ -1221,17 +1684,15 @@ export default function JobDetailScreen() {
                   ) : null}
                 </View>
               </View>
-              <View className="my-3 h-px bg-black/10 dark:bg-white/10" />
 
-              <View className="flex-row items-center justify-between">
+              <View className="mt-2 flex-row items-center justify-between">
                 <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">
                   {t('jobs.reminderLabel')}
                 </Text>
                 <Text className="text-app-row text-black dark:text-white">{formatReminder(reminderType)}</Text>
               </View>
-              <View className="my-3 h-px bg-black/10 dark:bg-white/10" />
 
-              <View className="flex-row items-center justify-between">
+              <View className="mt-2 flex-row items-center justify-between">
                 <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">{t('jobs.priceLabel')}</Text>
                 <Text className="text-app-row text-black dark:text-white">
                 {formatPrice(job.price)}
@@ -1240,8 +1701,7 @@ export default function JobDetailScreen() {
 
               {(job.archived_at || job.status === 'done') ? (
                 <>
-                  <View className="my-3 h-px bg-black/10 dark:bg-white/10" />
-                  <View className="flex-row items-center justify-between">
+                  <View className="mt-2 flex-row items-center justify-between">
                     <View className="mr-4 flex-1">
                       <Text className="text-app-meta font-medium text-black/60 dark:text-white/70">
                         {job.archived_at ? t('jobs.archivedLabel') : t('jobs.archiveReadyLabel')}
@@ -1254,15 +1714,10 @@ export default function JobDetailScreen() {
                     </View>
                     <Pressable
                       onPress={onToggleArchive}
-                      className={[
-                        'rounded-full px-4 py-2.5',
-                        job.archived_at ? 'bg-[#E8F0FF] dark:bg-[#1E2A44]' : 'bg-[#F1F4FB] dark:bg-white/10',
-                      ].join(' ')}>
+                      className="py-2">
                       <Text
-                        className={[
-                        'text-app-meta font-bold',
-                          job.archived_at ? 'text-[#3C69D9] dark:text-[#8FB2FF]' : 'text-black dark:text-white',
-                        ].join(' ')}>
+                        className="text-app-meta font-semibold"
+                        style={{ color: secondaryLinkColor }}>
                         {job.archived_at ? t('jobs.unarchive') : t('jobs.archive')}
                       </Text>
                     </Pressable>
@@ -1272,8 +1727,7 @@ export default function JobDetailScreen() {
 
               {job.description ? (
                 <>
-                  <View className="my-3 h-px bg-black/10 dark:bg-white/10" />
-                  <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">
+                  <Text className="mt-2 text-app-meta-lg font-medium text-black/60 dark:text-white/70">
                     {t('jobs.descriptionLabel')}
                   </Text>
                   <Text className="mt-1.5 text-app-body text-black/80 dark:text-white/80">{job.description}</Text>
@@ -1282,135 +1736,124 @@ export default function JobDetailScreen() {
 
             </>
           ) : (
-            <Text className="text-app-meta text-black/60 dark:text-white/70">{t('jobs.notFound')}</Text>
+            <Text className="px-4 text-center text-app-meta italic text-black/60 dark:text-white/70">{t('jobs.notFound')}</Text>
           )}
 
           {error ? <Text className="mt-3 text-app-meta text-red-600">{error}</Text> : null}
         </View>
 
-        <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
-          <View className="flex-row items-center justify-between">
-            <Text className="text-app-section font-extrabold text-[#1C2745] dark:text-white">
-              {t('jobs.invoiceSection')}
-            </Text>
-            <Pressable
-              onPress={() => {
-                void onShareInvoice();
+        {renderSectionHeader(t('jobs.invoiceSection'))}
+        <View
+          onLayout={(event) => {
+            invoiceItemsContainerYRef.current = event.nativeEvent.layout.y;
+          }}
+          style={{ marginLeft: 12, marginTop: 8 }}>
+          {itemFormOpen && !editingItem ? (
+            <InvoiceItemInlineFormRow
+              title={itemTitle}
+              quantity={itemQuantity}
+              unitPrice={itemUnitPrice}
+              titlePlaceholder={t('jobs.invoiceItemsFieldTitle')}
+              quantityPlaceholder={t('jobs.invoiceItemsFieldQuantity')}
+              unitPricePlaceholder={i18n.language.startsWith('sr') ? 'Cena po JM' : 'Unit price'}
+              colors={colors}
+              colorScheme={colorScheme}
+              closing={itemFormClosing}
+              submitting={itemSubmitting}
+              onBlurAway={onInvoiceItemFormBlurAway}
+              onChangeTitle={setItemTitle}
+              onChangeQuantity={setItemQuantity}
+              onChangeUnitPrice={setItemUnitPrice}
+              onLayout={(event) => {
+                invoiceItemFormYRef.current = invoiceItemsContainerYRef.current + event.nativeEvent.layout.y;
               }}
-              disabled={invoiceSubmitting}
-              className="flex-row items-center rounded-3xl bg-black/5 px-2.5 py-2 disabled:opacity-60 dark:bg-white/10">
-              {invoiceSubmitting ? (
-                <ActivityIndicator size="small" color={colors.text} />
-              ) : (
-                <>
-                  <Ionicons name="document-text-outline" size={14} color={colors.text} />
-                  <Text className="ml-1 text-app-meta font-semibold text-black dark:text-white">
-                    {t('jobs.invoice.shortAction')}
-                  </Text>
-                </>
-              )}
-            </Pressable>
-          </View>
+              onSubmit={() => {
+                void onSubmitInvoiceItem();
+              }}
+            />
+          ) : null}
 
-          <View className="mt-4 rounded-3xl bg-black/[0.03] p-3 dark:bg-white/[0.05]">
-            <View className="flex-row items-center justify-between">
-              <Text className="text-app-row-lg font-extrabold text-[#1C2745] dark:text-white">
-                {t('jobs.invoiceItems')}
-              </Text>
-              <Pressable
-                onPress={openNewItemModal}
-                className="flex-row items-center rounded-3xl bg-[#E8F0FF] px-3 py-2 dark:bg-[#1E2A44]">
-                <Ionicons name="add" size={14} color={colors.text} />
-                  <Text className="ml-1 text-app-meta-lg font-semibold text-black dark:text-white">
-                  {t('jobs.invoiceItemsAdd')}
+          {hasInvoiceItems ? (
+            <View>
+              {invoiceItems.map((item, index) => {
+                const isEditingThisItem = itemFormOpen && editingItem?.id === item.id;
+                const shouldHideBehindCreateInput = itemFormOpen && !editingItem && item.id === optimisticCreatedItemId;
+                if (shouldHideBehindCreateInput) return null;
+                if (isEditingThisItem) {
+                  return (
+                    <InvoiceItemInlineFormRow
+                      key={item.id}
+                      marginTop={index > 0 ? INVOICE_ITEM_ROW_GAP : itemFormOpen && !editingItem ? INVOICE_ITEM_ROW_GAP : 0}
+                      title={itemTitle}
+                      quantity={itemQuantity}
+                      unitPrice={itemUnitPrice}
+                      titlePlaceholder={t('jobs.invoiceItemsFieldTitle')}
+                      quantityPlaceholder={t('jobs.invoiceItemsFieldQuantity')}
+                      unitPricePlaceholder={i18n.language.startsWith('sr') ? 'Cena po JM' : 'Unit price'}
+                      colors={colors}
+                      colorScheme={colorScheme}
+                      closing={itemFormClosing}
+                      submitting={itemSubmitting}
+                      onBlurAway={onInvoiceItemFormBlurAway}
+                      onChangeTitle={setItemTitle}
+                      onChangeQuantity={setItemQuantity}
+                      onChangeUnitPrice={setItemUnitPrice}
+                      onLayout={(event) => {
+                        invoiceItemFormYRef.current = invoiceItemsContainerYRef.current + event.nativeEvent.layout.y;
+                      }}
+                      onSubmit={() => {
+                        void onSubmitInvoiceItem();
+                      }}
+                    />
+                  );
+                }
+                return (
+                  <InvoiceItemSwipeRow
+                    key={item.id}
+                    item={item}
+                    index={index + (itemFormOpen && !editingItem ? 1 : 0)}
+                    locale={locale}
+                    colors={colors}
+                    colorScheme={colorScheme}
+                    formatPrice={formatPrice}
+                    unitLabel={t('jobs.invoice.unitService')}
+                    untitledLabel={t('jobs.invoiceItemsUntitled')}
+                    onEdit={openEditItemForm}
+                    onDelete={onDeleteInvoiceItem}
+                    isSwipeOpen={openInvoiceItemSwipeId === item.id}
+                    onSwipeOpen={onOpenInvoiceItemSwipe}
+                    onSwipeClose={onCloseInvoiceItemSwipe}
+                  />
+                );
+              })}
+              <View className="mt-4 h-px bg-black/10 dark:bg-white/10" />
+              <View className="mt-3 flex-row items-center justify-between pl-2">
+                <Text className="text-app-row font-semibold text-black/60 dark:text-white/70">
+                  {t('jobs.invoiceItemsTotal')}
                 </Text>
-              </Pressable>
-            </View>
-
-            {hasInvoiceItems ? (
-              <View className="mt-3">
-                {invoiceItems.map((item, index) => (
-                  <View key={item.id}>
-                    {index > 0 ? <View className="my-3 h-px bg-black/10 dark:bg-white/10" /> : null}
-                    <View className="flex-row items-start justify-between">
-                      <View className="mr-3 flex-1">
-                        <Text className="text-app-row-lg font-semibold text-black dark:text-white">
-                          {item.title || t('jobs.invoiceItemsUntitled')}
-                        </Text>
-                        <Text className="mt-1 text-app-meta-lg text-black/60 dark:text-white/70">
-                          {(item.quantity ?? 0).toLocaleString(locale)} {item.unit || t('jobs.invoice.unitService')} x{' '}
-                          {formatPrice(item.unit_price ?? 0)}
-                        </Text>
-                      </View>
-                      <View className="items-end">
-                        <Text className="text-app-row-lg font-bold text-black dark:text-white">
-                          {formatPrice(item.total ?? 0)}
-                        </Text>
-                        <View className="mt-2 flex-row items-center">
-                          <Pressable
-                            onPress={() => openEditItemModal(item)}
-                            className="mr-2 h-8 w-8 items-center justify-center rounded-full bg-black/5 dark:bg-white/10">
-                            <Ionicons name="create-outline" size={15} color={colors.text} />
-                          </Pressable>
-                          <Pressable
-                            onPress={() => onDeleteInvoiceItem(item)}
-                            className="h-8 w-8 items-center justify-center rounded-full bg-[#FDEBEE] dark:bg-[#3A1F24]">
-                            <Ionicons name="trash-outline" size={15} color="#FF3B30" />
-                          </Pressable>
-                        </View>
-                      </View>
-                    </View>
-                  </View>
-                ))}
-                <View className="mt-3 flex-row items-center justify-between rounded-2xl bg-white/70 px-3 py-2 dark:bg-[#2A2A2C]">
-                  <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">
-                    {t('jobs.invoiceItemsTotal')}
-                  </Text>
-                  <Text className="text-app-row-lg font-bold text-black dark:text-white">
-                    {formatPrice(invoiceItemsTotal)}
-                  </Text>
-                </View>
+                <Text className="text-app-row text-right font-semibold text-black dark:text-white">
+                  {formatPrice(invoiceItemsTotal)}
+                </Text>
               </View>
-            ) : (
-              <Text className="mt-3 text-app-meta-lg text-black/60 dark:text-white/70">
-                {t('jobs.invoiceItemsEmpty')}
-              </Text>
-            )}
-          </View>
+            </View>
+          ) : !itemFormOpen ? (
+            <Text className="mt-3 px-4 text-center text-app-meta-lg italic text-black/60 dark:text-white/70">
+              {t('jobs.invoiceItemsEmpty')}
+            </Text>
+          ) : null}
         </View>
 
-        <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
-          <View className="flex-row items-center justify-between">
-            <Text className="text-app-section font-extrabold text-[#1C2745] dark:text-white">
-              {t('jobs.financials')}
-            </Text>
-            <View className="flex-row items-center">
-              <Pressable
-                onPress={() =>
-                  router.push({
-                    pathname: '/(tabs)/posao/[id]/payment/new' as any,
-                    params: { id, returnTo: 'job' },
-                  })
-                }
-                className="mr-2 flex-row items-center rounded-3xl bg-[#E8F0FF] px-2.5 py-2 dark:bg-[#1E2A44]">
-                <Ionicons name="wallet-outline" size={14} color={colors.text} />
-                <Text className="ml-1 text-app-meta-lg font-semibold text-black dark:text-white">
-                  {t('jobs.paymentShort')}
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => router.push({ pathname: '/(tabs)/posao/[id]/expense/new' as any, params: { id } })}
-                className="flex-row items-center rounded-3xl bg-[#FDEBEE] px-2.5 py-2 dark:bg-[#3A1F24]">
-                <Ionicons name="receipt-outline" size={14} color={colors.text} />
-                <Text className="ml-1 text-app-meta-lg font-semibold text-black dark:text-white">
-                  {t('jobs.expenseShort')}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
+        {renderSectionHeader(t('jobs.financials'))}
+        <View style={{ marginLeft: 12, marginTop: 8 }}>
 
-          <View className="mt-4">
+          <View>
             <View className="flex-row items-center justify-between">
+              <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">{t('jobs.profit')}</Text>
+              <Text className="text-app-row font-semibold text-[#2F8C57] dark:text-[#7AD69C]">
+                {formatPrice(profit)}
+              </Text>
+            </View>
+            <View className="mt-2 flex-row items-center justify-between">
               <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">{t('jobs.totalPaid')}</Text>
               <Text className="text-app-row text-black dark:text-white">
                 {formatPrice(totalPaid)}
@@ -1422,12 +1865,6 @@ export default function JobDetailScreen() {
                 {formatPrice(totalExpense)}
               </Text>
             </View>
-            <View className="mt-2 flex-row items-center justify-between">
-              <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">{t('jobs.profit')}</Text>
-              <Text className="text-app-row font-semibold text-black dark:text-white">
-                {formatPrice(profit)}
-              </Text>
-            </View>
             {tipAmount > 0 ? (
               <View className="mt-2 flex-row items-center justify-between">
                 <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">{t('jobs.tip')}</Text>
@@ -1436,7 +1873,7 @@ export default function JobDetailScreen() {
                 </Text>
               </View>
             ) : null}
-            {outstanding != null ? (
+            {outstanding != null && outstanding > 0 ? (
               <View className="mt-2 flex-row items-center justify-between">
                 <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">{t('jobs.outstanding')}</Text>
                 <Text className="text-app-row text-black dark:text-white">
@@ -1449,7 +1886,7 @@ export default function JobDetailScreen() {
           <View className="my-4 h-px bg-black/10 dark:bg-white/10" />
           <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">{t('jobs.payments')}</Text>
           {payments.length === 0 ? (
-            <Text className="mt-2 text-app-meta-lg text-black/60 dark:text-white/70">{t('jobs.noPayments')}</Text>
+            <Text className="mt-2 px-4 text-center text-app-meta-lg italic text-black/60 dark:text-white/70">{t('jobs.noPayments')}</Text>
           ) : (
             payments.map((p) => (
               <Pressable
@@ -1460,14 +1897,23 @@ export default function JobDetailScreen() {
                     params: { id, paymentId: p.id, returnTo: 'job' },
                   })
                 }
-                className="mt-2 flex-row items-center justify-between">
+                className="mt-2 flex-row items-center justify-between pl-3">
                 <View className="flex-1 pr-4">
-                  <Text className="text-app-meta-lg text-black/80 dark:text-white/80" numberOfLines={1}>
-                    {p.note || t('jobs.payment')}
-                  </Text>
-                  {p.payment_date ? (
-                    <Text className="text-app-meta-lg text-black/50 dark:text-white/60">{formatListDate(p.payment_date)}</Text>
-                  ) : null}
+                  <View className="flex-row items-center">
+                    {p.payment_date ? (
+                      <Text
+                        style={{
+                          marginRight: 5,
+                          color: colorScheme === 'dark' ? '#72A8FF' : '#1C60C3',
+                          fontSize: 12,
+                        }}>
+                        {formatListDate(p.payment_date)}
+                      </Text>
+                    ) : null}
+                    <Text className="flex-1 text-app-meta-lg text-black/80 dark:text-white/80" numberOfLines={1}>
+                      {p.note || t('jobs.payment')}
+                    </Text>
+                  </View>
                 </View>
                 <Text className="text-app-meta-lg text-black/70 dark:text-white/80">
                   {formatPrice(p.amount ?? 0)}
@@ -1476,10 +1922,10 @@ export default function JobDetailScreen() {
             ))
           )}
 
-          <View className="my-4 h-px bg-black/10 dark:bg-white/10" />
+          <View className="my-4" />
           <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">{t('jobs.expenses')}</Text>
           {expenses.length === 0 ? (
-            <Text className="mt-2 text-app-meta-lg text-black/60 dark:text-white/70">{t('jobs.noExpenses')}</Text>
+            <Text className="mt-2 px-4 text-center text-app-meta-lg italic text-black/60 dark:text-white/70">{t('jobs.noExpenses')}</Text>
           ) : (
             expenses.map((e) => (
               <Pressable
@@ -1490,14 +1936,23 @@ export default function JobDetailScreen() {
                     params: { id, expenseId: e.id },
                   })
                 }
-                className="mt-2 flex-row items-center justify-between">
+                className="mt-2 flex-row items-center justify-between pl-3">
                 <View className="flex-1 pr-4">
-                  <Text className="text-app-meta-lg text-black/80 dark:text-white/80" numberOfLines={1}>
-                    {e.title || t('jobs.expense')}
-                  </Text>
-                  {e.created_at ? (
-                    <Text className="text-app-meta-lg text-black/50 dark:text-white/60">{formatListDate(e.created_at)}</Text>
-                  ) : null}
+                  <View className="flex-row items-center">
+                    {e.created_at ? (
+                      <Text
+                        style={{
+                          marginRight: 5,
+                          color: colorScheme === 'dark' ? '#72A8FF' : '#1C60C3',
+                          fontSize: 12,
+                        }}>
+                        {formatListDate(e.created_at)}
+                      </Text>
+                    ) : null}
+                    <Text className="flex-1 text-app-meta-lg text-black/80 dark:text-white/80" numberOfLines={1}>
+                      {e.title || t('jobs.expense')}
+                    </Text>
+                  </View>
                 </View>
                 <Text className="text-app-meta-lg text-black/70 dark:text-white/80">
                   {formatPrice(e.amount ?? 0)}
@@ -1507,153 +1962,16 @@ export default function JobDetailScreen() {
           )}
         </View>
 
-        {renderImageSection('before', beforeImages, pendingBeforeImages)}
-        {renderImageSection('after', afterImages, pendingAfterImages)}
+        {renderImagesSection()}
 
-        <View
-          onLayout={(event) => setQuickActionsY(event.nativeEvent.layout.y)}
-          className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
-          <Text className="text-app-section font-extrabold text-[#1C2745] dark:text-white">{t('jobs.quickActions')}</Text>
-          {phoneDigits ? (
-            <View className="mt-3">
-              <Text className="text-app-meta-lg font-medium text-black/60 dark:text-white/70">
-                {t('jobs.customMessage')}
-              </Text>
-              <View className="mt-2">
-                <AppTextInput
-                  value={customMessage}
-                  onChangeText={setCustomMessage}
-                  onFocus={() => {
-                    setTimeout(() => {
-                      mainScrollRef.current?.scrollTo({
-                        y: Math.max(0, quickActionsY - 24),
-                        animated: true,
-                      });
-                    }, Platform.OS === 'android' ? 260 : 120);
-                  }}
-                  placeholder={t('jobs.customMessagePlaceholder')}
-                  placeholderTextColor={colors.secondaryText}
-                  multiline
-                  textAlignVertical="top"
-                  className="min-h-[80px] bg-black/5 dark:bg-white/10"
-                />
-              </View>
-
-              <View className="mt-3 flex-row flex-wrap justify-center">
-                <Pressable
-                  onPress={onCall}
-                  className="mr-2 mt-2 flex-row items-center rounded-3xl bg-black/5 px-4 py-2 dark:bg-white/10">
-                  <Ionicons name="call-outline" size={16} color={colors.text} />
-                  <Text className="ml-2 text-app-meta text-black dark:text-white">{t('jobs.call')}</Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={onSms}
-                  className="mr-2 mt-2 flex-row items-center rounded-3xl bg-[#E8F0FF] px-4 py-2 dark:bg-[#1E2A44]">
-                  <Ionicons name="chatbubble-outline" size={16} color={colors.text} />
-                  <Text className="ml-2 text-app-meta text-black dark:text-white">{t('jobs.sms')}</Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={onViber}
-                  className="mr-2 mt-2 flex-row items-center rounded-3xl bg-[#E8F7EF] px-4 py-2 dark:bg-[#203326]">
-                  <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.text} />
-                  <Text className="ml-2 text-app-meta text-black dark:text-white">{t('jobs.viber')}</Text>
-                </Pressable>
-              </View>
-            </View>
-          ) : (
-            <Text className="mt-2 text-app-meta text-black/60 dark:text-white/70">{t('jobs.noPhone')}</Text>
-          )}
         </View>
-        </View>
-      </ScrollView>
+      </Animated.ScrollView>
       </KeyboardAvoidingView>
       </View>
 
-    <Modal transparent visible={itemModalOpen} animationType="fade" onRequestClose={closeItemModal}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        className="flex-1 justify-end bg-black/35"
-        onLayout={(event) => setItemModalHeight(event.nativeEvent.layout.height)}>
-        <Pressable onPress={closeItemModal} className="absolute inset-0" />
-        <View
-          className="rounded-t-[32px] bg-white px-6 pt-5 dark:bg-[#1C1C1E]"
-          style={{
-            paddingBottom: 24 + insets.bottom,
-            marginBottom: itemSheetKeyboardOffset,
-            maxHeight: itemSheetMaxHeight,
-          }}>
-          <View className="mb-4 flex-row items-center justify-between">
-            <Text className="text-app-section font-extrabold text-[#1C2745] dark:text-white">
-              {editingItem ? t('jobs.invoiceItemsEdit') : t('jobs.invoiceItemsCreate')}
-            </Text>
-            <Pressable
-              onPress={closeItemModal}
-              className="h-10 w-10 items-center justify-center rounded-full bg-black/5 dark:bg-white/10">
-              <Ionicons name="close" size={18} color={colors.text} />
-            </Pressable>
-          </View>
+      <JobDetailFloatingActions actions={floatingActions} />
 
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-            automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 8 }}>
-            <Text className="mb-2 text-app-row font-semibold text-black dark:text-white">
-              {t('jobs.invoiceItemsFieldTitle')}
-            </Text>
-            <AppTextInput value={itemTitle} onChangeText={setItemTitle} placeholder={t('jobs.invoiceItemsFieldTitlePlaceholder')} />
-
-            <Text className="mb-2 mt-4 text-app-row font-semibold text-black dark:text-white">
-              {t('jobs.invoiceItemsFieldUnit')}
-            </Text>
-            <AppTextInput value={itemUnit} onChangeText={setItemUnit} placeholder={t('jobs.invoiceItemsFieldUnitPlaceholder')} />
-
-            <View className="mt-4 flex-row">
-              <View className="mr-3 flex-1">
-                <Text className="mb-2 text-app-row font-semibold text-black dark:text-white">
-                  {t('jobs.invoiceItemsFieldQuantity')}
-                </Text>
-                <AppTextInput
-                  value={itemQuantity}
-                  onChangeText={setItemQuantity}
-                  placeholder="1"
-                  keyboardType="decimal-pad"
-                />
-              </View>
-              <View className="flex-1">
-                <Text className="mb-2 text-app-row font-semibold text-black dark:text-white">
-                  {t('jobs.invoiceItemsFieldUnitPrice')}
-                </Text>
-                <AppTextInput
-                  value={itemUnitPrice}
-                  onChangeText={setItemUnitPrice}
-                  placeholder="0"
-                  keyboardType="decimal-pad"
-                />
-              </View>
-            </View>
-
-            <Pressable
-              onPress={() => {
-                void onSubmitInvoiceItem();
-              }}
-              disabled={itemSubmitting}
-              className="mt-6 items-center rounded-3xl bg-[#1D4ED8] px-4 py-4 disabled:opacity-60">
-              {itemSubmitting ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text className="text-app-row font-semibold text-white">{t('common.save')}</Text>
-              )}
-            </Pressable>
-          </ScrollView>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-
-      <Modal transparent visible={Boolean(previewKind && previewImages.length)} animationType="fade" onRequestClose={onClosePreview}>
+      <Modal transparent visible={previewOpen && previewImages.length > 0} animationType="fade" onRequestClose={onClosePreview}>
         <View className="flex-1 bg-black">
           <View className="absolute left-0 right-0 top-0 z-10 flex-row items-center justify-between px-6" style={{ paddingTop: insets.top + 12 }}>
             <Pressable
@@ -1697,7 +2015,7 @@ export default function JobDetailScreen() {
               className="absolute left-0 right-0 z-10 items-center"
               style={{ top: insets.top + 58 }}>
               <View className="rounded-full bg-black/40 px-4 py-2 border border-white/10">
-                <Text className="text-app-meta font-bold text-white">
+                <Text className="text-app-meta font-semibold text-white">
                   {formatImageDateTime(previewImage.created_at)}
                 </Text>
               </View>
@@ -1732,7 +2050,7 @@ export default function JobDetailScreen() {
           ) : null}
 
           <FlatList
-            key={`${previewKind ?? 'none'}-${previewImages.length}`}
+            key={`images-${previewImages.length}`}
             data={previewImages}
             keyExtractor={(item) => item.id}
             horizontal

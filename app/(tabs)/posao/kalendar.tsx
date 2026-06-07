@@ -1,16 +1,17 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ActivityIndicator, Animated, Pressable, Text, View } from 'react-native';
 
 import Colors from '@/constants/Colors';
-import { MascotEmptyState } from '@/components/MascotEmptyState';
+import { CollapsingMainHeader, MainScreenTitle } from '@/components/CollapsingMainHeader';
+import { JobStatusText } from '@/components/JobStatusText';
 import { useColorScheme } from '@/components/useColorScheme';
 import { parseDateInput } from '@/lib/date';
 import { listJobs, type JobListItem } from '@/lib/jobs';
+import { goBackOrReplace } from '@/lib/navigation';
 import { useAuth } from '@/providers/AuthProvider';
 
 const toDateKey = (date: Date) => {
@@ -29,9 +30,10 @@ export default function JobsCalendarScreen() {
   const { session } = useAuth();
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
-  const insets = useSafeAreaInsets();
+  const scrollY = useRef(new Animated.Value(0)).current;
   const userId = session?.user?.id ?? null;
   const locale = i18n.language === 'sr' ? 'sr-Latn-RS' : i18n.language;
+  const sectionSeparatorColor = colorScheme === 'dark' ? 'rgba(84,84,88,0.38)' : 'rgba(60,60,67,0.14)';
 
   const today = useMemo(() => new Date(), []);
   const [monthCursor, setMonthCursor] = useState(() => startOfMonth(today));
@@ -45,7 +47,7 @@ export default function JobsCalendarScreen() {
     [locale]
   );
   const dayFormatter = useMemo(
-    () => new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'short', year: 'numeric' }),
+    () => new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'long', year: 'numeric' }),
     [locale]
   );
   const weekdayFormatter = useMemo(
@@ -153,7 +155,7 @@ export default function JobsCalendarScreen() {
   }, [monthCursor]);
 
   const onBack = () => {
-    router.replace({ pathname: '/(tabs)/poslovi' as any });
+    goBackOrReplace(router, { pathname: '/(tabs)/poslovi' as any });
   };
 
   const shiftMonth = (offset: number) => {
@@ -172,53 +174,59 @@ export default function JobsCalendarScreen() {
   };
 
   return (
-    <ScrollView
-      stickyHeaderIndices={[0]}
-      className="flex-1 bg-[#F2F2F7] dark:bg-black"
-      contentContainerClassName="pb-20">
-      <View style={{ position: 'relative', zIndex: 20, backgroundColor: colors.background }}>
-        <View className="px-6 pb-6" style={{ paddingTop: insets.top + 12 }}>
-          <View className="flex-row items-center justify-between">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('common.back')}
-              onPress={onBack}
-              className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
-              <Ionicons name="chevron-back" size={20} color={colors.text} />
-            </Pressable>
+    <View className="flex-1 bg-[#F2F2F7] dark:bg-[#1D2229]">
+      <CollapsingMainHeader
+        title={t('jobs.calendarTitle')}
+        iconName="calendar-outline"
+        scrollY={scrollY}
+        left={
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('common.back')}
+            onPress={onBack}
+            hitSlop={8}
+            className="h-11 w-11 items-center justify-center">
+            <Ionicons name="chevron-back" size={25} color="#717983" />
+          </Pressable>
+        }
+        right={
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('jobs.add')}
+            onPress={onScheduleForSelectedDay}
+            disabled={!canScheduleSelectedDate}
+            className="h-10 items-center justify-center rounded-3xl bg-[#007AFF] px-4 disabled:opacity-50 dark:bg-[#0A84FF]">
+            <Text className="text-app-meta-lg font-semibold text-white">
+              {t('jobs.calendarScheduleCta')}
+            </Text>
+          </Pressable>
+        }
+      />
 
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('jobs.add')}
-              onPress={onScheduleForSelectedDay}
-              disabled={!canScheduleSelectedDate}
-              className="h-10 items-center justify-center rounded-3xl bg-[#007AFF] px-5 dark:bg-[#0A84FF]">
-              <Text className={canScheduleSelectedDate ? 'text-app-body font-semibold text-white' : 'text-app-body font-semibold text-white/60'}>
-                {t('jobs.calendarScheduleCta')}
-              </Text>
-            </Pressable>
-          </View>
-
-          <Text className="mt-4 font-bold text-app-display tracking-tight text-black dark:text-white">
-            {t('jobs.calendarTitle')}
-          </Text>
-          <Text className="mt-1 text-app-subtitle text-black/60 dark:text-white/70">
-            {t('jobs.calendarSubtitle')}
-          </Text>
-        </View>
-      </View>
-
-      <View className="px-6 pt-4">
+      <Animated.ScrollView
+        className="flex-1 px-6"
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
+        )}
+        scrollEventThrottle={16}
+        contentContainerStyle={{ paddingBottom: 112 }}>
+        <MainScreenTitle title={t('jobs.calendarTitle')} iconName="calendar-outline" scrollY={scrollY} />
+        <Text className="-mt-4 mb-4 text-app-subtitle text-black/60 dark:text-white/70">
+          {t('jobs.calendarSubtitle')}
+        </Text>
         {error ? <Text className="mb-3 text-app-meta text-red-600">{error}</Text> : null}
 
-        <View className="overflow-hidden rounded-3xl border border-black/10 bg-white/90 px-4 pt-4 pb-2 dark:border-white/10 dark:bg-[#1C1C1E]/90">
-          <View className="flex-row items-center justify-between">
+        <View className="mt-5 flex-row items-center justify-between">
             <Pressable
               onPress={() => shiftMonth(-1)}
               className="h-10 w-10 items-center justify-center rounded-full bg-black/5 dark:bg-white/10">
               <Ionicons name="chevron-back" size={18} color={colors.text} />
             </Pressable>
-            <Text className="text-app-section font-extrabold capitalize text-[#1C2745] dark:text-white">
+            <Text
+              className="text-app-row-title font-semibold capitalize"
+              style={{ color: colorScheme === 'dark' ? '#72A8FF' : '#1C60C3' }}>
               {monthLabel}
             </Text>
             <Pressable
@@ -226,7 +234,8 @@ export default function JobsCalendarScreen() {
               className="h-10 w-10 items-center justify-center rounded-full bg-black/5 dark:bg-white/10">
               <Ionicons name="chevron-forward" size={18} color={colors.text} />
             </Pressable>
-          </View>
+        </View>
+        <View className="mt-2 h-px" style={{ backgroundColor: sectionSeparatorColor }} />
 
           <View className="mt-4 flex-row justify-between">
             {weekdayLabels.map((label) => (
@@ -276,7 +285,7 @@ export default function JobsCalendarScreen() {
                           style={{
                             color: isSelected ? '#FFFFFF' : colors.text,
                             fontSize: 14,
-                            fontWeight: isSelected || isToday ? '700' : '500',
+                            fontWeight: isSelected || isToday ? '600' : '500',
                           }}>
                           {entry.date.getDate()}
                         </Text>
@@ -287,20 +296,22 @@ export default function JobsCalendarScreen() {
               );
             })}
           </View>
-        </View>
 
-        <Text className="mt-5 text-app-section font-extrabold text-[#1C2745] dark:text-white">
+        <Text
+          className="mt-8 text-app-row-title font-semibold"
+          style={{ color: colorScheme === 'dark' ? '#72A8FF' : '#1C60C3' }}>
           {t('jobs.calendarDaySection', { date: selectedDateLabel })}
         </Text>
-        <View className="mt-2 overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/90">
+        <View className="mt-2 h-px" style={{ backgroundColor: sectionSeparatorColor }} />
+        <View style={{ marginLeft: 12, marginTop: 8 }}>
           {loading ? (
             <View className="items-center py-6">
               <ActivityIndicator />
             </View>
           ) : selectedDayJobs.length === 0 ? (
-            <View className="py-4">
-              <MascotEmptyState title={t('jobs.calendarEmptyDayTitle')} body={t('jobs.calendarEmptyDayBody')} compact imageSize={112} />
-            </View>
+            <Text className="px-4 py-3 text-center text-app-meta-lg italic text-black/55 dark:text-white/60">
+              {t('jobs.calendarEmptyDayTitle')}
+            </Text>
           ) : (
             selectedDayJobs.map((job, index) => {
               const statusLabel =
@@ -308,30 +319,31 @@ export default function JobsCalendarScreen() {
                   ? t('jobs.statuses.done')
                   : job.status === 'in_progress'
                     ? t('jobs.statuses.inProgress')
-                    : t('jobs.statuses.scheduled');
+                    : job.status === 'pending'
+                      ? t('jobs.statuses.pending')
+                      : t('jobs.statuses.scheduled');
 
               return (
                 <Pressable
                   key={job.id}
                   onPress={() => router.push(`/(tabs)/posao/${job.id}`)}
-                  className={index > 0 ? 'border-t border-black/10 pt-4 dark:border-white/10' : ''}>
-                  <View className={index > 0 ? 'mt-4' : ''}>
-                    <View className="flex-row items-start justify-between">
-                      <View className="mr-3 flex-1">
-                        <Text className="text-app-row font-extrabold text-[#1C2745] dark:text-white" numberOfLines={1}>
+                  className={index > 0 ? 'mt-4' : ''}>
+                  <View className="flex-row items-center justify-between py-1">
+                    <View className="mr-3 flex-1">
+                      <View className="flex-row items-center">
+                        <Text className="flex-1 text-app-row text-[#1C2745] dark:text-white" numberOfLines={1}>
                           {job.title || t('jobs.untitled')}
                         </Text>
-                        <View className="mt-1 flex-row items-center">
-                          <Ionicons name="person-outline" size={14} color={colors.secondaryText} />
-                          <Text className="ml-2 text-app-meta-lg text-black/60 dark:text-white/70">
-                            {job.client?.name || t('jobs.noClient')}
-                          </Text>
-                          <Text className="mx-2 text-app-meta-lg text-black/30 dark:text-white/30">•</Text>
-                          <Text className="text-app-meta-lg text-black/60 dark:text-white/70">{statusLabel}</Text>
-                        </View>
                       </View>
-                      <Ionicons name="chevron-forward" size={16} color={colors.secondaryText} />
+                      <View className="mt-1 flex-row items-center">
+                        <Ionicons name="person-outline" size={14} color={colors.secondaryText} />
+                        <Text className="ml-2 text-app-meta-lg text-black/60 dark:text-white/70">
+                          {job.client?.name || t('jobs.noClient')}
+                        </Text>
+                      </View>
                     </View>
+                    <JobStatusText label={statusLabel} status={job.status} style={{ marginRight: 10 }} />
+                    <Ionicons name="chevron-forward" size={16} color={colors.secondaryText} />
                   </View>
                 </Pressable>
               );
@@ -341,19 +353,15 @@ export default function JobsCalendarScreen() {
           <Pressable
             onPress={onScheduleForSelectedDay}
             disabled={!canScheduleSelectedDate}
-            className={[
-              'mt-4 flex-row items-center justify-center rounded-2xl py-3',
-              canScheduleSelectedDate ? 'bg-[#E8F0FF] dark:bg-[#1E2A44]' : 'bg-black/5 dark:bg-white/10',
-            ].join(' ')}>
-            <Ionicons name="add-circle-outline" size={18} color={canScheduleSelectedDate ? '#3C69D9' : colors.secondaryText} />
+            className="mt-4 items-center py-2 disabled:opacity-50">
             <Text
-              className="ml-2 text-app-meta-lg font-semibold"
+              className="text-app-meta-lg font-semibold"
               style={{ color: canScheduleSelectedDate ? (colorScheme === 'dark' ? '#8FB2FF' : '#3C69D9') : colors.secondaryText }}>
               {t('jobs.calendarScheduleForDate', { date: selectedDateLabel })}
             </Text>
           </Pressable>
         </View>
-      </View>
-    </ScrollView>
+      </Animated.ScrollView>
+    </View>
   );
 }

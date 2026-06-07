@@ -4,9 +4,12 @@ import { useColorScheme as useNativewindColorScheme } from 'nativewind';
 
 import { getStoredThemePreference, setStoredThemePreference, type AppThemePreference } from '@/lib/theme';
 
+type ResolvedTheme = 'light' | 'dark';
+
 type ThemePreferenceContextValue = {
   ready: boolean;
-  colorScheme: AppThemePreference;
+  colorScheme: ResolvedTheme;
+  themePreference: AppThemePreference;
   setColorScheme: (theme: AppThemePreference) => void;
   reapplyColorScheme: () => void;
   toggleColorScheme: () => void;
@@ -14,18 +17,30 @@ type ThemePreferenceContextValue = {
 
 const ThemePreferenceContext = createContext<ThemePreferenceContextValue | null>(null);
 
-export function ThemePreferenceProvider({ children }: { children: React.ReactNode }) {
+function resolveThemePreference(theme: AppThemePreference): ResolvedTheme {
+  if (theme !== 'system') return theme;
+  return Appearance.getColorScheme() === 'dark' ? 'dark' : 'light';
+}
+
+export function ThemePreferenceProvider({
+  children,
+  initialTheme = 'dark',
+}: {
+  children: React.ReactNode;
+  initialTheme?: AppThemePreference;
+}) {
   const { colorScheme, setColorScheme } = useNativewindColorScheme();
   const [ready, setReady] = useState(false);
-  const [preferredTheme, setPreferredTheme] = useState<AppThemePreference>('light');
-  const preferredRef = useRef<AppThemePreference>('light');
+  const [preferredTheme, setPreferredTheme] = useState<AppThemePreference>(initialTheme);
+  const preferredRef = useRef<AppThemePreference>(initialTheme);
   const reapplyTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const applyTheme = useCallback(
     (theme: AppThemePreference) => {
-      setColorScheme(theme);
+      const resolvedTheme = resolveThemePreference(theme);
+      setColorScheme(resolvedTheme);
       if (typeof Appearance.setColorScheme === 'function') {
-        Appearance.setColorScheme(theme);
+        Appearance.setColorScheme(theme === 'system' ? null : resolvedTheme);
       }
     },
     [setColorScheme]
@@ -63,7 +78,7 @@ export function ThemePreferenceProvider({ children }: { children: React.ReactNod
     (async () => {
       try {
         const stored = await getStoredThemePreference();
-        const nextTheme = stored ?? 'light';
+        const nextTheme = stored ?? initialTheme;
         preferredRef.current = nextTheme;
         setPreferredTheme(nextTheme);
         applyTheme(nextTheme);
@@ -78,7 +93,7 @@ export function ThemePreferenceProvider({ children }: { children: React.ReactNod
     return () => {
       active = false;
     };
-  }, [applyTheme]);
+  }, [applyTheme, initialTheme]);
 
   useEffect(() => {
     return () => {
@@ -93,7 +108,7 @@ export function ThemePreferenceProvider({ children }: { children: React.ReactNod
 
   useEffect(() => {
     if (!ready) return;
-    if (colorScheme !== preferredTheme) {
+    if (colorScheme !== resolveThemePreference(preferredTheme)) {
       scheduleReapplyBurst();
     }
   }, [colorScheme, preferredTheme, ready, scheduleReapplyBurst]);
@@ -123,7 +138,7 @@ export function ThemePreferenceProvider({ children }: { children: React.ReactNod
     };
   }, [ready, scheduleReapplyBurst]);
 
-  const currentScheme: AppThemePreference = preferredTheme;
+  const currentScheme = resolveThemePreference(preferredTheme);
 
   const persistAndSet = useCallback(
     (theme: AppThemePreference) => {
@@ -146,11 +161,12 @@ export function ThemePreferenceProvider({ children }: { children: React.ReactNod
     () => ({
       ready,
       colorScheme: currentScheme,
+      themePreference: preferredTheme,
       setColorScheme: persistAndSet,
       reapplyColorScheme: scheduleReapplyBurst,
       toggleColorScheme,
     }),
-    [currentScheme, persistAndSet, ready, scheduleReapplyBurst, toggleColorScheme]
+    [currentScheme, persistAndSet, preferredTheme, ready, scheduleReapplyBurst, toggleColorScheme]
   );
 
   return <ThemePreferenceContext.Provider value={value}>{children}</ThemePreferenceContext.Provider>;

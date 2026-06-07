@@ -1,9 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
-  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -11,42 +10,36 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
-import { usePlaceholderTextColor } from '@/components/usePlaceholderTextColor';
-import { AppTextInput } from '@/components/AppTextInput';
+import { useColorScheme } from '@/components/useColorScheme';
+import Colors from '@/constants/Colors';
 import { supabase } from '@/lib/supabase';
+
+const INPUT_HEIGHT = 42;
+const FORM_WIDTH = 320;
 
 export default function ResetPasswordScreen() {
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
   const { t } = useTranslation();
+  const colorScheme = useColorScheme() ?? 'light';
+  const isDark = colorScheme === 'dark';
+  const colors = Colors[colorScheme];
   const [email, setEmail] = useState('');
+  const [focused, setFocused] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
-  const [keyboardInset, setKeyboardInset] = useState(0);
-  const placeholderTextColor = usePlaceholderTextColor(submitting);
-  const keyboardOpen = keyboardInset > 0;
-  const scrollRef = useRef<ScrollView>(null);
-  const emailRef = useRef<TextInput>(null);
 
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvent, (event) => {
-      setKeyboardInset(event.endCoordinates.height);
-    });
-    const hideSub = Keyboard.addListener(hideEvent, () => {
-      setKeyboardInset(0);
-    });
-
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
+  const screenBackground = isDark ? colors.background : '#FFFFFF';
+  const titleColor = isDark ? '#F7F7F8' : '#25272C';
+  const bodyColor = isDark ? 'rgba(235,235,245,0.58)' : 'rgba(60,60,67,0.62)';
+  const lineColor = isDark ? 'rgba(255,255,255,0.22)' : 'rgba(60,60,67,0.28)';
+  const placeholderColor = isDark ? 'rgba(235,235,245,0.48)' : 'rgba(60,60,67,0.42)';
 
   const sendReset = async () => {
     setSubmitting(true);
@@ -62,94 +55,106 @@ export default function ResetPasswordScreen() {
     else setInfo(t('auth.resetPassword.sent'));
   };
 
-  const focusEmail = () => {
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        scrollRef.current?.scrollTo({ y: 0, animated: true });
-      }, Platform.OS === 'ios' ? 60 : 120);
-    });
-  };
-
   return (
-    <View className="flex-1 bg-[#F2F2F7] dark:bg-black">
+    <View style={{ flex: 1, backgroundColor: screenBackground }}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}>
-        <View style={{ flex: 1, paddingTop: insets.top + 24, paddingHorizontal: 24, paddingBottom: Math.max(insets.bottom, 16) + 16 }}>
-          <View className="items-center">
-            <Image
-              source={require('../../assets/images/maskotathink.png')}
-              resizeMode="contain"
-              style={{ width: 136, height: 136 }}
-            />
-            <Text className="mt-2 text-center text-app-display font-extrabold text-[#1C2745] dark:text-white">
-              {t('auth.resetPassword.title')}
-            </Text>
-            <Text className="mt-2 max-w-[270px] text-center text-app-subtitle text-black/60 dark:text-white/70">
-              {t('auth.resetPassword.subtitle')}
-            </Text>
-          </View>
-
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          contentContainerStyle={{
+            flexGrow: 1,
+            minHeight: height,
+            paddingHorizontal: 36,
+            paddingTop: insets.top + 86,
+            paddingBottom: Math.max(insets.bottom + 22, 34),
+          }}>
           <View
-            className="mt-6 overflow-hidden rounded-[28px] border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]"
-            style={{ flex: keyboardOpen ? 1 : undefined, minHeight: keyboardOpen ? 0 : undefined }}>
-            <ScrollView
-              ref={scrollRef}
-              style={{ flex: keyboardOpen ? 1 : undefined }}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-              automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
-              contentContainerStyle={{
-                paddingHorizontal: 20,
-                paddingTop: 20,
-                paddingBottom: keyboardInset + 20,
-                flexGrow: keyboardOpen ? 1 : 0,
-              }}>
-              <Text className="text-app-meta font-semibold uppercase tracking-[0.3px] text-black/55 dark:text-white/60">
-                {t('common.email')}
-              </Text>
-              <AppTextInput
-                ref={emailRef}
-                value={email}
-                onChangeText={setEmail}
-                onFocus={focusEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                autoCorrect={false}
-                returnKeyType="done"
-                placeholder={t('auth.placeholders.email')}
-                placeholderMuted={submitting}
-                placeholderTextColor={placeholderTextColor}
-                className="mt-2 rounded-[20px] border border-black/5 bg-[#F6F8FF] px-4 py-3.5 dark:border-white/10 dark:bg-[#232836]"
-              />
+            style={{
+              width: '100%',
+              maxWidth: FORM_WIDTH,
+              alignSelf: 'center',
+              flexGrow: 1,
+              justifyContent: 'space-between',
+            }}>
+            <View>
+              <View>
+                <Text style={{ color: titleColor, fontSize: 28, lineHeight: 34, fontWeight: '500' }}>
+                  {t('auth.resetPassword.title')}
+                </Text>
+                <Text style={{ marginTop: 6, color: bodyColor, fontSize: 16, lineHeight: 22 }}>
+                  {t('auth.resetPassword.subtitle')}
+                </Text>
+              </View>
 
-              {error ? <Text className="mt-3 text-app-meta text-red-500">{error}</Text> : null}
-              {info ? <Text className="mt-3 text-app-meta text-black/60 dark:text-white/70">{info}</Text> : null}
+              <View style={{ marginTop: 52 }}>
+                <TextInput
+                  value={email}
+                  onChangeText={setEmail}
+                  onFocus={() => setFocused(true)}
+                  onBlur={() => setFocused(false)}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  autoCorrect={false}
+                  returnKeyType="done"
+                  placeholder={t('common.email')}
+                  placeholderTextColor={placeholderColor}
+                  selectionColor={colors.tint}
+                  editable={!submitting}
+                  style={{
+                    height: INPUT_HEIGHT,
+                    borderBottomWidth: 0.5,
+                    borderStyle: 'solid',
+                    borderBottomColor: focused ? colors.tint : lineColor,
+                    color: titleColor,
+                    fontSize: 16,
+                    paddingHorizontal: 0,
+                    paddingVertical: 0,
+                  }}
+                />
+              </View>
+
+              {error ? <Text style={{ marginTop: 14, color: '#FF6B6B', fontSize: 13 }}>{error}</Text> : null}
+              {info ? <Text style={{ marginTop: 14, color: bodyColor, fontSize: 13 }}>{info}</Text> : null}
 
               <Pressable
                 disabled={submitting}
                 onPress={sendReset}
-                className="mt-4 items-center justify-center rounded-[20px] py-3.5 disabled:opacity-60"
-                style={{ backgroundColor: '#2F68ED' }}>
+                style={{
+                  marginTop: 32,
+                  height: 44,
+                  borderRadius: 22,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: colors.tint,
+                  opacity: submitting ? 0.72 : 1,
+                }}>
                 {submitting ? (
-                  <ActivityIndicator color="white" />
+                  <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <Text className="text-app-row font-bold text-white">{t('auth.resetPassword.submit')}</Text>
+                  <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '500' }}>
+                    {t('auth.resetPassword.submit')}
+                  </Text>
                 )}
               </Pressable>
+            </View>
 
+            <View style={{ paddingTop: 34, alignItems: 'center' }}>
               <Link href="/(auth)/sign-in" asChild>
-                <Pressable className="mt-2 py-2">
-                  <Text className="text-center text-app-row font-semibold text-[#3C69D9] dark:text-[#8FB2FF]">
+                <Pressable hitSlop={10}>
+                  <Text style={{ color: colors.tint, fontSize: 14, fontWeight: '500', textAlign: 'center' }}>
                     {t('auth.resetPassword.backToSignIn')}
                   </Text>
                 </Pressable>
               </Link>
-            </ScrollView>
+            </View>
           </View>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </View>
   );

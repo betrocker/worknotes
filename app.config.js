@@ -15,7 +15,7 @@ module.exports = () => {
 
   return {
     expo: {
-      name: 'Tefter',
+      name: 'eTefter',
       slug: 'tefter',
       version: '1.0.0',
       orientation: 'default',
@@ -23,9 +23,14 @@ module.exports = () => {
       scheme: 'tefter',
       userInterfaceStyle: 'automatic',
       splash: {
-        image: './assets/images/splash-blank.png',
+        image: './assets/images/splash-logo.png',
         resizeMode: 'contain',
-        backgroundColor: '#0C63E7',
+        backgroundColor: '#1D2229',
+        dark: {
+          image: './assets/images/splash-logo.png',
+          resizeMode: 'contain',
+          backgroundColor: '#1D2229',
+        },
       },
       ios: {
         supportsTablet: true,
@@ -55,9 +60,14 @@ module.exports = () => {
         [
           'expo-splash-screen',
           {
-            image: './assets/images/splash-blank.png',
+            image: './assets/images/splash-logo.png',
             resizeMode: 'contain',
-            backgroundColor: '#0C63E7',
+            backgroundColor: '#1D2229',
+            dark: {
+              image: './assets/images/splash-logo.png',
+              resizeMode: 'contain',
+              backgroundColor: '#1D2229',
+            },
           },
         ],
         'expo-localization',
@@ -65,9 +75,9 @@ module.exports = () => {
           'expo-image-picker',
           {
             photosPermission:
-              'Tefter koristi galeriju za dodavanje slika pre i posle posla, kao i loga firme.',
+              'eTefter koristi galeriju za dodavanje slika pre i posle posla, kao i loga firme.',
             cameraPermission:
-              'Tefter koristi kameru za fotografisanje slika pre i posle posla.',
+              'eTefter koristi kameru za fotografisanje slika pre i posle posla.',
             microphonePermission: false,
           },
         ],

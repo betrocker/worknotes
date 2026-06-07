@@ -19,6 +19,16 @@ export async function listClients(userId: string): Promise<DbClient[]> {
   return data ?? [];
 }
 
+export async function countClients(userId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('clients')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId);
+
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
 type ClientDebtRow = {
   id: string;
   name: string | null;

@@ -1,20 +1,299 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { LinearGradient } from 'expo-linear-gradient';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, Animated, FlatList, Linking, Modal, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Easing, Linking, Modal, PanResponder, Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Colors from '@/constants/Colors';
-import { MascotEmptyState } from '@/components/MascotEmptyState';
+import { EmptyState } from '@/components/EmptyState';
 import { PaymentJobPickerModal } from '@/components/PaymentJobPickerModal';
-import { LargeHeader } from '@/components/LargeHeader';
-import { AppSearchInput } from '@/components/AppSearchInput';
+import { CollapsingMainHeader, MainScreenTitle } from '@/components/CollapsingMainHeader';
+import { useQuickFindSwipeDown } from '@/components/useQuickFindSwipeDown';
 import { useColorScheme } from '@/components/useColorScheme';
 import { listClientOpenDebtJobs, listClientsWithDebt, type ClientOpenDebtJob, type ClientWithDebt } from '@/lib/clients';
+import { setMainFloatingActionsHidden } from '@/lib/floating-actions-visibility';
+import { goBackOrReplace } from '@/lib/navigation';
+import { triggerSelectionHaptic } from '@/lib/haptics';
 import { useAuth } from '@/providers/AuthProvider';
+
+type ClientSwipeSelectRowProps = {
+  item: ClientWithDebt;
+  selected: boolean;
+  selectionMode: boolean;
+  colors: typeof Colors.light;
+  colorScheme: 'light' | 'dark';
+  paymentLabel: string;
+  formatJobsLabel: (count: number) => string;
+  formatMoney: Intl.NumberFormat;
+  onOpen: (item: ClientWithDebt) => void;
+  onToggleSelected: (item: ClientWithDebt) => void;
+  onAddPayment: (item: ClientWithDebt) => void;
+};
+
+const CLIENT_SELECT_SWIPE_THRESHOLD = 36;
+const CLIENT_SELECT_SWIPE_MAX = 56;
+const CLIENT_SELECT_GESTURE_START = 3;
+const CLIENT_SELECT_HORIZONTAL_BIAS = 0.72;
+
+function ClientSelectionCircle({ selected, colorScheme }: { selected: boolean; colorScheme: 'light' | 'dark' }) {
+  const accent = colorScheme === 'dark' ? '#72A8FF' : '#1C60C3';
+  return (
+    <View
+      style={{
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+        borderWidth: 1.5,
+        borderColor: selected ? accent : colorScheme === 'dark' ? 'rgba(255,255,255,0.36)' : 'rgba(60,60,67,0.28)',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+      {selected ? (
+        <View
+          style={{
+            width: 11,
+            height: 11,
+            borderRadius: 5.5,
+            backgroundColor: accent,
+          }}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function ClientSwipeSelectRow({
+  item,
+  selected,
+  selectionMode,
+  colors,
+  colorScheme,
+  paymentLabel,
+  formatJobsLabel,
+  formatMoney,
+  onOpen,
+  onToggleSelected,
+  onAddPayment,
+}: ClientSwipeSelectRowProps) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const circleProgress = useRef(new Animated.Value(selectionMode ? 1 : 0)).current;
+  const maxSwipeDistanceRef = useRef(0);
+  const currentSwipeDistanceRef = useRef(0);
+  const suppressOpenRef = useRef(false);
+  const [swiping, setSwiping] = useState(false);
+
+  useEffect(() => {
+    Animated.spring(circleProgress, {
+      toValue: selectionMode ? 1 : 0,
+      useNativeDriver: true,
+      damping: 18,
+      stiffness: 220,
+      mass: 0.8,
+    }).start();
+  }, [circleProgress, selectionMode]);
+
+  const resetSwipe = useCallback(() => {
+    const duration = Math.min(190, Math.max(90, currentSwipeDistanceRef.current * 2.8));
+    Animated.timing(translateX, {
+      toValue: 0,
+      duration,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        setSwiping(false);
+        maxSwipeDistanceRef.current = 0;
+        currentSwipeDistanceRef.current = 0;
+      }
+    });
+  }, [translateX]);
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponderCapture: (_, gesture) =>
+          gesture.dx < -CLIENT_SELECT_GESTURE_START &&
+          Math.abs(gesture.dx) > Math.abs(gesture.dy) * CLIENT_SELECT_HORIZONTAL_BIAS,
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          gesture.dx < -CLIENT_SELECT_GESTURE_START &&
+          Math.abs(gesture.dx) > Math.abs(gesture.dy) * CLIENT_SELECT_HORIZONTAL_BIAS,
+        onPanResponderGrant: () => {
+          maxSwipeDistanceRef.current = 0;
+          currentSwipeDistanceRef.current = 0;
+          suppressOpenRef.current = false;
+          setSwiping(true);
+        },
+        onPanResponderMove: (_, gesture) => {
+          const rawNext = Math.min(0, gesture.dx);
+          const distance = Math.abs(rawNext);
+          if (distance > 6) {
+            suppressOpenRef.current = true;
+          }
+          maxSwipeDistanceRef.current = Math.max(maxSwipeDistanceRef.current, distance);
+          currentSwipeDistanceRef.current = distance;
+          const next =
+            distance > CLIENT_SELECT_SWIPE_MAX
+              ? -(CLIENT_SELECT_SWIPE_MAX + (distance - CLIENT_SELECT_SWIPE_MAX) * 0.18)
+              : rawNext;
+          translateX.setValue(next);
+        },
+        onPanResponderRelease: (_, gesture) => {
+          const shouldSelect = maxSwipeDistanceRef.current > CLIENT_SELECT_SWIPE_THRESHOLD || gesture.vx < -0.55;
+          if (shouldSelect) {
+            onToggleSelected(item);
+          }
+          resetSwipe();
+        },
+        onPanResponderTerminate: resetSwipe,
+        onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => true,
+      }),
+    [item, onToggleSelected, resetSwipe, translateX]
+  );
+
+  const circleOpacity = circleProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+  const circleScale = circleProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.86, 1],
+  });
+  const revealOpacity = translateX.interpolate({
+    inputRange: [-24, 0],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+  const revealTranslateX = translateX.interpolate({
+    inputRange: [-CLIENT_SELECT_SWIPE_MAX, 0],
+    outputRange: [0, 16],
+    extrapolate: 'clamp',
+  });
+  const revealScale = translateX.interpolate({
+    inputRange: [-CLIENT_SELECT_SWIPE_MAX, -16, 0],
+    outputRange: [1, 0.92, 0.86],
+    extrapolate: 'clamp',
+  });
+  const selectedRowBackground = colorScheme === 'dark' ? 'rgba(47, 105, 190, 0.26)' : '#D5E5FF';
+  const activeRowBackground = colorScheme === 'dark' ? '#30333A' : '#E4E6EA';
+  const movingRowBackground = swiping ? activeRowBackground : 'transparent';
+  const revealBackgroundColor = colorScheme === 'dark' ? '#315FAD' : '#1C60C3';
+  const secondaryText = item.phone || item.address || formatJobsLabel(item.jobs_count);
+
+  return (
+    <Animated.View
+      {...panResponder.panHandlers}
+      className="flex-row items-center"
+      style={{ marginVertical: 1, borderRadius: 12 }}>
+      {selected ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: -12,
+            right: -12,
+            bottom: 0,
+            borderRadius: 12,
+            backgroundColor: selectedRowBackground,
+          }}
+        />
+      ) : null}
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          bottom: 0,
+          width: 78,
+          paddingRight: 10,
+          borderRadius: 12,
+          backgroundColor: revealBackgroundColor,
+          opacity: revealOpacity,
+          alignItems: 'flex-end',
+          justifyContent: 'center',
+          transform: [{ translateX: revealTranslateX }, { scale: revealScale }],
+        }}>
+        <Ionicons name="checkbox-outline" size={22} color="#FFFFFF" />
+      </Animated.View>
+      <Animated.View
+        className="flex-1 flex-row items-center"
+        style={{
+          marginHorizontal: -8,
+          paddingHorizontal: 8,
+          paddingVertical: 5,
+          borderRadius: 12,
+          backgroundColor: movingRowBackground,
+          transform: [{ translateX }],
+        }}>
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel={item.name || '-'}
+          onPress={() => {
+            if (suppressOpenRef.current) {
+              suppressOpenRef.current = false;
+              return;
+            }
+            onOpen(item);
+          }}
+          className="flex-1">
+          <View className="flex-row items-center justify-between">
+            <View style={{ marginRight: 12, flex: 1 }}>
+              <Text style={{ color: colors.text, fontSize: 16, fontWeight: '400' }} numberOfLines={1}>
+                {item.name || '-'}
+              </Text>
+              <View style={{ marginTop: -1, flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={{ color: colors.secondaryText, fontSize: 12 }} numberOfLines={1}>
+                  {secondaryText}
+                </Text>
+              </View>
+            </View>
+
+            {item.debt > 0 ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={paymentLabel}
+                hitSlop={8}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  onAddPayment(item);
+                }}
+                className="items-end">
+                <Text
+                  className="text-app-row font-semibold"
+                  style={{ color: colorScheme === 'dark' ? '#FF8A8A' : '#C84D4D' }}
+                  numberOfLines={1}>
+                  {formatMoney.format(item.debt)}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </Pressable>
+
+        <Animated.View
+          style={{
+            width: selectionMode ? 34 : 0,
+            opacity: circleOpacity,
+            alignItems: 'flex-end',
+            transform: [{ scale: circleScale }],
+          }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected }}
+            disabled={!selectionMode}
+            onPress={() => onToggleSelected(item)}
+            hitSlop={8}
+            className="items-end justify-center">
+            <ClientSelectionCircle selected={selected} colorScheme={colorScheme} />
+          </Pressable>
+        </Animated.View>
+      </Animated.View>
+    </Animated.View>
+  );
+}
 
 function getSerbianPluralForm(count: number) {
   const abs = Math.abs(count);
@@ -33,22 +312,45 @@ export default function KlijentiScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const quickFindSwipe = useQuickFindSwipeDown();
 
   const userId = session?.user?.id ?? null;
 
   const [items, setItems] = useState<ClientWithDebt[]>([]);
-  const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<'all' | 'debt'>('all');
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [contactClient, setContactClient] = useState<ClientWithDebt | null>(null);
   const [paymentPicker, setPaymentPicker] = useState<{ clientName: string | null; jobs: ClientOpenDebtJob[] } | null>(null);
-  const [segmentWidth, setSegmentWidth] = useState(0);
-  const [listViewportHeight, setListViewportHeight] = useState(0);
-  const [listContentHeight, setListContentHeight] = useState(0);
-  const [listCanScroll, setListCanScroll] = useState(false);
-  const [showScrollHint, setShowScrollHint] = useState(false);
-  const segmentTranslateX = React.useRef(new Animated.Value(0)).current;
+  const selectionMode = selectedClientId != null;
+  const singleSelectedClient = useMemo(
+    () => items.find((item) => item.id === selectedClientId) ?? null,
+    [items, selectedClientId]
+  );
+  const canContactSelectedClient = Boolean(singleSelectedClient?.phone);
+  const canMapSelectedClient = Boolean(singleSelectedClient?.address?.trim());
+  const selectionBarProgress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    setSelectedClientId((current) => (current && items.some((item) => item.id === current) ? current : null));
+  }, [items]);
+
+  useEffect(() => {
+    Animated.spring(selectionBarProgress, {
+      toValue: selectionMode ? 1 : 0,
+      useNativeDriver: true,
+      damping: 18,
+      stiffness: 220,
+      mass: 0.82,
+    }).start();
+  }, [selectionBarProgress, selectionMode]);
+
+  useEffect(() => {
+    setMainFloatingActionsHidden(selectionMode);
+    return () => setMainFloatingActionsHidden(false);
+  }, [selectionMode]);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -72,19 +374,10 @@ export default function KlijentiScreen() {
 
   const locale = i18n.language === 'sr' ? 'sr-Latn-RS' : i18n.language;
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return items
-      .filter((c) => {
-      if (filter === 'debt' && c.debt <= 0) return false;
-      const name = (c.name ?? '').toLowerCase();
-      const phone = (c.phone ?? '').toLowerCase();
-      const note = (c.note ?? '').toLowerCase();
-      if (!q) return true;
-      return name.includes(q) || phone.includes(q) || note.includes(q);
-      })
-      .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', locale, { sensitivity: 'base' }));
-  }, [filter, items, locale, query]);
+  const sortedClients = useMemo(
+    () => [...items].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', locale, { sensitivity: 'base' })),
+    [items, locale]
+  );
 
   const formatMoney = useMemo(
     () =>
@@ -166,17 +459,6 @@ export default function KlijentiScreen() {
     [router, t, userId]
   );
 
-  const onContact = useCallback(
-    (client: ClientWithDebt) => {
-      if (!client.phone) {
-        Alert.alert(t('jobs.noPhone'));
-        return;
-      }
-      setContactClient(client);
-    },
-    [t]
-  );
-
   const onCloseContactModal = useCallback(() => {
     setContactClient(null);
   }, []);
@@ -184,10 +466,6 @@ export default function KlijentiScreen() {
   const onClosePaymentPicker = useCallback(() => {
     setPaymentPicker(null);
   }, []);
-
-  const onAdd = () => {
-    router.push({ pathname: '/(tabs)/klijent/new' as any });
-  };
 
   const clientsWithDebt = useMemo(() => items.filter((c) => c.debt > 0).length, [items]);
   const formatClientsShortLabel = useCallback(
@@ -211,322 +489,317 @@ export default function KlijentiScreen() {
     [i18n.language, t]
   );
   const headerSubtitle = `${formatClientsShortLabel(items.length)} • ${formatDebtsShortLabel(clientsWithDebt)}`;
-  const clientFilters = useMemo(
-    () => [
-      { key: 'all' as const, label: t('clients.filters.all') },
-      { key: 'debt' as const, label: t('clients.filters.debt') },
-    ],
-    [t]
-  );
-  const activeFilterIndex = Math.max(
-    0,
-    clientFilters.findIndex((chip) => chip.key === filter)
+  const sectionSeparatorColor = colorScheme === 'dark' ? 'rgba(84,84,88,0.38)' : 'rgba(60,60,67,0.14)';
+  const primaryActionColor = colorScheme === 'dark' ? '#72A8FF' : '#1C60C3';
+  const isDark = colorScheme === 'dark';
+  const contactModalWidth = Math.max(280, Math.round(windowWidth * 0.8));
+  const contactModalMaxHeight = Math.max(260, Math.min(420, Math.round(windowHeight * 0.6)));
+  const modalBackgroundColor = isDark ? Colors.dark.menuSurface : '#FFFFFF';
+  const modalBorderColor = isDark ? 'rgba(255,255,255,0.18)' : 'rgba(60,60,67,0.12)';
+  const modalBackdropColor = isDark ? 'rgba(0,0,0,0.42)' : 'rgba(16,24,40,0.22)';
+
+  const openClient = useCallback(
+    (item: ClientWithDebt) => {
+      router.push({ pathname: '/(tabs)/klijent/[id]' as any, params: { id: item.id } });
+    },
+    [router]
   );
 
-  React.useEffect(() => {
-    if (!segmentWidth) return;
-    Animated.timing(segmentTranslateX, {
-      toValue: activeFilterIndex * segmentWidth,
-      duration: 180,
-      useNativeDriver: true,
-    }).start();
-  }, [activeFilterIndex, segmentTranslateX, segmentWidth]);
+  const toggleSelectedClient = useCallback((item: ClientWithDebt) => {
+    triggerSelectionHaptic();
+    setSelectedClientId((current) => (current === item.id ? null : item.id));
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setSelectedClientId(null);
+  }, []);
+
+  const onContactSelected = useCallback(() => {
+    if (!singleSelectedClient?.phone) return;
+    clearSelection();
+    setContactClient(singleSelectedClient);
+  }, [clearSelection, singleSelectedClient]);
+
+  const onOpenSelectedClientMap = useCallback(() => {
+    const address = singleSelectedClient?.address?.trim();
+    if (!address) {
+      Alert.alert(t('clients.noAddressTitle'), t('clients.noAddressBody'));
+      return;
+    }
+    clearSelection();
+    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+    void openUrl(url);
+  }, [clearSelection, openUrl, singleSelectedClient?.address, t]);
+
+  const renderClientRow = (item: ClientWithDebt) => (
+    <ClientSwipeSelectRow
+      key={item.id}
+      item={item}
+      selected={selectedClientId === item.id}
+      selectionMode={selectionMode}
+      colors={colors}
+      colorScheme={colorScheme}
+      paymentLabel={t('jobs.payment')}
+      formatJobsLabel={formatClientsShortLabel}
+      formatMoney={formatMoney}
+      onOpen={openClient}
+      onToggleSelected={toggleSelectedClient}
+      onAddPayment={onAddPayment}
+    />
+  );
+
+  const renderClientSection = (title: string, clients: ClientWithDebt[], emptyTitle: string, emptyBody?: string) => (
+    <View style={{ marginBottom: 22 }}>
+      <Text
+        className="text-app-row-title font-semibold"
+        style={{ color: colorScheme === 'dark' ? '#72A8FF' : '#1C60C3' }}>
+        {title}
+      </Text>
+      <View
+        className="mt-2 h-px"
+        style={{ backgroundColor: sectionSeparatorColor }}
+      />
+      <View style={{ marginLeft: 12, marginTop: 8 }}>
+        {clients.length > 0 ? (
+          clients.map((item) => renderClientRow(item))
+        ) : (
+          <EmptyState
+            title={emptyTitle}
+            body={emptyBody}
+            compact
+          />
+        )}
+      </View>
+    </View>
+  );
 
   return (
-    <View className="flex-1 bg-[#F2F2F7] dark:bg-black">
-      <LargeHeader
+    <View className="flex-1 bg-[#F2F2F7] dark:bg-[#1D2229]">
+      <CollapsingMainHeader
         title={t('tabs.clients')}
-        subtitle={headerSubtitle}
+        iconName="people-outline"
+        scrollY={scrollY}
+        left={
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('common.back')}
+            onPress={() => goBackOrReplace(router, '/(tabs)' as any)}
+            hitSlop={8}
+            className="h-11 w-11 items-center justify-center">
+            <Ionicons name="chevron-back" size={25} color="#717983" />
+          </Pressable>
+        }
         right={
           <View className="flex-row items-center">
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={t('clients.add')}
-              onPress={onAdd}
-              className="mr-3 h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-[#1C1C1E]/70">
-              <Ionicons name="add" size={22} color={colors.text} />
+              accessibilityLabel={t('tabs.profile')}
+              onPress={() => router.push('/(tabs)/podesavanja' as any)}
+              hitSlop={8}
+              style={{
+                width: 38,
+                height: 38,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+              <Ionicons name="person-outline" size={20} color="#717983" />
             </Pressable>
           </View>
         }
       />
 
-      <View className="flex-1 px-6 pt-2">
-        <AppSearchInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder={t('clients.searchPlaceholder')}
-        />
-
-        <View
-          className="mt-3 flex-row rounded-[18px] p-0.5"
-          style={{ backgroundColor: colorScheme === 'dark' ? '#141416' : '#ECECF0' }}>
-          {segmentWidth > 0 ? (
-            <Animated.View
-              pointerEvents="none"
-              style={{
-                position: 'absolute',
-                top: 2,
-                bottom: 2,
-                left: 2,
-                width: segmentWidth,
-                borderRadius: 14,
-                backgroundColor: colorScheme === 'dark' ? '#2C2C2E' : '#FFFFFF',
-                shadowColor: '#000000',
-                shadowOpacity: colorScheme === 'dark' ? 0.18 : 0.08,
-                shadowRadius: 6,
-                shadowOffset: { width: 0, height: 2 },
-                elevation: 2,
-                transform: [{ translateX: segmentTranslateX }],
-              }}
-            />
-          ) : null}
-          {clientFilters.map((chip) => {
-            const selected = filter === chip.key;
-            return (
-              <Pressable
-                key={chip.key}
-                onPress={() => setFilter(chip.key)}
-                className="flex-1 rounded-[14px] px-3 py-2"
-                onLayout={(event) => {
-                  const width = event.nativeEvent.layout.width;
-                  if (!segmentWidth && width > 0) {
-                    setSegmentWidth(width);
-                  }
-                }}>
-                <Text
-                  className={selected ? 'text-app-meta-lg font-semibold' : 'text-app-meta-lg'}
-                  style={{
-                    textAlign: 'center',
-                    color: selected
-                      ? colors.text
-                      : colorScheme === 'dark'
-                        ? 'rgba(255,255,255,0.68)'
-                        : 'rgba(0,0,0,0.58)',
-                  }}>
-                  {chip.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+      <Animated.ScrollView
+        className="flex-1 px-6"
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true, listener: quickFindSwipe.onScroll }
+        )}
+        {...quickFindSwipe.touchHandlers}
+        refreshControl={quickFindSwipe.refreshControl}
+        scrollEventThrottle={16}
+        contentContainerStyle={{ paddingBottom: 148 }}>
+        <MainScreenTitle title={t('tabs.clients')} iconName="people-outline" scrollY={scrollY} />
+        <Text className="-mt-4 mb-4 text-app-subtitle text-black/60 dark:text-white/70">
+          {headerSubtitle}
+        </Text>
 
         {error ? <Text className="mt-3 text-app-meta text-red-600">{error}</Text> : null}
 
-        <View
-          className="mt-4 flex-1 overflow-hidden rounded-[24px]"
-          style={{
-            backgroundColor: colorScheme === 'dark' ? '#1C1C1E' : '#FFFFFF',
-            marginBottom: Math.max(insets.bottom, 12) + 96,
-          }}>
+        <View style={{ marginTop: 24 }}>
           {loading ? (
-            <View className="items-center py-6">
+            <View className="items-center py-8">
               <ActivityIndicator />
             </View>
           ) : (
-            <FlatList
-              className="flex-1"
-              data={filtered}
-              keyExtractor={(item) => item.id}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 80 }}
-              onLayout={(event) => {
-                const visibleHeight = event.nativeEvent.layout.height;
-                setListViewportHeight(visibleHeight);
-                const canScroll = listContentHeight > visibleHeight + 92;
-                setListCanScroll(canScroll);
-                setShowScrollHint(canScroll);
-              }}
-              onContentSizeChange={(_, contentHeight) => {
-                setListContentHeight(contentHeight);
-                const canScroll = contentHeight > listViewportHeight + 92;
-                setListCanScroll(canScroll);
-                setShowScrollHint(canScroll);
-              }}
-              onScroll={(event) => {
-                const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-                const remaining = contentSize.height - (contentOffset.y + layoutMeasurement.height);
-                const canScroll = contentSize.height > layoutMeasurement.height + 92;
-                setListCanScroll(canScroll);
-                setShowScrollHint(canScroll && remaining > 92);
-              }}
-              scrollEventThrottle={16}
-              ListEmptyComponent={() => (
-                <MascotEmptyState
-                  title={t('clients.emptyTitle')}
-                  body={t('clients.emptyBody')}
-                  actionLabel={t('clients.add')}
-                  onAction={onAdd}
-                  stacked
-                  centeredAction
-                  imageSize={164}
-                />
-              )}
-              ListHeaderComponent={filtered.length > 0 ? <View className="h-3" /> : null}
-              ListFooterComponent={filtered.length > 0 ? <View className="h-3" /> : null}
-              renderItem={({ item, index }) => {
-                const dividerColor =
-                  colorScheme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(60,60,67,0.10)';
-                return (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={item.name || '-'}
-                    onPress={() =>
-                      router.push({ pathname: '/(tabs)/klijent/[id]' as any, params: { id: item.id } })
-                    }
-                    android_ripple={{
-                      color: colorScheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-                    }}
-                    className="px-4 py-4"
-                    style={{
-                      backgroundColor: colorScheme === 'dark' ? '#1C1C1E' : '#FFFFFF',
-                      borderTopWidth: index > 0 ? 1 : 0,
-                      borderTopColor: dividerColor,
-                    }}>
-                    <View className="flex-row items-start justify-between">
-                      <View className="mr-3 flex-1">
-                        <Text
-                          className="text-app-row-lg font-bold text-[#1C2745] dark:text-white"
-                          numberOfLines={1}>
-                          {item.name || '-'}
-                        </Text>
-                      </View>
-
-                      {item.debt > 0 ? (
-                        <Text className="ml-3 text-app-meta-lg text-red-600 dark:text-red-400">
-                          {t('clients.debt')}:{' '}
-                          <Text className="font-semibold">{formatMoney.format(item.debt)}</Text>
-                        </Text>
-                      ) : null}
-                    </View>
-
-                    <View className="mt-0.5 flex-row items-center justify-between">
-                      <View className="mr-4 flex-1 flex-row items-center">
-                        {item.phone ? (
-                          <Text
-                            className="text-app-meta-lg text-black/60 dark:text-white/70"
-                            numberOfLines={1}>
-                            {item.phone}
-                          </Text>
-                        ) : item.address ? (
-                          <Text
-                            className="text-app-meta-lg text-black/60 dark:text-white/70"
-                            numberOfLines={1}>
-                            {item.address}
-                          </Text>
-                        ) : null}
-                      </View>
-
-                      <View className="flex-row items-center">
-                        <Pressable
-                          onPress={() => onContact(item)}
-                          hitSlop={6}
-                          accessibilityRole="button"
-                          accessibilityLabel={t('clients.contact')}
-                          className="mr-2 flex-row items-center rounded-full bg-black/[0.04] px-3 py-1.5 dark:bg-white/[0.06]">
-                          <Ionicons
-                            name="chatbubble-ellipses-outline"
-                            size={14}
-                            color={colors.secondaryText}
-                          />
-                          <Text className="ml-1.5 text-app-meta-lg font-medium text-black/75 dark:text-white/80">
-                            {t('clients.contact')}
-                          </Text>
-                        </Pressable>
-
-                        {item.debt > 0 ? (
-                          <Pressable
-                            onPress={() => onAddPayment(item)}
-                            hitSlop={6}
-                            accessibilityRole="button"
-                            accessibilityLabel={t('jobs.payment')}
-                            className="flex-row items-center rounded-full bg-[#EAF1FF] px-3 py-1.5 dark:bg-[#243149]">
-                            <Ionicons
-                              name="wallet-outline"
-                              size={14}
-                              color={colorScheme === 'dark' ? '#8FB2FF' : '#2F68ED'}
-                            />
-                            <Text
-                              className="ml-1.5 text-app-meta-lg font-medium"
-                              style={{ color: colorScheme === 'dark' ? '#8FB2FF' : '#2F68ED' }}>
-                              {t('jobs.payment')}
-                            </Text>
-                          </Pressable>
-                        ) : null}
-                      </View>
-                    </View>
-                  </Pressable>
-                );
-              }}
-            />
+            renderClientSection(
+              t('clients.allClients'),
+              sortedClients,
+              t('clients.emptyTitle'),
+              t('clients.emptyBody')
+            )
           )}
-          {!loading && listCanScroll && showScrollHint ? (
-            <>
-              <LinearGradient
-                pointerEvents="none"
-                colors={
-                  colorScheme === 'dark'
-                    ? (['rgba(28,28,30,0)', 'rgba(28,28,30,0.78)', 'rgba(28,28,30,0.98)'] as const)
-                    : (['rgba(255,255,255,0)', 'rgba(255,255,255,0.78)', 'rgba(255,255,255,0.98)'] as const)
-                }
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  height: 46,
-                }}
-              />
-              <View
-                pointerEvents="none"
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  right: 0,
-                  bottom: 8,
-                  alignItems: 'center',
-                }}>
-                <View
-                  className="h-6 w-6 items-center justify-center rounded-full"
-                  style={{
-                    backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(60,60,67,0.08)',
-                  }}>
-                  <Ionicons name="chevron-down" size={14} color={colors.secondaryText} />
-                </View>
-              </View>
-            </>
-          ) : null}
         </View>
-      </View>
+      </Animated.ScrollView>
+
+      <Animated.View
+        pointerEvents={selectionMode ? 'auto' : 'none'}
+        style={{
+          position: 'absolute',
+          top: Math.max(insets.top + 8, 18),
+          right: 20,
+          zIndex: 70,
+          elevation: 0,
+          opacity: selectionBarProgress,
+          transform: [
+            {
+              translateY: selectionBarProgress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-10, 0],
+              }),
+            },
+          ],
+        }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('common.close')}
+          onPress={clearSelection}
+          style={{
+            minHeight: 38,
+            borderRadius: 19,
+            borderWidth: 1,
+            borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.24)' : 'rgba(255,255,255,0.68)',
+            backgroundColor: primaryActionColor,
+            shadowOpacity: 0,
+            elevation: 0,
+            paddingHorizontal: 14,
+            flexDirection: 'row',
+            alignItems: 'center',
+          }}>
+          <Text className="text-app-subtitle font-semibold" style={{ color: '#FFFFFF' }}>
+            {t('common.close')}
+          </Text>
+        </Pressable>
+      </Animated.View>
+
+      <Animated.View
+        pointerEvents={selectionMode ? 'auto' : 'none'}
+        style={{
+          position: 'absolute',
+          left: 24,
+          right: 24,
+          bottom: Math.max(insets.bottom + 18, 24),
+          zIndex: 60,
+          elevation: 0,
+          opacity: selectionBarProgress,
+          transform: [
+            {
+              translateY: selectionBarProgress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [24, 0],
+              }),
+            },
+          ],
+        }}>
+        <View
+          style={{
+            minHeight: 48,
+            borderRadius: 24,
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.24)',
+            backgroundColor: 'rgba(56,64,76,0.9)',
+            shadowOpacity: 0,
+            elevation: 0,
+            paddingHorizontal: 14,
+            flexDirection: 'row',
+            alignItems: 'center',
+          }}>
+          <View className="flex-1 flex-row items-center justify-between">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('clients.contact')}
+              disabled={!canContactSelectedClient}
+              onPress={onContactSelected}
+              className="min-h-[42px] flex-1 flex-row items-center justify-center rounded-full px-1 disabled:opacity-35">
+              <Ionicons name="call-outline" size={17} color="#FFFFFF" />
+              <Text className="ml-1.5 text-app-row-lg font-semibold" style={{ color: '#FFFFFF' }} numberOfLines={1}>
+                {t('clients.contact')}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('clients.newJob')}
+              className="min-h-[42px] flex-1 flex-row items-center justify-center rounded-full px-1 disabled:opacity-35">
+              <Ionicons name="briefcase-outline" size={17} color="#FFFFFF" />
+              <Text className="ml-1.5 text-app-row-lg font-semibold" style={{ color: '#FFFFFF' }} numberOfLines={1}>
+                {t('clients.newJob')}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('clients.map')}
+              disabled={!canMapSelectedClient}
+              onPress={onOpenSelectedClientMap}
+              className="min-h-[42px] flex-1 flex-row items-center justify-center rounded-full px-1 disabled:opacity-35">
+              <Ionicons name="map-outline" size={17} color="#FFFFFF" />
+              <Text className="ml-1.5 text-app-row-lg font-semibold" style={{ color: '#FFFFFF' }} numberOfLines={1}>
+                {t('clients.map')}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Animated.View>
 
       <Modal transparent visible={Boolean(contactClient)} animationType="fade" onRequestClose={onCloseContactModal}>
-        <View className="flex-1 items-center justify-center bg-black/35 px-6">
+        <View className="flex-1 items-center justify-center" style={{ backgroundColor: modalBackdropColor }}>
           <Pressable onPress={onCloseContactModal} className="absolute inset-0" />
-          <View className="w-full max-w-[360px] overflow-hidden rounded-3xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-[#1C1C1E]">
-            <View className="flex-row items-center justify-between">
-              <Text className="text-app-row-lg font-semibold text-black dark:text-white" numberOfLines={1}>
-                {contactClient?.name || t('clients.contact')}
-              </Text>
-              <Pressable
-                onPress={onCloseContactModal}
-                className="h-8 w-8 items-center justify-center rounded-full bg-black/5 dark:bg-white/10">
-                <Ionicons name="close" size={18} color={colors.text} />
-              </Pressable>
+          <View
+            style={{
+              width: contactModalWidth,
+              maxHeight: contactModalMaxHeight,
+              borderRadius: 30,
+              borderWidth: 1,
+              borderColor: modalBorderColor,
+              overflow: 'hidden',
+              backgroundColor: modalBackgroundColor,
+            }}>
+            <View style={{ height: 64, backgroundColor: modalBackgroundColor }}>
+              <View className="h-full flex-row items-center justify-between px-4">
+                <View className="h-9 w-9" />
+                <Text className="flex-1 text-center text-app-row-title font-semibold" style={{ color: colors.text }} numberOfLines={1}>
+                  {contactClient?.name || t('clients.contact')}
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('common.close')}
+                  onPress={onCloseContactModal}
+                  hitSlop={8}
+                  className="h-9 w-9 items-center justify-center rounded-full"
+                  style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(60,60,67,0.08)' }}>
+                  <Ionicons name="close" size={19} color={colors.text} />
+                </Pressable>
+              </View>
             </View>
 
-            {contactClient?.phone ? (
-              <Text className="mt-1 text-app-meta-lg text-black/55 dark:text-white/65">{contactClient.phone}</Text>
-            ) : null}
+            <View className="px-4 pb-5">
+              {contactClient?.phone ? (
+                <Text className="mb-3 text-center text-app-meta-lg" style={{ color: colors.secondaryText }} numberOfLines={1}>
+                  {contactClient.phone}
+                </Text>
+              ) : null}
 
-            <View className="mt-4 flex-row">
               <Pressable
                 onPress={() => {
                   if (!contactClient?.phone) return;
                   onCloseContactModal();
                   onCall(contactClient.phone);
                 }}
-                className="mr-2 flex-1 flex-row items-center justify-center rounded-2xl bg-black/[0.045] py-3 dark:bg-white/[0.08]">
-                <Ionicons name="call-outline" size={16} color={colors.text} />
-                <Text className="ml-2 text-app-meta-lg font-medium text-black/80 dark:text-white/85">{t('jobs.call')}</Text>
+                className="flex-row items-center py-2.5">
+                <Ionicons name="call-outline" size={18} color={colors.accent} />
+                <Text className="ml-3 flex-1 text-base font-medium" style={{ color: colors.text }}>
+                  {t('jobs.call')}
+                </Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.secondaryText} />
               </Pressable>
 
               <Pressable
@@ -535,9 +808,12 @@ export default function KlijentiScreen() {
                   onCloseContactModal();
                   onSms(contactClient.phone);
                 }}
-                className="mr-2 flex-1 flex-row items-center justify-center rounded-2xl bg-black/[0.045] py-3 dark:bg-white/[0.08]">
-                <Ionicons name="chatbubble-outline" size={16} color={colors.text} />
-                <Text className="ml-2 text-app-meta-lg font-medium text-black/80 dark:text-white/85">{t('jobs.sms')}</Text>
+                className="flex-row items-center py-2.5">
+                <Ionicons name="chatbubble-outline" size={18} color={colors.accent} />
+                <Text className="ml-3 flex-1 text-base font-medium" style={{ color: colors.text }}>
+                  {t('jobs.sms')}
+                </Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.secondaryText} />
               </Pressable>
 
               <Pressable
@@ -546,9 +822,12 @@ export default function KlijentiScreen() {
                   onCloseContactModal();
                   onViber(contactClient.phone);
                 }}
-                className="flex-1 flex-row items-center justify-center rounded-2xl bg-black/[0.045] py-3 dark:bg-white/[0.08]">
-                <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.text} />
-                <Text className="ml-2 text-app-meta-lg font-medium text-black/80 dark:text-white/85">{t('jobs.viber')}</Text>
+                className="flex-row items-center py-2.5">
+                <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.accent} />
+                <Text className="ml-3 flex-1 text-base font-medium" style={{ color: colors.text }}>
+                  {t('jobs.viber')}
+                </Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.secondaryText} />
               </Pressable>
             </View>
           </View>

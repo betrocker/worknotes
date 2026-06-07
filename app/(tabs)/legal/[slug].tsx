@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
 import { useColorScheme } from '@/components/useColorScheme';
-import Colors from '@/constants/Colors';
+import { goBackOrReplace } from '@/lib/navigation';
 
 type LegalSection = {
   title: string;
@@ -33,11 +33,12 @@ export default function LegalDocumentScreen() {
   const { t } = useTranslation();
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
-  const colors = Colors[colorScheme];
   const [headerHeight, setHeaderHeight] = useState(0);
   const primaryText = isDark ? 'rgba(255,255,255,0.92)' : 'rgba(0,0,0,0.82)';
   const secondaryText = isDark ? 'rgba(255,255,255,0.68)' : 'rgba(0,0,0,0.55)';
   const bodyText = isDark ? 'rgba(255,255,255,0.84)' : 'rgba(0,0,0,0.78)';
+  const sectionTitleColor = isDark ? '#72A8FF' : '#1C60C3';
+  const sectionSeparatorColor = isDark ? 'rgba(84,84,88,0.38)' : 'rgba(60,60,67,0.14)';
 
   const documentKey = slug === 'terms' || slug === 'privacy' ? slug : null;
 
@@ -55,7 +56,7 @@ export default function LegalDocumentScreen() {
 
   if (!documentKey || !document) {
     return (
-      <View className="flex-1 items-center justify-center bg-[#F2F2F7] px-6 dark:bg-black">
+      <View className="flex-1 items-center justify-center bg-[#F2F2F7] px-6 dark:bg-[#1D2229]">
         <Text className="text-app-body" style={{ color: secondaryText }}>
           {t('notFound.message')}
         </Text>
@@ -64,7 +65,7 @@ export default function LegalDocumentScreen() {
   }
 
   return (
-    <View className="flex-1 bg-[#F2F2F7] dark:bg-black">
+    <View className="flex-1 bg-[#F2F2F7] dark:bg-[#1D2229]">
       <View
         onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}
         style={{
@@ -76,17 +77,17 @@ export default function LegalDocumentScreen() {
           paddingTop: insets.top + 12,
           paddingHorizontal: 24,
           paddingBottom: 24,
-          backgroundColor: isDark ? '#000000' : '#F2F2F7',
+          backgroundColor: isDark ? '#1D2229' : '#F2F2F7',
         }}>
         <View className="flex-row items-center justify-between">
           <Pressable
-            onPress={() => router.replace('/(tabs)/podesavanja')}
-            className="h-10 w-10 items-center justify-center rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
-            <Ionicons name="chevron-back" size={20} color={colors.text} />
+            onPress={() => goBackOrReplace(router, '/(tabs)/podesavanja' as any)}
+            className="h-11 w-11 items-center justify-center">
+            <Ionicons name="chevron-back" size={25} color="#717983" />
           </Pressable>
         </View>
 
-        <Text className="mt-4 font-bold text-app-display tracking-tight" style={{ color: primaryText }}>
+        <Text className="mt-4 font-semibold text-app-display tracking-tight" style={{ color: primaryText }}>
           {document.title}
         </Text>
         <Text className="mt-2 text-app-subtitle" style={{ color: secondaryText }}>
@@ -95,41 +96,41 @@ export default function LegalDocumentScreen() {
       </View>
 
       <ScrollView
-        className="flex-1 bg-[#F2F2F7] dark:bg-black"
+        className="flex-1 bg-[#F2F2F7] dark:bg-[#1D2229]"
         contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: 40 }}>
         <View className="px-6">
-          <View
-            className="overflow-hidden rounded-3xl border p-5"
-            style={{
-              borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)',
-              backgroundColor: isDark ? '#111317' : '#FFFFFF',
-            }}>
-            <Text className="text-app-meta font-semibold" style={{ color: secondaryText }}>
-              {document.updated}
-            </Text>
+          <Text className="px-1 text-app-meta" style={{ color: secondaryText }}>
+            {document.updated}
+          </Text>
 
-            {document.intro.map((paragraph) => (
-              <Text key={paragraph} className="mt-4 text-app-body" style={{ color: bodyText }}>
+          <View style={{ marginLeft: 12, marginTop: 12 }}>
+            {document.intro.map((paragraph, index) => (
+              <Text key={paragraph} className={index > 0 ? 'mt-3 text-app-body' : 'text-app-body'} style={{ color: bodyText }}>
                 {paragraph}
               </Text>
             ))}
+          </View>
 
-            {document.sections.map((section, index) => (
-              <View key={`${section.title}-${index}`} className="mt-7">
+          {document.sections.map((section, index) => (
+            <View key={`${section.title}-${index}`} className="mt-6">
+              <View className="px-1">
                 <Text
-                  className="text-app-section font-extrabold"
-                  style={{ color: isDark ? '#FFFFFF' : '#1C2745' }}>
+                  className="text-app-row-title font-semibold"
+                  style={{ color: sectionTitleColor }}>
                   {section.title}
                 </Text>
+              </View>
+              <View className="mt-2 h-px" style={{ backgroundColor: sectionSeparatorColor }} />
 
+              <View style={{ marginLeft: 12, marginTop: 8 }}>
                 {section.paragraphs?.map((paragraph) => (
-                  <Text key={paragraph} className="mt-3 text-app-body" style={{ color: bodyText }}>
+                  <Text key={paragraph} className="mb-3 text-app-body" style={{ color: bodyText }}>
                     {paragraph}
                   </Text>
                 ))}
 
                 {section.bullets?.length ? (
-                  <View className="mt-3">
+                  <View>
                     {section.bullets.map((bullet) => (
                       <View key={bullet} className="mb-2 flex-row items-start">
                         <Text className="mr-3 mt-[1px] text-app-body" style={{ color: bodyText }}>
@@ -144,21 +145,16 @@ export default function LegalDocumentScreen() {
                 ) : null}
 
                 {section.boxTitle || section.boxLines?.length ? (
-                  <View
-                    className="mt-4 rounded-[18px] border px-4 py-4"
-                    style={{
-                      borderColor: isDark ? 'rgba(143,178,255,0.16)' : 'rgba(0,0,0,0.06)',
-                      backgroundColor: isDark ? '#171C26' : '#F7FAFF',
-                    }}>
+                  <View className="mt-2">
                     {section.boxTitle ? (
                       <Text
-                        className="text-app-row font-bold"
-                        style={{ color: isDark ? '#FFFFFF' : '#1C2745' }}>
+                        className="text-app-row-title font-semibold"
+                        style={{ color: primaryText }}>
                         {section.boxTitle}
                       </Text>
                     ) : null}
                     {section.boxLines?.map((line) => (
-                      <Text key={line} className="mt-1 text-app-body" style={{ color: bodyText }}>
+                      <Text key={line} className="mt-2 text-app-body" style={{ color: bodyText }}>
                         {line}
                       </Text>
                     ))}
@@ -166,24 +162,17 @@ export default function LegalDocumentScreen() {
                 ) : null}
 
                 {section.warn ? (
-                  <View
-                    className="mt-4 rounded-[18px] border px-4 py-4"
-                    style={{
-                      borderColor: isDark ? '#5E4A24' : '#F3D6A6',
-                      backgroundColor: isDark ? '#2A2215' : '#FFF8EF',
-                    }}>
-                    <Text className="text-app-body" style={{ color: bodyText }}>
-                      {section.warn}
-                    </Text>
-                  </View>
+                  <Text className="mt-2 text-app-body italic" style={{ color: secondaryText }}>
+                    {section.warn}
+                  </Text>
                 ) : null}
               </View>
-            ))}
+            </View>
+          ))}
 
-            <Text className="mt-7 text-app-meta" style={{ color: secondaryText }}>
-              {document.footer}
-            </Text>
-          </View>
+          <Text className="mt-7 px-1 text-app-meta" style={{ color: secondaryText }}>
+            {document.footer}
+          </Text>
         </View>
       </ScrollView>
     </View>

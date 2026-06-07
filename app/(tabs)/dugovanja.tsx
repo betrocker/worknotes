@@ -1,20 +1,36 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { LinearGradient } from 'expo-linear-gradient';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, FlatList, Linking, Modal, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, Easing, Linking, Modal, PanResponder, Platform, Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Colors from '@/constants/Colors';
-import { AppSearchInput } from '@/components/AppSearchInput';
-import { LargeHeader } from '@/components/LargeHeader';
-import { MascotEmptyState } from '@/components/MascotEmptyState';
+import { CollapsingMainHeader, MainScreenTitle } from '@/components/CollapsingMainHeader';
+import { EmptyState } from '@/components/EmptyState';
 import { PaymentJobPickerModal } from '@/components/PaymentJobPickerModal';
+import { useQuickFindSwipeDown } from '@/components/useQuickFindSwipeDown';
 import { useColorScheme } from '@/components/useColorScheme';
 import { listClientOpenDebtJobs, listClientsWithDebt, type ClientOpenDebtJob, type ClientWithDebt } from '@/lib/clients';
+import { setMainFloatingActionsHidden } from '@/lib/floating-actions-visibility';
+import { goBackOrReplace } from '@/lib/navigation';
+import { triggerSelectionHaptic } from '@/lib/haptics';
 import { useAuth } from '@/providers/AuthProvider';
+
+type DebtSwipeSelectRowProps = {
+  selected: boolean;
+  selectionMode: boolean;
+  colorScheme: 'light' | 'dark';
+  children: React.ReactNode;
+  onOpen: () => void;
+  onToggleSelected: () => void;
+};
+
+const DEBT_SELECT_SWIPE_THRESHOLD = 36;
+const DEBT_SELECT_SWIPE_MAX = 56;
+const DEBT_SELECT_GESTURE_START = 3;
+const DEBT_SELECT_HORIZONTAL_BIAS = 0.72;
 
 function getSerbianPluralForm(count: number) {
   const abs = Math.abs(count);
@@ -26,6 +42,227 @@ function getSerbianPluralForm(count: number) {
   return 'other';
 }
 
+function DebtSelectionCircle({ selected, colorScheme }: { selected: boolean; colorScheme: 'light' | 'dark' }) {
+  const accent = colorScheme === 'dark' ? '#72A8FF' : '#1C60C3';
+  return (
+    <View
+      style={{
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+        borderWidth: 1.5,
+        borderColor: selected ? accent : colorScheme === 'dark' ? 'rgba(255,255,255,0.36)' : 'rgba(60,60,67,0.28)',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+      {selected ? (
+        <View
+          style={{
+            width: 11,
+            height: 11,
+            borderRadius: 5.5,
+            backgroundColor: accent,
+          }}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function DebtSwipeSelectRow({
+  selected,
+  selectionMode,
+  colorScheme,
+  children,
+  onOpen,
+  onToggleSelected,
+}: DebtSwipeSelectRowProps) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const circleProgress = useRef(new Animated.Value(selectionMode ? 1 : 0)).current;
+  const maxSwipeDistanceRef = useRef(0);
+  const currentSwipeDistanceRef = useRef(0);
+  const suppressOpenRef = useRef(false);
+  const [swiping, setSwiping] = useState(false);
+
+  useEffect(() => {
+    Animated.spring(circleProgress, {
+      toValue: selectionMode ? 1 : 0,
+      useNativeDriver: true,
+      damping: 18,
+      stiffness: 220,
+      mass: 0.8,
+    }).start();
+  }, [circleProgress, selectionMode]);
+
+  const resetSwipe = useCallback(() => {
+    const duration = Math.min(190, Math.max(90, currentSwipeDistanceRef.current * 2.8));
+    Animated.timing(translateX, {
+      toValue: 0,
+      duration,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        setSwiping(false);
+        maxSwipeDistanceRef.current = 0;
+        currentSwipeDistanceRef.current = 0;
+      }
+    });
+  }, [translateX]);
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponderCapture: (_, gesture) =>
+          gesture.dx < -DEBT_SELECT_GESTURE_START &&
+          Math.abs(gesture.dx) > Math.abs(gesture.dy) * DEBT_SELECT_HORIZONTAL_BIAS,
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          gesture.dx < -DEBT_SELECT_GESTURE_START &&
+          Math.abs(gesture.dx) > Math.abs(gesture.dy) * DEBT_SELECT_HORIZONTAL_BIAS,
+        onPanResponderGrant: () => {
+          maxSwipeDistanceRef.current = 0;
+          currentSwipeDistanceRef.current = 0;
+          suppressOpenRef.current = false;
+          setSwiping(true);
+        },
+        onPanResponderMove: (_, gesture) => {
+          const rawNext = Math.min(0, gesture.dx);
+          const distance = Math.abs(rawNext);
+          if (distance > 6) {
+            suppressOpenRef.current = true;
+          }
+          maxSwipeDistanceRef.current = Math.max(maxSwipeDistanceRef.current, distance);
+          currentSwipeDistanceRef.current = distance;
+          const next =
+            distance > DEBT_SELECT_SWIPE_MAX
+              ? -(DEBT_SELECT_SWIPE_MAX + (distance - DEBT_SELECT_SWIPE_MAX) * 0.18)
+              : rawNext;
+          translateX.setValue(next);
+        },
+        onPanResponderRelease: (_, gesture) => {
+          const shouldSelect = maxSwipeDistanceRef.current > DEBT_SELECT_SWIPE_THRESHOLD || gesture.vx < -0.55;
+          if (shouldSelect) {
+            onToggleSelected();
+          }
+          resetSwipe();
+        },
+        onPanResponderTerminate: resetSwipe,
+        onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => true,
+      }),
+    [onToggleSelected, resetSwipe, translateX]
+  );
+
+  const circleOpacity = circleProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+  const circleScale = circleProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.86, 1],
+  });
+  const revealOpacity = translateX.interpolate({
+    inputRange: [-24, 0],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+  const revealTranslateX = translateX.interpolate({
+    inputRange: [-DEBT_SELECT_SWIPE_MAX, 0],
+    outputRange: [0, 16],
+    extrapolate: 'clamp',
+  });
+  const revealScale = translateX.interpolate({
+    inputRange: [-DEBT_SELECT_SWIPE_MAX, -16, 0],
+    outputRange: [1, 0.92, 0.86],
+    extrapolate: 'clamp',
+  });
+  const selectedRowBackground = colorScheme === 'dark' ? 'rgba(47, 105, 190, 0.26)' : '#D5E5FF';
+  const activeRowBackground = colorScheme === 'dark' ? '#30333A' : '#E4E6EA';
+  const movingRowBackground = swiping ? activeRowBackground : 'transparent';
+  const revealBackgroundColor = colorScheme === 'dark' ? '#315FAD' : '#1C60C3';
+
+  return (
+    <Animated.View
+      {...panResponder.panHandlers}
+      className="flex-row items-center"
+      style={{ marginVertical: 1, borderRadius: 12 }}>
+      {selected ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: -12,
+            right: -12,
+            bottom: 0,
+            borderRadius: 12,
+            backgroundColor: selectedRowBackground,
+          }}
+        />
+      ) : null}
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          bottom: 0,
+          width: 78,
+          paddingRight: 10,
+          borderRadius: 12,
+          backgroundColor: revealBackgroundColor,
+          opacity: revealOpacity,
+          alignItems: 'flex-end',
+          justifyContent: 'center',
+          transform: [{ translateX: revealTranslateX }, { scale: revealScale }],
+        }}>
+        <Ionicons name="checkbox-outline" size={22} color="#FFFFFF" />
+      </Animated.View>
+      <Animated.View
+        className="flex-1 flex-row items-center"
+        style={{
+          marginHorizontal: -8,
+          paddingHorizontal: 8,
+          paddingVertical: 6,
+          borderRadius: 12,
+          backgroundColor: movingRowBackground,
+          transform: [{ translateX }],
+        }}>
+        <Pressable
+          accessibilityRole="link"
+          onPress={() => {
+            if (suppressOpenRef.current) {
+              suppressOpenRef.current = false;
+              return;
+            }
+            onOpen();
+          }}
+          className="flex-1">
+          {children}
+        </Pressable>
+
+        <Animated.View
+          style={{
+            width: selectionMode ? 34 : 0,
+            opacity: circleOpacity,
+            alignItems: 'flex-end',
+            transform: [{ scale: circleScale }],
+          }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected }}
+            disabled={!selectionMode}
+            onPress={onToggleSelected}
+            hitSlop={8}
+            className="items-end justify-center">
+            <DebtSelectionCircle selected={selected} colorScheme={colorScheme} />
+          </Pressable>
+        </Animated.View>
+      </Animated.View>
+    </Animated.View>
+  );
+}
+
 export default function DugovanjaScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
@@ -33,19 +270,19 @@ export default function DugovanjaScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const quickFindSwipe = useQuickFindSwipeDown();
+  const selectionBarProgress = useRef(new Animated.Value(0)).current;
   const userId = session?.user?.id ?? null;
 
   const [items, setItems] = useState<ClientWithDebt[]>([]);
-  const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [contactClient, setContactClient] = useState<ClientWithDebt | null>(null);
+  const [reminderClient, setReminderClient] = useState<ClientWithDebt | null>(null);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [paymentPicker, setPaymentPicker] = useState<{ clientName: string | null; jobs: ClientOpenDebtJob[] } | null>(null);
   const [debtJobsPicker, setDebtJobsPicker] = useState<{ clientName: string | null; jobs: ClientOpenDebtJob[] } | null>(null);
-  const [listViewportHeight, setListViewportHeight] = useState(0);
-  const [listContentHeight, setListContentHeight] = useState(0);
-  const [listCanScroll, setListCanScroll] = useState(false);
-  const [showScrollHint, setShowScrollHint] = useState(false);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -78,26 +315,45 @@ export default function DugovanjaScreen() {
     [locale]
   );
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return items
-      .filter((item) => {
-        if (!q) return true;
-        const haystack = [item.name ?? '', item.phone ?? '', item.address ?? '', item.note ?? '']
-          .join(' ')
-          .toLowerCase();
-        return haystack.includes(q);
-      })
-      .sort((a, b) => {
+  const sortedItems = useMemo(
+    () =>
+      [...items].sort((a, b) => {
         if (b.debt !== a.debt) return b.debt - a.debt;
         const aTime = new Date(a.latest_activity_at ?? a.created_at ?? 0).getTime();
         const bTime = new Date(b.latest_activity_at ?? b.created_at ?? 0).getTime();
         return bTime - aTime;
-      });
-  }, [items, query]);
+      }),
+    [items]
+  );
 
   const totalDebt = useMemo(() => items.reduce((sum, item) => sum + item.debt, 0), [items]);
   const debtorsCount = items.length;
+  const selectedClient = useMemo(
+    () => sortedItems.find((item) => item.id === selectedClientId) ?? null,
+    [selectedClientId, sortedItems]
+  );
+  const selectionMode = Boolean(selectedClient);
+
+  useEffect(() => {
+    Animated.spring(selectionBarProgress, {
+      toValue: selectionMode ? 1 : 0,
+      useNativeDriver: true,
+      damping: 18,
+      stiffness: 210,
+      mass: 0.82,
+    }).start();
+  }, [selectionBarProgress, selectionMode]);
+
+  useEffect(() => {
+    if (selectedClientId && !selectedClient) {
+      setSelectedClientId(null);
+    }
+  }, [selectedClient, selectedClientId]);
+
+  useEffect(() => {
+    setMainFloatingActionsHidden(selectionMode);
+    return () => setMainFloatingActionsHidden(false);
+  }, [selectionMode]);
   const formatDebtorsShortLabel = useCallback(
     (count: number) => {
       if (i18n.language === 'sr') {
@@ -120,6 +376,23 @@ export default function DugovanjaScreen() {
     },
     [i18n.language, t]
   );
+  const sectionSeparatorColor = colorScheme === 'dark' ? 'rgba(84,84,88,0.38)' : 'rgba(60,60,67,0.14)';
+  const primaryActionColor = colorScheme === 'dark' ? '#0A84FF' : '#1C60C3';
+  const isDark = colorScheme === 'dark';
+  const reminderModalWidth = Math.max(280, Math.round(windowWidth * 0.8));
+  const reminderModalMaxHeight = Math.max(300, Math.min(440, Math.round(windowHeight * 0.62)));
+  const modalBackgroundColor = isDark ? Colors.dark.menuSurface : '#FFFFFF';
+  const modalBorderColor = isDark ? 'rgba(255,255,255,0.18)' : 'rgba(60,60,67,0.12)';
+  const modalBackdropColor = isDark ? 'rgba(0,0,0,0.42)' : 'rgba(16,24,40,0.22)';
+
+  const getDebtJobLabel = useCallback(
+    (item: ClientWithDebt) => {
+      if (item.debt_jobs_count > 1) return formatDebtJobsLabel(item.debt_jobs_count);
+      if (item.top_debt_job_title) return item.top_debt_job_title;
+      return t('debts.activeJobAvailable');
+    },
+    [formatDebtJobsLabel, t]
+  );
 
   const openUrl = useCallback(async (url: string) => {
     try {
@@ -132,10 +405,11 @@ export default function DugovanjaScreen() {
   }, []);
 
   const onSms = useCallback(
-    (phone: string) => {
+    (phone: string, message?: string) => {
       const digits = phone.replace(/[^\d+]/g, '');
       if (!digits) return;
-      void openUrl(`sms:${digits}`);
+      const body = message ? `${Platform.OS === 'ios' ? '&' : '?'}body=${encodeURIComponent(message)}` : '';
+      void openUrl(`sms:${digits}${body}`);
     },
     [openUrl]
   );
@@ -150,12 +424,34 @@ export default function DugovanjaScreen() {
   );
 
   const onViber = useCallback(
-    (phone: string) => {
+    (phone: string, message?: string) => {
       const digits = phone.replace(/[^\d+]/g, '');
       if (!digits) return;
+      if (message) {
+        void openUrl(`viber://forward?text=${encodeURIComponent(message)}`);
+        return;
+      }
       void openUrl(`viber://chat?number=${encodeURIComponent(digits)}`);
     },
     [openUrl]
+  );
+
+  const buildReminderMessage = useCallback(
+    (item: ClientWithDebt) => {
+      const target =
+        item.debt_jobs_count > 1
+          ? i18n.language === 'sr'
+            ? t(`debts.reminderJobsCountForms.${getSerbianPluralForm(item.debt_jobs_count)}`, { count: item.debt_jobs_count })
+            : t('debts.reminderJobsCountForms.other', { count: item.debt_jobs_count })
+          : item.top_debt_job_title || t('debts.activeJobAvailable');
+
+      return t('debts.reminderMessage', {
+        name: item.name || t('common.unnamed'),
+        debt: formatMoney.format(item.debt),
+        target,
+      });
+    },
+    [formatMoney, i18n.language, t]
   );
 
   const addPayment = useCallback(
@@ -186,10 +482,34 @@ export default function DugovanjaScreen() {
     [router, userId]
   );
 
-  const onContact = useCallback((item: ClientWithDebt) => {
-    if (!item.phone) return;
-    setContactClient(item);
+  const toggleSelectedClient = useCallback((item: ClientWithDebt) => {
+    triggerSelectionHaptic();
+    setSelectedClientId((current) => (current === item.id ? null : item.id));
   }, []);
+
+  const clearSelection = useCallback(() => {
+    setSelectedClientId(null);
+  }, []);
+
+  const onCallSelected = useCallback(() => {
+    if (!selectedClient?.phone) return;
+    const phone = selectedClient.phone;
+    clearSelection();
+    onCall(phone);
+  }, [clearSelection, onCall, selectedClient]);
+
+  const onRemindSelected = useCallback(() => {
+    if (!selectedClient?.phone) return;
+    setReminderClient(selectedClient);
+    clearSelection();
+  }, [clearSelection, selectedClient]);
+
+  const onPaymentSelected = useCallback(() => {
+    if (!selectedClient) return;
+    const item = selectedClient;
+    clearSelection();
+    void addPayment(item);
+  }, [addPayment, clearSelection, selectedClient]);
 
   const onRowPress = useCallback(
     async (item: ClientWithDebt) => {
@@ -209,8 +529,8 @@ export default function DugovanjaScreen() {
     [router, userId]
   );
 
-  const onCloseContactModal = useCallback(() => {
-    setContactClient(null);
+  const onCloseReminderModal = useCallback(() => {
+    setReminderClient(null);
   }, []);
 
   const onClosePaymentPicker = useCallback(() => {
@@ -221,257 +541,296 @@ export default function DugovanjaScreen() {
     setDebtJobsPicker(null);
   }, []);
 
-  return (
-    <View className="flex-1 bg-[#F2F2F7] dark:bg-black">
-      <LargeHeader title={t('tabs.debts')} subtitle={subtitle} />
+  const renderDebtRow = (item: ClientWithDebt) => (
+    <View
+      key={item.id}
+      style={{ marginTop: 1 }}>
+      <DebtSwipeSelectRow
+        selected={selectedClientId === item.id}
+        selectionMode={selectionMode}
+        colorScheme={colorScheme}
+        onOpen={() => {
+          void onRowPress(item);
+        }}
+        onToggleSelected={() => toggleSelectedClient(item)}>
+        <View className="flex-row items-center justify-between">
+          <View style={{ marginRight: 12, flex: 1 }}>
+            <Text style={{ color: colors.text, fontSize: 16, fontWeight: '400' }} numberOfLines={1}>
+              {item.name || '-'}
+            </Text>
+            <View style={{ marginTop: -1, flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={{ color: colors.secondaryText, fontSize: 12 }} numberOfLines={1}>
+                {getDebtJobLabel(item)}
+              </Text>
+            </View>
+          </View>
 
-      <View className="flex-1 px-6 pt-3">
-        <AppSearchInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder={t('debts.searchPlaceholder')}
-        />
+          <View className="items-end">
+            <Text style={{ color: colorScheme === 'dark' ? '#FF8A8A' : '#C84D4D', fontSize: 13 }}>
+              {formatMoney.format(item.debt)}
+            </Text>
+          </View>
+        </View>
+      </DebtSwipeSelectRow>
+    </View>
+  );
+
+  return (
+    <View className="flex-1 bg-[#F2F2F7] dark:bg-[#1D2229]">
+      <CollapsingMainHeader
+        title={t('tabs.debts')}
+        iconName="cash-outline"
+        scrollY={scrollY}
+        left={
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('common.back')}
+            onPress={() => goBackOrReplace(router, '/(tabs)' as any)}
+            hitSlop={8}
+            className="h-11 w-11 items-center justify-center">
+            <Ionicons name="chevron-back" size={25} color="#717983" />
+          </Pressable>
+        }
+        right={
+          <View className="flex-row items-center">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('tabs.profile')}
+              onPress={() => router.push('/(tabs)/podesavanja' as any)}
+              hitSlop={8}
+              style={{
+                width: 38,
+                height: 38,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+              <Ionicons name="person-outline" size={20} color="#717983" />
+            </Pressable>
+          </View>
+        }
+      />
+
+      <Animated.ScrollView
+        className="flex-1 px-6"
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true, listener: quickFindSwipe.onScroll }
+        )}
+        {...quickFindSwipe.touchHandlers}
+        refreshControl={quickFindSwipe.refreshControl}
+        scrollEventThrottle={16}
+        contentContainerStyle={{ paddingBottom: 148 }}>
+        <MainScreenTitle title={t('tabs.debts')} iconName="cash-outline" scrollY={scrollY} />
+        <Text className="-mt-4 mb-4 text-app-subtitle text-black/60 dark:text-white/70">
+          {subtitle}
+        </Text>
 
         {error ? <Text className="mt-3 text-app-meta text-red-600 dark:text-red-400">{error}</Text> : null}
 
-        <View
-          className="mt-4 flex-1 overflow-hidden rounded-[24px]"
-          style={{
-            backgroundColor: colorScheme === 'dark' ? '#1C1C1E' : '#FFFFFF',
-            marginBottom: Math.max(insets.bottom, 12) + 96,
-          }}>
+        <View style={{ marginTop: 24, marginBottom: 22 }}>
+          <Text
+            className="text-app-row-title font-semibold"
+            style={{ color: colorScheme === 'dark' ? '#72A8FF' : '#1C60C3' }}>
+            {t('tabs.debts')}
+          </Text>
+          <View
+            className="mt-2 h-px"
+            style={{ backgroundColor: sectionSeparatorColor }}
+          />
+          <View style={{ marginLeft: 12, marginTop: 8 }}>
           {loading ? (
-            <View className="items-center py-6">
+            <View className="items-center py-8">
               <ActivityIndicator />
             </View>
+          ) : sortedItems.length > 0 ? (
+            sortedItems.map((item) => renderDebtRow(item))
           ) : (
-            <FlatList
-              className="flex-1"
-              data={filtered}
-              keyExtractor={(item) => item.id}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 80 }}
-              onLayout={(event) => {
-                const visibleHeight = event.nativeEvent.layout.height;
-                setListViewportHeight(visibleHeight);
-                const canScroll = listContentHeight > visibleHeight + 92;
-                setListCanScroll(canScroll);
-                setShowScrollHint(canScroll);
-              }}
-              onContentSizeChange={(_, contentHeight) => {
-                setListContentHeight(contentHeight);
-                const canScroll = contentHeight > listViewportHeight + 92;
-                setListCanScroll(canScroll);
-                setShowScrollHint(canScroll);
-              }}
-              onScroll={(event) => {
-                const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-                const remaining = contentSize.height - (contentOffset.y + layoutMeasurement.height);
-                const canScroll = contentSize.height > layoutMeasurement.height + 92;
-                setListCanScroll(canScroll);
-                setShowScrollHint(canScroll && remaining > 92);
-              }}
-              scrollEventThrottle={16}
-              ListEmptyComponent={() => (
-                <MascotEmptyState
-                  title={t('debts.emptyTitle')}
-                  body={t('debts.emptyBody')}
-                  variant="thumbs"
-                  compact
-                  imageSize={164}
-                />
-              )}
-              ListHeaderComponent={filtered.length > 0 ? <View className="h-3" /> : null}
-              ListFooterComponent={filtered.length > 0 ? <View className="h-3" /> : null}
-              renderItem={({ item, index }) => (
-                <Pressable
-                  onPress={() => {
-                    void onRowPress(item);
-                  }}
-                  className="bg-white px-4 py-4 dark:bg-[#1C1C1E]"
-                  style={{
-                    borderTopWidth: index > 0 ? 1 : 0,
-                    borderTopColor: 'transparent',
-                  }}>
-                  <View>
-                    {index > 0 ? (
-                      <View
-                        style={{
-                          position: 'absolute',
-                          top: -16,
-                          left: 4,
-                          right: 4,
-                          height: 1,
-                          backgroundColor:
-                            colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(60,60,67,0.08)',
-                        }}
-                      />
-                    ) : null}
-
-                    <View className="flex-row items-start justify-between">
-                      <View className="mr-3 flex-1">
-                        <Text className="text-app-row-lg font-bold text-[#1C2745] dark:text-white" numberOfLines={1}>
-                          {item.name || '-'}
-                        </Text>
-                      </View>
-
-                      <View
-                        className="ml-3 rounded-full px-2.5 py-1"
-                        style={{
-                          backgroundColor: colorScheme === 'dark' ? 'rgba(255,107,107,0.16)' : 'rgba(255,59,48,0.10)',
-                        }}>
-                        <Text className="text-app-meta-lg font-bold text-red-600 dark:text-red-400">
-                          {formatMoney.format(item.debt)}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View className="mt-0.5 flex-row items-center justify-between">
-                      <View className="mr-4 flex-1">
-                        {item.debt_jobs_count > 1 ? (
-                          <Text className="text-app-meta-lg text-black/60 dark:text-white/70" numberOfLines={1}>
-                            {formatDebtJobsLabel(item.debt_jobs_count)}
-                          </Text>
-                        ) : item.top_debt_job_title ? (
-                          <Text className="text-app-meta-lg text-black/60 dark:text-white/70" numberOfLines={1}>
-                            {item.top_debt_job_title}
-                          </Text>
-                        ) : item.latest_active_job_id ? (
-                          <Text className="text-app-meta-lg text-black/60 dark:text-white/70" numberOfLines={1}>
-                            {t('debts.activeJobAvailable')}
-                          </Text>
-                        ) : null}
-                      </View>
-
-                      <View className="flex-row items-center">
-                        {item.phone ? (
-                          <Pressable
-                            onPress={(e) => {
-                              e.stopPropagation();
-                              onContact(item);
-                            }}
-                            className="mr-2 flex-row items-center px-1 py-1">
-                            <Ionicons name="chatbubble-ellipses-outline" size={14} color={colors.secondaryText} />
-                            <Text className="ml-1.5 text-app-meta-lg font-medium text-black/75 dark:text-white/80">
-                              {t('clients.contact')}
-                            </Text>
-                          </Pressable>
-                        ) : null}
-
-                        <Pressable
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            addPayment(item);
-                          }}
-                          className="flex-row items-center rounded-full bg-[#EAF1FF] px-3 py-1.5 dark:bg-[#243149]">
-                          <Ionicons
-                            name="wallet-outline"
-                            size={14}
-                            color={colorScheme === 'dark' ? '#8FB2FF' : '#2F68ED'}
-                          />
-                          <Text
-                            className="ml-1.5 text-app-meta-lg font-medium"
-                            style={{ color: colorScheme === 'dark' ? '#8FB2FF' : '#2F68ED' }}>
-                            {t('jobs.payment')}
-                          </Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  </View>
-                </Pressable>
-              )}
+            <EmptyState
+              title={t('debts.emptyTitle')}
+              body={t('debts.emptyBody')}
+              compact
             />
           )}
-          {!loading && listCanScroll && showScrollHint ? (
-            <>
-              <LinearGradient
-                pointerEvents="none"
-                colors={
-                  colorScheme === 'dark'
-                    ? (['rgba(28,28,30,0)', 'rgba(28,28,30,0.78)', 'rgba(28,28,30,0.98)'] as const)
-                    : (['rgba(255,255,255,0)', 'rgba(255,255,255,0.78)', 'rgba(255,255,255,0.98)'] as const)
-                }
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  height: 46,
-                }}
-              />
-              <View
-                pointerEvents="none"
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  right: 0,
-                  bottom: 8,
-                  alignItems: 'center',
-                }}>
-                <View
-                  className="h-6 w-6 items-center justify-center rounded-full"
-                  style={{
-                    backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(60,60,67,0.08)',
-                  }}>
-                  <Ionicons name="chevron-down" size={14} color={colors.secondaryText} />
-                </View>
-              </View>
-            </>
-          ) : null}
+          </View>
         </View>
-      </View>
+      </Animated.ScrollView>
 
-      <Modal transparent visible={Boolean(contactClient)} animationType="fade" onRequestClose={onCloseContactModal}>
-        <View className="flex-1 items-center justify-center bg-black/35 px-6">
-          <Pressable onPress={onCloseContactModal} className="absolute inset-0" />
-          <View className="w-full max-w-[360px] overflow-hidden rounded-3xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-[#1C1C1E]">
-            <View className="flex-row items-center justify-between">
-              <Text className="text-app-row-lg font-semibold text-black dark:text-white" numberOfLines={1}>
-                {contactClient?.name || t('clients.contact')}
+      <Animated.View
+        pointerEvents={selectionMode ? 'auto' : 'none'}
+        style={{
+          position: 'absolute',
+          top: Math.max(insets.top + 8, 18),
+          right: 20,
+          zIndex: 70,
+          elevation: 0,
+          opacity: selectionBarProgress,
+          transform: [
+            {
+              translateY: selectionBarProgress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-10, 0],
+              }),
+            },
+          ],
+        }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('common.close')}
+          onPress={clearSelection}
+          style={{
+            minHeight: 38,
+            borderRadius: 19,
+            borderWidth: 1,
+            borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.24)' : 'rgba(255,255,255,0.68)',
+            backgroundColor: primaryActionColor,
+            shadowOpacity: 0,
+            elevation: 0,
+            paddingHorizontal: 14,
+            flexDirection: 'row',
+            alignItems: 'center',
+          }}>
+          <Text className="text-app-subtitle font-semibold" style={{ color: '#FFFFFF' }}>
+            {t('common.close')}
+          </Text>
+        </Pressable>
+      </Animated.View>
+
+      <Animated.View
+        pointerEvents={selectionMode ? 'auto' : 'none'}
+        style={{
+          position: 'absolute',
+          left: 24,
+          right: 24,
+          bottom: Math.max(insets.bottom + 18, 24),
+          zIndex: 60,
+          elevation: 0,
+          opacity: selectionBarProgress,
+          transform: [
+            {
+              translateY: selectionBarProgress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [24, 0],
+              }),
+            },
+          ],
+        }}>
+        <View
+          style={{
+            minHeight: 48,
+            borderRadius: 24,
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.24)',
+            backgroundColor: 'rgba(56,64,76,0.9)',
+            shadowOpacity: 0,
+            elevation: 0,
+            paddingHorizontal: 14,
+            flexDirection: 'row',
+            alignItems: 'center',
+          }}>
+          <View className="flex-1 flex-row items-center justify-between">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('jobs.call')}
+              disabled={!selectedClient?.phone}
+              onPress={onCallSelected}
+              className="min-h-[42px] flex-1 flex-row items-center justify-center rounded-full px-1 disabled:opacity-35">
+              <Ionicons name="call-outline" size={17} color="#FFFFFF" />
+              <Text className="ml-1.5 text-app-row-lg font-semibold" style={{ color: '#FFFFFF' }} numberOfLines={1}>
+                {t('jobs.call')}
               </Text>
-              <Pressable
-                onPress={onCloseContactModal}
-                className="h-8 w-8 items-center justify-center rounded-full bg-black/5 dark:bg-white/10">
-                <Ionicons name="close" size={18} color={colors.text} />
-              </Pressable>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('debts.remind')}
+              disabled={!selectedClient?.phone}
+              onPress={onRemindSelected}
+              className="min-h-[42px] flex-1 flex-row items-center justify-center rounded-full px-1 disabled:opacity-35">
+              <Ionicons name="chatbubble-ellipses-outline" size={17} color="#FFFFFF" />
+              <Text className="ml-1.5 text-app-row-lg font-semibold" style={{ color: '#FFFFFF' }} numberOfLines={1}>
+                {t('debts.remind')}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('jobs.charge')}
+              onPress={onPaymentSelected}
+              className="min-h-[42px] flex-1 flex-row items-center justify-center rounded-full px-1">
+              <Ionicons name="cash-outline" size={17} color="#FFFFFF" />
+              <Text className="ml-1.5 text-app-row-lg font-semibold" style={{ color: '#FFFFFF' }} numberOfLines={1}>
+                {t('jobs.charge')}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Animated.View>
+
+      <Modal transparent visible={Boolean(reminderClient)} animationType="fade" onRequestClose={onCloseReminderModal}>
+        <View className="flex-1 items-center justify-center" style={{ backgroundColor: modalBackdropColor }}>
+          <Pressable onPress={onCloseReminderModal} className="absolute inset-0" />
+          <View
+            style={{
+              width: reminderModalWidth,
+              maxHeight: reminderModalMaxHeight,
+              borderRadius: 30,
+              borderWidth: 1,
+              borderColor: modalBorderColor,
+              overflow: 'hidden',
+              backgroundColor: modalBackgroundColor,
+            }}>
+            <View style={{ height: 64, backgroundColor: modalBackgroundColor }}>
+              <View className="h-full flex-row items-center justify-between px-4">
+                <View className="h-9 w-9" />
+                <Text className="flex-1 text-center text-app-row-title font-semibold" style={{ color: colors.text }} numberOfLines={1}>
+                  {reminderClient?.name || t('debts.remind')}
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('common.close')}
+                  onPress={onCloseReminderModal}
+                  hitSlop={8}
+                  className="h-9 w-9 items-center justify-center rounded-full"
+                  style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(60,60,67,0.08)' }}>
+                  <Ionicons name="close" size={19} color={colors.text} />
+                </Pressable>
+              </View>
             </View>
 
-            {contactClient?.phone ? (
-              <Text className="mt-1 text-app-meta-lg text-black/55 dark:text-white/65">{contactClient.phone}</Text>
-            ) : null}
+            <View className="px-4 pb-5">
+              {reminderClient ? (
+                <Text className="mb-4 text-center text-app-meta-lg leading-5" style={{ color: colors.secondaryText }}>
+                  {buildReminderMessage(reminderClient)}
+                </Text>
+              ) : null}
 
-            <View className="mt-4 flex-row">
               <Pressable
                 onPress={() => {
-                  if (!contactClient?.phone) return;
-                  onCloseContactModal();
-                  onCall(contactClient.phone);
+                  if (!reminderClient?.phone) return;
+                  const message = buildReminderMessage(reminderClient);
+                  onCloseReminderModal();
+                  onSms(reminderClient.phone, message);
                 }}
-                className="mr-2 flex-1 flex-row items-center justify-center rounded-2xl bg-black/[0.045] py-3 dark:bg-white/[0.08]">
-                <Ionicons name="call-outline" size={16} color={colors.text} />
-                <Text className="ml-2 text-app-meta-lg font-medium text-black/80 dark:text-white/85">{t('jobs.call')}</Text>
+                className="flex-row items-center py-2.5">
+                <Ionicons name="chatbubble-outline" size={18} color={colors.accent} />
+                <Text className="ml-3 flex-1 text-base font-medium" style={{ color: colors.text }}>
+                  {t('jobs.sms')}
+                </Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.secondaryText} />
               </Pressable>
 
               <Pressable
                 onPress={() => {
-                  if (!contactClient?.phone) return;
-                  onCloseContactModal();
-                  onSms(contactClient.phone);
+                  if (!reminderClient?.phone) return;
+                  const message = buildReminderMessage(reminderClient);
+                  onCloseReminderModal();
+                  onViber(reminderClient.phone, message);
                 }}
-                className="mr-2 flex-1 flex-row items-center justify-center rounded-2xl bg-black/[0.045] py-3 dark:bg-white/[0.08]">
-                <Ionicons name="chatbubble-outline" size={16} color={colors.text} />
-                <Text className="ml-2 text-app-meta-lg font-medium text-black/80 dark:text-white/85">{t('jobs.sms')}</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => {
-                  if (!contactClient?.phone) return;
-                  onCloseContactModal();
-                  onViber(contactClient.phone);
-                }}
-                className="flex-1 flex-row items-center justify-center rounded-2xl bg-black/[0.045] py-3 dark:bg-white/[0.08]">
-                <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.text} />
-                <Text className="ml-2 text-app-meta-lg font-medium text-black/80 dark:text-white/85">{t('jobs.viber')}</Text>
+                className="flex-row items-center py-2.5">
+                <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.accent} />
+                <Text className="ml-3 flex-1 text-base font-medium" style={{ color: colors.text }}>
+                  {t('jobs.viber')}
+                </Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.secondaryText} />
               </Pressable>
             </View>
           </View>

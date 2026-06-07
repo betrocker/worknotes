@@ -6,11 +6,13 @@ import i18n from '@/lib/i18n';
 
 const NOTIFICATIONS_ENABLED_KEY = 'settings.notifications_enabled';
 const DEFAULT_REMINDER_KEY = 'settings.notifications.default_reminder';
+const DEFAULT_REMINDER_TIME_KEY = 'settings.notifications.default_reminder_time';
 const DEFAULT_CHANNEL_ID = 'job-reminders';
 const REMINDER_PREFERENCE_PREFIX = 'jobs.reminder.preference:';
 const REMINDER_NOTIFICATION_ID_PREFIX = 'jobs.reminder.notification:';
 
 export type JobReminderOption = 'none' | 'same_day' | 'day_before';
+export type ReminderTimeOption = '09:00' | '12:00' | '18:00';
 
 type ReminderInput = {
   jobId: string;
@@ -20,16 +22,29 @@ type ReminderInput = {
   clientName?: string | null;
 };
 
-function parseDateOnly(value: string, reminderType: JobReminderOption): Date | null {
+function isReminderTimeOption(value: string | null): value is ReminderTimeOption {
+  return value === '09:00' || value === '12:00' || value === '18:00';
+}
+
+function parseReminderTime(value: ReminderTimeOption) {
+  const [hourStr, minuteStr] = value.split(':');
+  return {
+    hour: Number(hourStr),
+    minute: Number(minuteStr),
+  };
+}
+
+function parseDateOnly(value: string, reminderType: JobReminderOption, reminderTime: ReminderTimeOption): Date | null {
   const [yearStr, monthStr, dayStr] = value.split('-');
   const year = Number(yearStr);
   const month = Number(monthStr);
   const day = Number(dayStr);
   if (!year || !month || !day) return null;
+  const { hour, minute } = parseReminderTime(reminderTime);
   const date =
     reminderType === 'day_before'
-      ? new Date(year, month - 1, day - 1, 18, 0, 0)
-      : new Date(year, month - 1, day, 9, 0, 0);
+      ? new Date(year, month - 1, day - 1, hour, minute, 0)
+      : new Date(year, month - 1, day, hour, minute, 0);
   if (Number.isNaN(date.getTime())) return null;
   return date;
 }
@@ -115,6 +130,24 @@ export async function setDefaultJobReminderPreference(reminderType: JobReminderO
   }
 }
 
+export async function getDefaultReminderTime(): Promise<ReminderTimeOption> {
+  try {
+    const value = await AsyncStorage.getItem(DEFAULT_REMINDER_TIME_KEY);
+    if (isReminderTimeOption(value)) return value;
+    return '09:00';
+  } catch {
+    return '09:00';
+  }
+}
+
+export async function setDefaultReminderTime(reminderTime: ReminderTimeOption): Promise<void> {
+  try {
+    await AsyncStorage.setItem(DEFAULT_REMINDER_TIME_KEY, reminderTime);
+  } catch {
+    // ignore
+  }
+}
+
 export async function cancelJobReminder(jobId: string): Promise<void> {
   try {
     const key = getNotificationKey(jobId);
@@ -142,7 +175,8 @@ export async function scheduleJobReminder({
     const enabled = await getNotificationsEnabled();
     if (!enabled) return;
 
-    const date = parseDateOnly(scheduledDate, reminderType);
+    const reminderTime = await getDefaultReminderTime();
+    const date = parseDateOnly(scheduledDate, reminderType, reminderTime);
     if (!date) return;
     if (date.getTime() <= Date.now()) return;
 

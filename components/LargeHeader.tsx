@@ -11,12 +11,14 @@ export function LargeHeader({
   right,
   elevated = false,
   blur = true,
+  compact = false,
 }: {
   title: string;
   subtitle?: string;
   right?: React.ReactNode;
   elevated?: boolean;
   blur?: boolean;
+  compact?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme() ?? "light";
@@ -33,10 +35,15 @@ export function LargeHeader({
         },
         containerStyle,
       ]}>
-      <View style={{ paddingTop: insets.top + 20, paddingHorizontal: 24, paddingBottom: 24 }}>
+      <View
+        style={{
+          paddingTop: insets.top + (compact ? 14 : 20),
+          paddingHorizontal: 24,
+          paddingBottom: compact ? 14 : 24,
+        }}>
         <View className="flex-row items-center justify-between">
           <View className="flex-1 pr-4">
-            <Text className="font-bold text-app-display tracking-tight text-black dark:text-white">
+            <Text className="font-semibold text-app-display tracking-tight text-black dark:text-white">
               {title}
             </Text>
           </View>

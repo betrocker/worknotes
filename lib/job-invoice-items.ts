@@ -53,17 +53,18 @@ async function syncJobPrice(jobId: string) {
   if (updateError) throw new Error(updateError.message);
 }
 
-async function getNextPosition(jobId: string) {
+async function getNewItemPosition(jobId: string) {
   const { data, error } = await supabase
     .from('job_invoice_items')
     .select('position')
     .eq('job_id', jobId)
-    .order('position', { ascending: false })
+    .order('position', { ascending: true })
     .limit(1)
     .overrideTypes<{ position: number | null }[], { merge: false }>();
 
   if (error) throw new Error(error.message);
-  return (data?.[0]?.position ?? 0) + 1;
+  const firstPosition = data?.[0]?.position;
+  return firstPosition == null ? 1 : firstPosition - 1;
 }
 
 export async function listJobInvoiceItems(jobId: string): Promise<JobInvoiceItemRow[]> {
@@ -81,7 +82,7 @@ export async function listJobInvoiceItems(jobId: string): Promise<JobInvoiceItem
 
 export async function createJobInvoiceItem(userId: string, jobId: string, input: JobInvoiceItemInput): Promise<void> {
   const payload = buildPayload(input);
-  const position = await getNextPosition(jobId);
+  const position = await getNewItemPosition(jobId);
 
   const { error } = await supabase.from('job_invoice_items').insert({
     user_id: userId,

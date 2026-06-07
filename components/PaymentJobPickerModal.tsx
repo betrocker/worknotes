@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useMemo } from 'react';
-import { Modal, Pressable, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import Colors from '@/constants/Colors';
@@ -11,7 +11,7 @@ import type { ClientOpenDebtJob } from '@/lib/clients';
 type Props = {
   visible: boolean;
   clientName: string | null;
-  jobs: ClientOpenDebtJob[];
+  jobs: (ClientOpenDebtJob & { clientName?: string | null })[];
   onClose: () => void;
   onSelect: (jobId: string) => void;
 };
@@ -20,7 +20,14 @@ export function PaymentJobPickerModal({ visible, clientName, jobs, onClose, onSe
   const { t, i18n } = useTranslation();
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
+  const isDark = colorScheme === 'dark';
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const locale = i18n.language === 'sr' ? 'sr-Latn-RS' : i18n.language;
+  const modalWidth = Math.max(280, Math.round(windowWidth * 0.8));
+  const modalMaxHeight = Math.max(300, Math.min(480, Math.round(windowHeight * 0.69)));
+  const modalBackgroundColor = isDark ? Colors.dark.menuSurface : '#FFFFFF';
+  const modalBorderColor = isDark ? 'rgba(255,255,255,0.18)' : 'rgba(60,60,67,0.12)';
+  const modalBackdropColor = isDark ? 'rgba(0,0,0,0.42)' : 'rgba(16,24,40,0.22)';
 
   const moneyFormatter = useMemo(
     () =>
@@ -33,7 +40,7 @@ export function PaymentJobPickerModal({ visible, clientName, jobs, onClose, onSe
   );
 
   const dateFormatter = useMemo(
-    () => new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'short', year: 'numeric' }),
+    () => new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'long', year: 'numeric' }),
     [locale]
   );
 
@@ -46,43 +53,55 @@ export function PaymentJobPickerModal({ visible, clientName, jobs, onClose, onSe
 
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
-      <View className="flex-1 items-center justify-center bg-black/35 px-6">
+      <View className="flex-1 items-center justify-center" style={{ backgroundColor: modalBackdropColor }}>
         <Pressable onPress={onClose} className="absolute inset-0" />
-        <View className="w-full max-w-[360px] overflow-hidden rounded-3xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-[#1C1C1E]">
-          <Pressable
-            onPress={onClose}
-            className="absolute right-4 top-4 z-10 h-8 w-8 items-center justify-center rounded-full bg-black/5 dark:bg-white/10">
-            <Ionicons name="close" size={18} color={colors.text} />
-          </Pressable>
-
-          <View className="flex-row items-start">
-            <View className="mr-12 flex-1">
-              <Text className="text-app-row-lg font-semibold text-black dark:text-white" numberOfLines={1}>
+        <View
+          style={{
+            width: modalWidth,
+            maxHeight: modalMaxHeight,
+            borderRadius: 30,
+            borderWidth: 1,
+            borderColor: modalBorderColor,
+            overflow: 'hidden',
+            backgroundColor: modalBackgroundColor,
+          }}>
+          <View style={{ height: 64, backgroundColor: modalBackgroundColor }}>
+            <View className="h-full flex-row items-center justify-between px-4">
+              <View className="h-9 w-9" />
+              <Text className="flex-1 text-center text-app-row-title font-semibold" style={{ color: colors.text }} numberOfLines={1}>
                 {clientName || t('clients.selectPaymentJob')}
               </Text>
-              <Text className="mt-1 text-app-meta-lg text-black/55 dark:text-white/65">
-                {t('clients.selectPaymentJob')}
-              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('common.close')}
+                onPress={onClose}
+                hitSlop={8}
+                className="h-9 w-9 items-center justify-center rounded-full"
+                style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(60,60,67,0.08)' }}>
+                <Ionicons name="close" size={19} color={colors.text} />
+              </Pressable>
             </View>
           </View>
 
-          <View className="mt-4">
-            {jobs.map((job, index) => (
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            style={{ maxHeight: modalMaxHeight - 64 }}
+            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 18 }}>
+            <Text className="mb-3 text-center text-app-meta-lg" style={{ color: colors.secondaryText }}>
+              {t('clients.selectPaymentJob')}
+            </Text>
+            {jobs.map((job) => (
               <Pressable
                 key={job.id}
                 onPress={() => onSelect(job.id)}
-                className="py-3"
-                style={{
-                  borderTopWidth: index > 0 ? 1 : 0,
-                  borderTopColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(60,60,67,0.12)',
-                }}>
-                <View className="flex-row items-start justify-between">
+                className="flex-row items-center py-2.5">
+                <View className="flex-1 flex-row items-start justify-between">
                   <View className="mr-3 flex-1">
-                    <Text className="text-app-row font-semibold text-black dark:text-white" numberOfLines={1}>
+                    <Text className="text-base font-medium" style={{ color: colors.text }} numberOfLines={1}>
                       {job.title || t('jobs.untitled')}
                     </Text>
-                    <Text className="mt-1 text-app-meta-lg text-black/55 dark:text-white/65">
-                      {formatDate(job.scheduled_date)}
+                    <Text className="text-app-meta-lg" style={{ color: colors.secondaryText }} numberOfLines={1}>
+                      {job.clientName ? `${job.clientName} • ${formatDate(job.scheduled_date)}` : formatDate(job.scheduled_date)}
                     </Text>
                   </View>
                   <View className="items-end">
@@ -91,9 +110,10 @@ export function PaymentJobPickerModal({ visible, clientName, jobs, onClose, onSe
                     </Text>
                   </View>
                 </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.secondaryText} style={{ marginLeft: 8 }} />
               </Pressable>
             ))}
-          </View>
+          </ScrollView>
         </View>
       </View>
     </Modal>

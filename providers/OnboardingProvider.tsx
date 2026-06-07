@@ -1,19 +1,17 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import { getOnboardingCompleted, setOnboardingCompleted } from '@/lib/onboarding';
-import { useAuth } from '@/providers/AuthProvider';
 
 type OnboardingContextValue = {
   ready: boolean;
   completed: boolean;
   complete: () => Promise<void>;
+  reset: () => Promise<void>;
 };
 
 const OnboardingContext = createContext<OnboardingContextValue | null>(null);
 
 export function OnboardingProvider({ children }: { children: React.ReactNode }) {
-  const { session } = useAuth();
-  const userId = session?.user?.id ?? null;
   const [ready, setReady] = useState(false);
   const [completed, setCompleted] = useState(false);
 
@@ -21,17 +19,8 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     let active = true;
 
     (async () => {
-      if (!userId) {
-        if (active) {
-          setCompleted(false);
-          setReady(true);
-        }
-        return;
-      }
-
-      setReady(false);
       try {
-        const nextCompleted = await getOnboardingCompleted(userId);
+        const nextCompleted = await getOnboardingCompleted();
         if (active) {
           setCompleted(nextCompleted);
         }
@@ -45,21 +34,26 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     return () => {
       active = false;
     };
-  }, [userId]);
+  }, []);
 
   const complete = useCallback(async () => {
-    if (!userId) return;
-    await setOnboardingCompleted(userId, true);
+    await setOnboardingCompleted(true);
     setCompleted(true);
-  }, [userId]);
+  }, []);
+
+  const reset = useCallback(async () => {
+    await setOnboardingCompleted(false);
+    setCompleted(false);
+  }, []);
 
   const value = useMemo(
     () => ({
       ready,
       completed,
       complete,
+      reset,
     }),
-    [completed, complete, ready]
+    [completed, complete, ready, reset]
   );
 
   return <OnboardingContext.Provider value={value}>{children}</OnboardingContext.Provider>;

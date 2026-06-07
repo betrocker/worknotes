@@ -107,7 +107,7 @@ function formatDate(locale: string, value: string | null | undefined) {
   if (Number.isNaN(parsed.getTime())) return value;
   return new Intl.DateTimeFormat(locale, {
     day: '2-digit',
-    month: '2-digit',
+    month: 'long',
     year: 'numeric',
   }).format(parsed);
 }

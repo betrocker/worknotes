@@ -1,63 +1,87 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
+  Keyboard,
+  Linking,
   Pressable,
   ScrollView,
   Switch,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { AppTextInput } from '@/components/AppTextInput';
 import Colors from '@/constants/Colors';
 import { useColorScheme, useSetColorScheme } from '@/components/useColorScheme';
-import { LargeHeader } from '@/components/LargeHeader';
 import { deleteCurrentAccount } from '@/lib/account';
 import { setStoredLanguage } from '@/lib/language';
+import type { AppLanguage } from '@/lib/i18n';
+import type { AppThemePreference } from '@/lib/theme';
 import {
   getDefaultJobReminderPreference,
+  getDefaultReminderTime,
   getNotificationsEnabled,
   setDefaultJobReminderPreference,
+  setDefaultReminderTime,
   setNotificationsEnabled,
   type JobReminderOption,
+  type ReminderTimeOption,
 } from '@/lib/notifications';
 import { deleteProfileAsset, uploadCompanyLogo } from '@/lib/profile-assets';
 import { supabase } from '@/lib/supabase';
 import { getUserDisplayName } from '@/lib/user';
+import { goBackOrReplace } from '@/lib/navigation';
 import { useAuth } from '@/providers/AuthProvider';
 import { useBilling } from '@/providers/BillingProvider';
+import { useThemePreference } from '@/providers/ThemePreferenceProvider';
+
+type SettingsScreenKey =
+  | 'menu'
+  | 'profile'
+  | 'profileEdit'
+  | 'subscription'
+  | 'company'
+  | 'companyEdit'
+  | 'theme'
+  | 'language'
+  | 'documents'
+  | 'support'
+  | 'notifications'
+  | 'about'
+  | 'account';
+
+const SUPPORT_EMAIL = 'podrska@etefter.app';
+const APP_ICON = require('../../assets/images/splash-logo.png');
 
 export default function PodesavanjaScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const setColorScheme = useSetColorScheme();
+  const { themePreference } = useThemePreference();
   const { t, i18n } = useTranslation();
   const { session } = useAuth();
   const router = useRouter();
   const colors = Colors[colorScheme];
-  const { hasSubscription, hasTrialAccess, trialDaysRemaining, trialEndsAt } = useBilling();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const { hasSubscription } = useBilling();
 
   const isDark = colorScheme === 'dark';
-  const isEnglish = (i18n.resolvedLanguage ?? i18n.language).toLowerCase().startsWith('en');
-  const [themeSwitchValue, setThemeSwitchValue] = useState(isDark);
-  const [themeSwitchPending, setThemeSwitchPending] = useState(false);
-  const [pendingThemeTarget, setPendingThemeTarget] = useState<boolean | null>(null);
+  const currentLanguage = (i18n.resolvedLanguage ?? i18n.language).toLowerCase().split('-')[0];
   const [notificationsEnabled, setNotificationsEnabledState] = useState<boolean | null>(null);
   const [notificationsSaving, setNotificationsSaving] = useState(false);
   const [defaultReminder, setDefaultReminder] = useState<JobReminderOption>('same_day');
+  const [defaultReminderTime, setDefaultReminderTimeState] = useState<ReminderTimeOption>('09:00');
   const [username, setUsername] = useState('');
   const [usernameDraft, setUsernameDraft] = useState('');
-  const [usernameModalOpen, setUsernameModalOpen] = useState(false);
+  const [usernameInputFocused, setUsernameInputFocused] = useState(false);
   const [usernameSubmitting, setUsernameSubmitting] = useState(false);
   const [usernameMessage, setUsernameMessage] = useState<string | null>(null);
   const [usernameError, setUsernameError] = useState<string | null>(null);
@@ -78,26 +102,22 @@ export default function PodesavanjaScreen() {
   const [companyLogoDraftUrl, setCompanyLogoDraftUrl] = useState<string | null>(null);
   const [companyLogoDraftPath, setCompanyLogoDraftPath] = useState<string | null>(null);
   const [companyLogoDraftLocalUri, setCompanyLogoDraftLocalUri] = useState<string | null>(null);
-  const [companyModalOpen, setCompanyModalOpen] = useState(false);
+  const [focusedCompanyField, setFocusedCompanyField] = useState<string | null>(null);
   const [companySubmitting, setCompanySubmitting] = useState(false);
   const [companyUploading, setCompanyUploading] = useState(false);
   const [companyError, setCompanyError] = useState<string | null>(null);
   const [companyMessage, setCompanyMessage] = useState<string | null>(null);
+  const [supportSubject, setSupportSubject] = useState('Podrska za eTefter');
+  const [supportMessage, setSupportMessage] = useState('');
+  const [focusedSupportField, setFocusedSupportField] = useState<string | null>(null);
   const [deletingAccount, setDeletingAccount] = useState(false);
-  const [infoModalKey, setInfoModalKey] = useState<'support' | 'version' | null>(null);
-  const themeToggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [settingsScreen, setSettingsScreen] = useState<SettingsScreenKey>('menu');
+  const settingsSlideX = useRef(new Animated.Value(0)).current;
+  const settingsScrollRef = useRef<ScrollView | null>(null);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const user = session?.user ?? null;
   const email = user?.email ?? '—';
   const displayName = useMemo(() => getUserDisplayName(user, email), [email, user]);
-  const hasCompanyDetails = Boolean(
-    companyName ||
-      companyPhone ||
-      companyAddress ||
-      companyPib ||
-      companyRegistrationNumber ||
-      companyAccountNumber ||
-      companyLogoUrl
-  );
   const appVersion = useMemo(() => {
     const configVersion =
       Constants.expoConfig?.version ??
@@ -105,23 +125,12 @@ export default function PodesavanjaScreen() {
       null;
     return configVersion || '1.0.0';
   }, []);
-  const profileInitials = useMemo(() => {
-    const source = (username || displayName || email || '').trim();
-    if (!source) return 'T';
-    const parts = source
-      .split(/\s+/)
-      .map((part) => part.trim())
-      .filter(Boolean);
-    if (parts.length === 0) return 'T';
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-    return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase();
-  }, [displayName, email, username]);
   const infoItems = useMemo(
     () => [
       {
         key: 'terms' as const,
         icon: 'document-text-outline' as const,
-        iconBg: isDark ? '#243047' : '#EEF3FF',
+        iconBg: isDark ? '#202B40' : '#DFE8FA',
         iconColor: isDark ? '#8FB2FF' : '#2F68ED',
         title: t('settings.termsTitle'),
         body: t('settings.termsBody'),
@@ -129,7 +138,7 @@ export default function PodesavanjaScreen() {
       {
         key: 'privacy' as const,
         icon: 'shield-checkmark-outline' as const,
-        iconBg: isDark ? '#203126' : '#EEF8F1',
+        iconBg: isDark ? '#1C2B22' : '#DDEFE2',
         iconColor: isDark ? '#7AD69C' : '#2F8C57',
         title: t('settings.privacyTitle'),
         body: t('settings.privacyBody'),
@@ -137,7 +146,7 @@ export default function PodesavanjaScreen() {
       {
         key: 'support' as const,
         icon: 'help-buoy-outline' as const,
-        iconBg: isDark ? '#2F2717' : '#FFF8EF',
+        iconBg: isDark ? '#292111' : '#F3E2C9',
         iconColor: isDark ? '#F4C16A' : '#B76E0D',
         title: t('settings.support'),
         body: t('settings.supportHelp'),
@@ -145,55 +154,185 @@ export default function PodesavanjaScreen() {
       {
         key: 'version' as const,
         icon: 'information-circle-outline' as const,
-        iconBg: isDark ? '#2D2540' : '#F2EEFF',
+        iconBg: isDark ? '#261F38' : '#E6DFF7',
         iconColor: isDark ? '#C0A7FF' : '#7359C8',
-        title: t('settings.appVersion'),
-        body: `Tefter ${appVersion}`,
+        title: 'O aplikaciji',
+        body: `eTefter ${appVersion}`,
       },
     ],
     [appVersion, isDark, t]
   );
-  const activeInfoItem = useMemo(
-    () => infoItems.find((item) => item.key === infoModalKey) ?? null,
-    [infoItems, infoModalKey]
+  const documentInfoItems = useMemo(
+    () => infoItems.filter((item) => item.key === 'terms' || item.key === 'privacy' || item.key === 'support'),
+    [infoItems]
   );
-  const trialEndsLabel = useMemo(() => {
-    if (!trialEndsAt) return null;
-    return new Date(trialEndsAt).toLocaleDateString(
-      i18n.language === 'sr' ? 'sr-Latn-RS' : i18n.language,
-      { day: '2-digit', month: '2-digit', year: 'numeric' }
-    );
-  }, [i18n.language, trialEndsAt]);
-
+  const secondaryInfoItems = useMemo(
+    () => infoItems.filter((item) => item.key === 'version'),
+    [infoItems]
+  );
+  const settingsScreenTitle = useMemo(() => {
+    switch (settingsScreen) {
+      case 'profile':
+        return 'Korisnicki profil';
+      case 'profileEdit':
+        return t('settings.editProfileTitle');
+      case 'subscription':
+        return 'Pretplata / Status';
+      case 'company':
+        return 'Podaci firme';
+      case 'companyEdit':
+        return t('settings.companySection');
+      case 'theme':
+        return 'Tema aplikacije';
+      case 'language':
+        return 'Jezik aplikacije';
+      case 'documents':
+        return 'Dokumenti';
+      case 'support':
+        return t('settings.support');
+      case 'notifications':
+        return t('settings.notifications');
+      case 'about':
+        return 'O aplikaciji';
+      case 'account':
+        return t('settings.accountSection');
+      default:
+        return 'Podesavanja';
+    }
+  }, [settingsScreen, t]);
   const reminderOptions = useMemo(
     () => [
-      { value: 'none' as const, label: t('jobs.reminders.none') },
-      { value: 'same_day' as const, label: t('jobs.reminders.sameDay') },
-      { value: 'day_before' as const, label: t('jobs.reminders.dayBefore') },
+      { value: 'none' as const, label: t('jobs.reminders.none'), icon: 'notifications-off-outline' as const },
+      { value: 'same_day' as const, label: t('jobs.reminders.sameDay'), icon: 'today-outline' as const },
+      { value: 'day_before' as const, label: t('jobs.reminders.dayBefore'), icon: 'calendar-outline' as const },
     ],
     [t]
+  );
+  const reminderTimeOptions = useMemo(
+    () => [
+      { value: '09:00' as const, label: '09:00' },
+      { value: '12:00' as const, label: '12:00' },
+      { value: '18:00' as const, label: '18:00' },
+    ],
+    []
+  );
+  const themeOptions = useMemo(
+    () => [
+      {
+        value: 'light' as const,
+        label: 'Light',
+        icon: 'sunny-outline' as const,
+        iconBg: isDark ? colors.elevatedSurface : '#F2F4F7',
+        iconColor: isDark ? '#F4C16A' : '#B76E0D',
+      },
+      {
+        value: 'dark' as const,
+        label: 'Dark',
+        icon: 'moon-outline' as const,
+        iconBg: isDark ? colors.elevatedSurface : '#F2F4F7',
+        iconColor: isDark ? '#C0A7FF' : '#7359C8',
+      },
+      {
+        value: 'system' as const,
+        label: 'Automatic',
+        icon: 'phone-portrait-outline' as const,
+        iconBg: isDark ? colors.elevatedSurface : '#F2F4F7',
+        iconColor: isDark ? '#8FB2FF' : '#2F68ED',
+      },
+    ],
+    [colors.elevatedSurface, isDark]
+  );
+  const languageOptions = useMemo(
+    () => [
+      { value: 'sr' as const, label: 'Srpski', flag: '🇷🇸' },
+      { value: 'en' as const, label: 'English', flag: '🇬🇧' },
+      { value: 'de' as const, label: 'Deutsch', flag: '🇩🇪' },
+      { value: 'fr' as const, label: 'Français', flag: '🇫🇷' },
+      { value: 'es' as const, label: 'Español', flag: '🇪🇸' },
+    ],
+    []
   );
 
   const switchTrackColor = useMemo(
     () => ({
-      false: isDark ? '#3A3A3C' : '#D7DCE7',
+      false: isDark ? '#4A4F58' : '#C8CDD6',
       true: isDark ? '#3A7BFF' : '#2F68ED',
     }),
     [isDark]
   );
-  const switchThumbColor = isDark ? '#FFFFFF' : '#FFFFFF';
-  const switchBgColor = isDark ? '#2C2C2E' : '#D7DCE7';
+  const switchThumbColor = notificationsEnabled ? '#FFFFFF' : isDark ? '#DDE3EA' : '#F7F8FA';
+  const switchBgColor = isDark ? '#4A4F58' : '#C8CDD6';
+  const modalWidth = Math.max(280, Math.round(windowWidth * 0.8));
+  const modalMaxHeight = Math.max(320, Math.min(480, Math.round(windowHeight * 0.69)));
+  const modalContentMaxHeight = Math.max(240, modalMaxHeight - 64);
+  const modalBackgroundColor = isDark ? Colors.dark.menuSurface : '#FFFFFF';
+  const modalBorderColor = isDark ? 'rgba(255,255,255,0.18)' : 'rgba(60,60,67,0.12)';
+  const modalBackdropColor = isDark ? 'rgba(0,0,0,0.42)' : 'rgba(16,24,40,0.22)';
+  const settingsInputSurfaceColor = isDark ? colors.elevatedSurface : '#F2F4F7';
+  const settingsInputFocusedBorderColor = isDark ? '#A6C8FF' : '#5FA2FF';
+  const settingsScrollBottomPadding = keyboardVisible
+    ? settingsScreen === 'companyEdit'
+      ? 145
+      : settingsScreen === 'profileEdit'
+        ? 180
+        : settingsScreen === 'support'
+          ? 220
+          : 28
+    : 28;
+  const profileInputBorderColor = usernameInputFocused
+    ? settingsInputFocusedBorderColor
+    : colors.inputBorder;
+  const profileInputBorderWidth = usernameInputFocused ? 2 : 1;
+  const getInputBorderColor = (focused: boolean) => (focused ? settingsInputFocusedBorderColor : colors.inputBorder);
+  const getInputBorderWidth = (focused: boolean) => (focused ? 2 : 1);
+  const subscriptionStatusColor = hasSubscription ? colors.successText : colors.warningText;
+  const subscriptionStatusSurfaceColor = hasSubscription ? colors.successSurface : colors.warningSurface;
+
+  const onSelectThemePreference = useCallback((nextTheme: AppThemePreference) => {
+    setColorScheme(nextTheme);
+  }, [setColorScheme]);
+
+  const onSelectLanguage = useCallback((nextLanguage: AppLanguage) => {
+    void i18n.changeLanguage(nextLanguage);
+    void setStoredLanguage(nextLanguage);
+  }, [i18n]);
+
+  const onSendSupportEmail = useCallback(async () => {
+    const subject = supportSubject.trim() || 'Podrska za eTefter';
+    const message = supportMessage.trim();
+    const body = [
+      message,
+      '',
+      '---',
+      `Korisnik: ${email}`,
+      `Verzija aplikacije: ${appVersion}`,
+    ].join('\n');
+    const url = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (!supported) {
+        Alert.alert('Email nije dostupan', `Mozes nas kontaktirati direktno na ${SUPPORT_EMAIL}.`);
+        return;
+      }
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('Email nije dostupan', `Mozes nas kontaktirati direktno na ${SUPPORT_EMAIL}.`);
+    }
+  }, [appVersion, email, supportMessage, supportSubject]);
 
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const [enabled, reminder] = await Promise.all([
+      const [enabled, reminder, reminderTime] = await Promise.all([
         getNotificationsEnabled(),
         getDefaultJobReminderPreference(),
+        getDefaultReminderTime(),
       ]);
       if (mounted) {
         setNotificationsEnabledState(enabled);
         setDefaultReminder(reminder);
+        setDefaultReminderTimeState(reminderTime);
       }
     })();
     return () => {
@@ -202,24 +341,36 @@ export default function PodesavanjaScreen() {
   }, []);
 
   useEffect(() => {
-    if (themeSwitchPending) {
-      if (pendingThemeTarget != null && isDark === pendingThemeTarget) {
-        setThemeSwitchValue(isDark);
-        setThemeSwitchPending(false);
-        setPendingThemeTarget(null);
-      }
-      return;
-    }
-    setThemeSwitchValue(isDark);
-  }, [isDark, pendingThemeTarget, themeSwitchPending]);
+    const showSubscription = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+      setFocusedCompanyField(null);
+    });
 
-  useEffect(() => {
     return () => {
-      if (themeToggleTimerRef.current) {
-        clearTimeout(themeToggleTimerRef.current);
-      }
+      showSubscription.remove();
+      hideSubscription.remove();
     };
   }, []);
+
+  useEffect(() => {
+    if (settingsScreen !== 'companyEdit' || !focusedCompanyField) return;
+
+    const scrollTargets: Record<string, number> = {
+      name: 160,
+      phone: 235,
+      address: 310,
+      pib: 385,
+      registration: 405,
+      account: 455,
+    };
+    const y = scrollTargets[focusedCompanyField] ?? 0;
+    const timer = setTimeout(() => {
+      settingsScrollRef.current?.scrollTo({ y, animated: true });
+    }, keyboardVisible ? 80 : 220);
+
+    return () => clearTimeout(timer);
+  }, [focusedCompanyField, keyboardVisible, settingsScreen]);
 
   useEffect(() => {
     setUsername(displayName === email ? '' : displayName);
@@ -274,20 +425,7 @@ export default function PodesavanjaScreen() {
     setCompanyLogoDraftLocalUri(null);
   }, [user?.user_metadata]);
 
-  const openUsernameModal = () => {
-    setUsernameDraft(username);
-    setUsernameError(null);
-    setUsernameMessage(null);
-    setUsernameModalOpen(true);
-  };
-
-  const closeUsernameModal = () => {
-    if (usernameSubmitting) return;
-    setUsernameModalOpen(false);
-    setUsernameError(null);
-  };
-
-  const openCompanyModal = () => {
+  const prepareCompanyDraft = useCallback(() => {
     setCompanyNameDraft(companyName);
     setCompanyPhoneDraft(companyPhone);
     setCompanyAddressDraft(companyAddress);
@@ -299,14 +437,16 @@ export default function PodesavanjaScreen() {
     setCompanyLogoDraftLocalUri(null);
     setCompanyError(null);
     setCompanyMessage(null);
-    setCompanyModalOpen(true);
-  };
-
-  const closeCompanyModal = () => {
-    if (companySubmitting || companyUploading) return;
-    setCompanyModalOpen(false);
-    setCompanyError(null);
-  };
+  }, [
+    companyAccountNumber,
+    companyAddress,
+    companyLogoPath,
+    companyLogoUrl,
+    companyName,
+    companyPhone,
+    companyPib,
+    companyRegistrationNumber,
+  ]);
 
   const onSaveUsername = async () => {
     const trimmed = usernameDraft.trim();
@@ -334,7 +474,7 @@ export default function PodesavanjaScreen() {
 
     setUsername(trimmed);
     setUsernameMessage(t('settings.usernameSaved'));
-    setUsernameModalOpen(false);
+    setSettingsScreen('profile');
   };
 
   const onPickCompanyLogo = async () => {
@@ -420,6 +560,7 @@ export default function PodesavanjaScreen() {
       setCompanyAccountNumber(trimmedAccountNumber);
       setCompanyLogoPath(nextLogoPath);
       setCompanyLogoUrl(nextLogoUrl);
+      setCompanyNameDraft(trimmed);
       setCompanyPhoneDraft(trimmedPhone);
       setCompanyAddressDraft(trimmedAddress);
       setCompanyPibDraft(trimmedPib);
@@ -428,7 +569,7 @@ export default function PodesavanjaScreen() {
       setCompanyLogoDraftPath(nextLogoPath);
       setCompanyLogoDraftUrl(nextLogoUrl);
       setCompanyLogoDraftLocalUri(null);
-      setCompanyModalOpen(false);
+      setSettingsScreen('company');
       setCompanyMessage(t('settings.companySaved'));
     } catch (error) {
       if (uploadedLogoPath) {
@@ -477,235 +618,911 @@ export default function PodesavanjaScreen() {
     );
   };
 
-  return (
-    <ScrollView
-      stickyHeaderIndices={[0]}
-      className="flex-1 bg-[#F2F2F7] dark:bg-black"
-      contentContainerStyle={{ paddingBottom: 168 }}>
-      <LargeHeader
-        title={t('tabs.profile')}
+  const animateSettingsScreen = useCallback((nextScreen: SettingsScreenKey, direction: 'forward' | 'back') => {
+    settingsSlideX.stopAnimation();
+    settingsSlideX.setValue(direction === 'forward' ? modalWidth : -modalWidth);
+    setSettingsScreen(nextScreen);
+    requestAnimationFrame(() => {
+      Animated.spring(settingsSlideX, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 220,
+        friction: 26,
+      }).start();
+    });
+  }, [modalWidth, settingsSlideX]);
+
+  const openSettingsScreen = useCallback((nextScreen: Exclude<SettingsScreenKey, 'menu'>) => {
+    animateSettingsScreen(nextScreen, 'forward');
+  }, [animateSettingsScreen]);
+
+  const openProfileEditScreen = useCallback(() => {
+    setUsernameDraft(username);
+    setUsernameError(null);
+    setUsernameMessage(null);
+    animateSettingsScreen('profileEdit', 'forward');
+  }, [animateSettingsScreen, username]);
+
+  const openCompanyEditScreen = useCallback(() => {
+    prepareCompanyDraft();
+    animateSettingsScreen('companyEdit', 'forward');
+  }, [animateSettingsScreen, prepareCompanyDraft]);
+
+  const goBackToSettingsMenu = useCallback(() => {
+    if (usernameSubmitting || companySubmitting || companyUploading) return;
+    if (settingsScreen === 'profileEdit') {
+      animateSettingsScreen('profile', 'back');
+      return;
+    }
+    if (settingsScreen === 'companyEdit') {
+      animateSettingsScreen('company', 'back');
+      return;
+    }
+    if (settingsScreen === 'support') {
+      animateSettingsScreen('documents', 'back');
+      return;
+    }
+    animateSettingsScreen('menu', 'back');
+  }, [animateSettingsScreen, companySubmitting, companyUploading, settingsScreen, usernameSubmitting]);
+
+  const renderSettingsRow = ({
+    icon,
+    iconBg: _iconBg,
+    iconColor,
+    label,
+    onPress,
+    destructive = false,
+  }: {
+    icon: React.ComponentProps<typeof Ionicons>['name'];
+    iconBg: string;
+    iconColor: string;
+    label: string;
+    onPress: () => void;
+    destructive?: boolean;
+  }) => (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      className="flex-row items-center py-1.5">
+      <View className="h-8 w-8 items-center justify-center">
+        <Ionicons name={icon} size={18} color={iconColor} />
+      </View>
+      <Text
+        className="ml-3 flex-1 text-base font-medium"
+        style={{ color: destructive ? (isDark ? '#D98780' : '#A9433C') : colors.text }}>
+        {label}
+      </Text>
+      <Ionicons name="chevron-forward" size={18} color={destructive ? (isDark ? '#B66B65' : '#A9433C') : colors.secondaryText} />
+    </Pressable>
+  );
+
+  const renderMenuSection = (rows: React.ReactNode[], first = false) => (
+    <View className={first ? 'mt-1' : 'mt-4'}>
+      {rows}
+    </View>
+  );
+
+  const renderCompanyDetailRow = (label: string, value: string | null | undefined) => (
+    <View className="mt-3 flex-row items-start justify-between">
+      <Text className="text-app-row" style={{ color: colors.secondaryText }}>
+        {label}
+      </Text>
+      <Text
+        className="ml-4 flex-1 text-right text-app-row font-semibold"
+        style={{ color: value ? colors.text : colors.secondaryText }}
+        numberOfLines={2}>
+        {value || 'Nije uneto'}
+      </Text>
+    </View>
+  );
+
+  const renderCompanyInput = ({
+    id,
+    label,
+    value,
+    onChangeText,
+    placeholder,
+    keyboardType,
+    autoCapitalize = 'none',
+  }: {
+    id: string;
+    label: string;
+    value: string;
+    onChangeText: (next: string) => void;
+    placeholder: string;
+    keyboardType?: React.ComponentProps<typeof AppTextInput>['keyboardType'];
+    autoCapitalize?: React.ComponentProps<typeof AppTextInput>['autoCapitalize'];
+  }) => (
+    <View className="mt-4">
+      <Text className="text-app-row font-semibold" style={{ color: colors.text }}>
+        {label}
+      </Text>
+      <AppTextInput
+        value={value}
+        onChangeText={(next) => {
+          onChangeText(next);
+          if (companyError) setCompanyError(null);
+          if (companyMessage) setCompanyMessage(null);
+        }}
+        onFocus={() => setFocusedCompanyField(id)}
+        onBlur={() => setFocusedCompanyField(null)}
+        autoCapitalize={autoCapitalize}
+        autoCorrect={false}
+        keyboardType={keyboardType}
+        placeholder={placeholder}
+        className="mt-3"
+        style={{
+          backgroundColor: settingsInputSurfaceColor,
+          borderWidth: getInputBorderWidth(focusedCompanyField === id),
+          borderColor: getInputBorderColor(focusedCompanyField === id),
+          borderRadius: 16,
+          color: colors.text,
+          paddingVertical: 8,
+        }}
       />
+    </View>
+  );
 
-      <View className="px-6 pt-3">
-        <View className="overflow-hidden rounded-3xl border border-black/10 bg-white/80 p-5 dark:border-white/10 dark:bg-[#1C1C1E]/80">
-          <View className="flex-row items-center">
-            <View
-              className="items-center justify-center rounded-full"
-              style={{
-                width: 60,
-                height: 60,
-                backgroundColor: isDark ? '#263245' : '#DCE6F7',
-              }}>
-              <Text style={{ fontSize: 24, fontWeight: '800', color: isDark ? '#8FB2FF' : '#2F68ED' }}>
-                {profileInitials}
-              </Text>
-            </View>
-
-            <View className="ml-4 flex-1">
-              <View className="flex-row items-center justify-between">
-                <Text className="mr-3 flex-1 text-app-section font-extrabold text-[#1C2745] dark:text-white" numberOfLines={1}>
-                  {displayName}
-                </Text>
+  return (
+    <View className="flex-1 items-center justify-center" style={{ backgroundColor: modalBackdropColor }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('common.close')}
+        onPress={() => goBackOrReplace(router, '/(tabs)' as any)}
+        className="absolute inset-0"
+      />
+      <View
+        style={{
+          width: modalWidth,
+          height: modalMaxHeight,
+          maxHeight: modalMaxHeight,
+          borderRadius: 30,
+          borderWidth: 1,
+          borderColor: modalBorderColor,
+          overflow: 'hidden',
+          backgroundColor: modalBackgroundColor,
+        }}>
+        <View
+          style={{
+            height: 64,
+            overflow: 'hidden',
+            backgroundColor: modalBackgroundColor,
+          }}>
+          <View className="h-full flex-row items-center justify-between px-4">
+            <View className="h-9 w-9 items-center justify-center">
+              {settingsScreen === 'menu' ? null : (
                 <Pressable
-                  onPress={openUsernameModal}
                   accessibilityRole="button"
-                  accessibilityLabel={t('settings.editProfile')}
-                  className="h-10 w-10 items-center justify-center">
-                  <FontAwesome name="pencil" size={18} color={isDark ? '#8FB2FF' : '#2F68ED'} />
+                  accessibilityLabel={t('common.back')}
+                  onPress={goBackToSettingsMenu}
+                  hitSlop={8}
+                  className="h-9 w-9 items-center justify-center rounded-full"
+                  style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(60,60,67,0.08)' }}>
+                  <Ionicons name="chevron-back" size={21} color={colors.text} />
                 </Pressable>
-              </View>
-              <Text className="mt-1 text-app-meta-lg text-black/60 dark:text-white/70" numberOfLines={1}>
-                {email}
-              </Text>
-              {hasSubscription ? (
-                <View className="mt-3 self-start rounded-full bg-[#EEF8F1] px-3 py-1.5 dark:bg-[#203126]">
-                  <Text className="text-app-meta-lg font-semibold text-[#2F8C57] dark:text-[#7AD69C]">
-                    {t('settings.premiumActive')}
-                  </Text>
-                </View>
-              ) : hasTrialAccess ? (
-                <View className="mt-3">
-                  <Pressable
-                    onPress={() => router.push({ pathname: '/paywall', params: { preview: '1' } })}
-                    className="self-start rounded-full bg-[#2F68ED] px-4 py-2 dark:bg-[#3A7BFF]">
-                    <Text className="text-app-meta-lg font-semibold text-white">
-                      {t('settings.buyPremium')}
-                    </Text>
-                  </Pressable>
-                  <Text className="mt-2 text-app-meta-lg text-black/60 dark:text-white/70">
-                    {t('settings.freeTrialBody', { count: trialDaysRemaining })}
-                  </Text>
-                  {trialEndsLabel ? (
-                    <Text className="mt-1 text-app-meta-lg text-black/55 dark:text-white/65">
-                      {t('settings.freeTrialEndsAt', { date: trialEndsLabel })}
-                    </Text>
-                  ) : null}
-                </View>
-              ) : null}
+              )}
             </View>
-          </View>
-
-          {usernameMessage ? (
-            <View className="mt-4 rounded-[20px] bg-black/5 px-4 py-3 dark:bg-white/5">
-              <Text className="text-app-meta-lg text-[#2F8C57] dark:text-[#7AD69C]">{usernameMessage}</Text>
-            </View>
-          ) : null}
-        </View>
-
-        <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/80 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/80">
-          <View className="flex-row items-center justify-between">
-            <Text className="text-app-section font-extrabold text-[#1C2745] dark:text-white">
-              {t('settings.companySection')}
+            <Text className="flex-1 text-center text-app-row-title font-semibold" style={{ color: colors.text }} numberOfLines={1}>
+              {settingsScreenTitle}
             </Text>
             <Pressable
-              onPress={openCompanyModal}
               accessibilityRole="button"
-              accessibilityLabel={t('settings.editProfile')}
-              className="h-10 w-10 items-center justify-center">
-              <FontAwesome name="pencil" size={18} color={isDark ? '#8FB2FF' : '#2F68ED'} />
+              accessibilityLabel={t('common.close')}
+              onPress={() => goBackOrReplace(router, '/(tabs)' as any)}
+              hitSlop={8}
+              className="h-9 w-9 items-center justify-center rounded-full"
+              style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(60,60,67,0.08)' }}>
+              <Ionicons name="close" size={19} color={colors.text} />
             </Pressable>
           </View>
+        </View>
 
-          <View className="mt-4 h-px bg-black/10 dark:bg-white/10" />
-          {hasCompanyDetails ? (
-            <>
-              <View className="mt-4 flex-row items-start">
+        <Animated.ScrollView
+          ref={settingsScrollRef}
+          style={{ maxHeight: modalContentMaxHeight }}
+          contentContainerStyle={{ paddingBottom: settingsScrollBottomPadding }}
+          keyboardDismissMode="none"
+          keyboardShouldPersistTaps="always"
+          automaticallyAdjustKeyboardInsets
+          showsVerticalScrollIndicator={false}
+        >
+      <Animated.View style={{ transform: [{ translateX: settingsSlideX }] }}>
+      <View className="px-4 pt-2">
+        {settingsScreen === 'menu' ? (
+          <>
+            {renderMenuSection([
+              <React.Fragment key="profile">
+                {renderSettingsRow({
+                  icon: 'person-outline',
+                  iconBg: colors.iconSurface,
+                  iconColor: colors.accent,
+                  label: 'Korisnicki profil',
+                  onPress: () => openSettingsScreen('profile'),
+                })}
+              </React.Fragment>,
+              <React.Fragment key="subscription">
+                {renderSettingsRow({
+                  icon: 'card-outline',
+                  iconBg: isDark ? '#1C2B22' : '#DDEFE2',
+                  iconColor: isDark ? '#7AD69C' : '#2F8C57',
+                  label: 'Pretplata / Status',
+                  onPress: () => openSettingsScreen('subscription'),
+                })}
+              </React.Fragment>,
+              <React.Fragment key="company">
+                {renderSettingsRow({
+                  icon: 'business-outline',
+                  iconBg: isDark ? '#292111' : '#F3E2C9',
+                  iconColor: isDark ? '#F4C16A' : '#B76E0D',
+                  label: 'Podaci firme',
+                  onPress: () => openSettingsScreen('company'),
+                })}
+              </React.Fragment>,
+              <React.Fragment key="theme">
+                {renderSettingsRow({
+                  icon: 'moon-outline',
+                  iconBg: isDark ? '#261F38' : '#E6DFF7',
+                  iconColor: isDark ? '#C0A7FF' : '#7359C8',
+                  label: 'Tema aplikacije',
+                  onPress: () => openSettingsScreen('theme'),
+                })}
+              </React.Fragment>,
+              <React.Fragment key="language">
+                {renderSettingsRow({
+                  icon: 'language-outline',
+                  iconBg: isDark ? '#182A39' : '#DCEAF7',
+                  iconColor: isDark ? '#72C4FF' : '#1C73B8',
+                  label: 'Jezik aplikacije',
+                  onPress: () => openSettingsScreen('language'),
+                })}
+              </React.Fragment>,
+            ], true)}
+
+            {renderMenuSection([
+              <React.Fragment key="notifications">
+                {renderSettingsRow({
+                  icon: 'notifications-outline',
+                  iconBg: isDark ? '#1C2B22' : '#DDEFE2',
+                  iconColor: isDark ? '#7AD69C' : '#2F8C57',
+                  label: t('settings.notifications'),
+                  onPress: () => openSettingsScreen('notifications'),
+                })}
+              </React.Fragment>,
+              <React.Fragment key="documents">
+                {renderSettingsRow({
+                  icon: 'documents-outline',
+                  iconBg: isDark ? '#202B40' : '#DFE8FA',
+                  iconColor: isDark ? '#8FB2FF' : '#2F68ED',
+                  label: 'Dokumenti i podrska',
+                  onPress: () => openSettingsScreen('documents'),
+                })}
+              </React.Fragment>,
+              ...secondaryInfoItems.map((item) => (
+                <React.Fragment key={item.key}>
+                  {renderSettingsRow({
+                    icon: item.icon,
+                    iconBg: item.iconBg,
+                    iconColor: item.iconColor,
+                    label: item.title,
+                    onPress: () => {
+                      openSettingsScreen('about');
+                    },
+                  })}
+                </React.Fragment>
+              )),
+            ])}
+
+            {renderMenuSection([
+              <React.Fragment key="account">
+                {renderSettingsRow({
+                  icon: 'person-circle-outline',
+                  iconBg: isDark ? '#202B40' : '#DFE8FA',
+                  iconColor: isDark ? '#8FB2FF' : '#2F68ED',
+                  label: t('settings.accountSection'),
+                  onPress: () => openSettingsScreen('account'),
+                })}
+              </React.Fragment>,
+            ])}
+          </>
+        ) : null}
+
+        {settingsScreen === 'profile' ? (
+          <>
+            <View className="mt-1 flex-row items-center justify-between">
+              <Text className="flex-1 pr-5 text-app-row leading-5" style={{ color: colors.secondaryText }}>
+                Osnovni podaci naloga koriste se za prikaz profila i komunikaciju u aplikaciji.
+              </Text>
+              <View className="h-16 w-16 items-center justify-center rounded-[22px]" style={{ backgroundColor: colors.iconSurface }}>
+                <Ionicons name="person-circle-outline" size={40} color={colors.accent} />
+              </View>
+            </View>
+
+            <View className="mt-6">
+              <Text className="text-app-row font-semibold" style={{ color: colors.secondaryText }}>
+                Korisnik
+              </Text>
+              <View className="mt-2 h-px" style={{ backgroundColor: colors.separator }} />
+            </View>
+
+            <View className="mt-4">
+              <Text className="text-app-section font-semibold" style={{ color: colors.text }} numberOfLines={1}>
+                {displayName}
+              </Text>
+              <Text className="mt-0.5 text-app-row" style={{ color: colors.secondaryText }} numberOfLines={1}>
+                {email}
+              </Text>
+            </View>
+
+            {usernameMessage ? (
+              <View
+                className="mt-5 rounded-[18px] px-4 py-3"
+                style={{ backgroundColor: colors.successSurface }}>
+                <Text className="text-app-meta-lg" style={{ color: colors.successText }}>{usernameMessage}</Text>
+              </View>
+            ) : null}
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={openProfileEditScreen}
+              className="mt-6 flex-row items-center justify-center rounded-[16px] px-4 py-2.5"
+              style={{ backgroundColor: colors.elevatedSurface }}>
+              <Text className="text-app-row-lg font-semibold" style={{ color: colors.text }}>
+                {t('settings.editProfile')}
+              </Text>
+            </Pressable>
+          </>
+        ) : null}
+
+        {settingsScreen === 'profileEdit' ? (
+          <>
+            <Text className="mt-1 text-app-row leading-5" style={{ color: colors.secondaryText }}>
+              Promeni ime koje se prikazuje u aplikaciji. Email adresa ostaje vezana za nalog.
+            </Text>
+
+            <View className="mt-6">
+              <Text className="text-app-row font-semibold" style={{ color: colors.text }}>
+                {t('settings.changeUsername')}
+              </Text>
+              <AppTextInput
+                value={usernameDraft}
+                onChangeText={(next) => {
+                  setUsernameDraft(next);
+                  if (usernameError) setUsernameError(null);
+                  if (usernameMessage) setUsernameMessage(null);
+                }}
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder={t('auth.signUp.usernamePlaceholder')}
+                onFocus={() => setUsernameInputFocused(true)}
+                onBlur={() => setUsernameInputFocused(false)}
+                className="mt-3"
+                style={{
+                  backgroundColor: settingsInputSurfaceColor,
+                  borderWidth: profileInputBorderWidth,
+                  borderColor: profileInputBorderColor,
+                  borderRadius: 16,
+                  color: colors.text,
+                  paddingVertical: 8,
+                }}
+              />
+            </View>
+
+            <View className="mt-5">
+              <Text className="text-app-row font-semibold" style={{ color: colors.text }}>
+                Email
+              </Text>
+              <Text className="mt-2 text-app-row-lg" style={{ color: colors.secondaryText }} numberOfLines={1}>
+                {email}
+              </Text>
+            </View>
+
+            {usernameError ? <Text className="mt-4 text-app-meta text-red-600">{usernameError}</Text> : null}
+
+            <Pressable
+              onPress={onSaveUsername}
+              disabled={usernameSubmitting}
+              className="mt-6 flex-row items-center justify-center rounded-[16px] px-4 py-2.5 disabled:opacity-60"
+              style={{ backgroundColor: colors.accent }}>
+              {usernameSubmitting ? (
+                <ActivityIndicator color={colors.onAccent} />
+              ) : (
+                <Text className="text-app-row-lg font-semibold" style={{ color: colors.onAccent }}>{t('settings.saveProfileChanges')}</Text>
+              )}
+            </Pressable>
+          </>
+        ) : null}
+
+        {settingsScreen === 'subscription' ? (
+          <>
+            <View className="mt-1 flex-row items-center justify-between">
+              <Text className="flex-1 pr-5 text-app-row leading-5" style={{ color: colors.secondaryText }}>
+                Prati trenutni status naloga i upravljaj pristupom Premium funkcijama.
+              </Text>
+              <View className="h-16 w-16 items-center justify-center rounded-[22px]" style={{ backgroundColor: colors.iconSurface }}>
+                <Ionicons name={hasSubscription ? 'shield-checkmark-outline' : 'card-outline'} size={36} color={subscriptionStatusColor} />
+              </View>
+            </View>
+
+            <View className="mt-6">
+              <Text className="text-app-row font-semibold" style={{ color: colors.secondaryText }}>
+                Status
+              </Text>
+              <View className="mt-2 h-px" style={{ backgroundColor: colors.separator }} />
+            </View>
+
+            <View className="mt-4">
+              <Text className="text-app-section font-semibold" style={{ color: colors.text }} numberOfLines={1}>
+                {hasSubscription ? t('settings.premiumActive') : t('settings.freePlan')}
+              </Text>
+              {hasSubscription ? (
+                <Text className="mt-0.5 text-app-row" style={{ color: colors.secondaryText }}>
+                  Premium funkcije su dostupne na ovom nalogu.
+                </Text>
+              ) : null}
+            </View>
+
+            <View
+              className="mt-5 rounded-[18px] px-4 py-3"
+              style={{ backgroundColor: subscriptionStatusSurfaceColor }}>
+              <Text className="text-app-meta-lg font-semibold" style={{ color: subscriptionStatusColor }}>
+                {hasSubscription ? t('settings.subscriptionStatus') : 'Ogranicenja plana'}
+              </Text>
+              {hasSubscription ? (
+                <Text className="mt-1 text-app-meta-lg" style={{ color: colors.secondaryText }}>
+                  Tvoj nalog trenutno koristi aktivan Premium status.
+                </Text>
+              ) : (
+                <>
+                  <Text className="mt-1 text-app-meta-lg" style={{ color: colors.secondaryText }}>
+                    Besplatni plan ukljucuje:
+                  </Text>
+                  <Text className="mt-1 text-app-meta-lg" style={{ color: colors.secondaryText }}>
+                    • 3 klijenta
+                  </Text>
+                  <Text className="text-app-meta-lg" style={{ color: colors.secondaryText }}>
+                    • 3 posla
+                  </Text>
+                </>
+              )}
+            </View>
+
+            {!hasSubscription ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => router.push({ pathname: '/paywall', params: { preview: '1' } })}
+                className="mt-6 flex-row items-center justify-center rounded-[16px] px-4 py-2.5"
+                style={{ backgroundColor: colors.accent }}>
+                <Text className="text-app-row-lg font-semibold" style={{ color: colors.onAccent }}>
+                  {t('settings.buyPremium')}
+                </Text>
+              </Pressable>
+            ) : null}
+          </>
+        ) : null}
+
+        {settingsScreen === 'company' ? (
+          <>
+            <View className="mt-1 flex-row items-center justify-between">
+              <Text className="flex-1 pr-5 text-app-row leading-5" style={{ color: colors.secondaryText }}>
+                Podaci firme koriste se za racune, dokumente i informacije koje saljes klijentima.
+              </Text>
+              <View className="h-16 w-16 items-center justify-center rounded-[22px]" style={{ backgroundColor: colors.iconSurface }}>
+                {companyLogoUrl ? (
+                  <Image source={{ uri: companyLogoUrl }} style={{ width: 46, height: 46, borderRadius: 11 }} resizeMode="contain" />
+                ) : (
+                  <Ionicons name="business-outline" size={34} color={colors.accent} />
+                )}
+              </View>
+            </View>
+
+            <View className="mt-6">
+              <Text className="text-app-row font-semibold" style={{ color: colors.secondaryText }}>
+                Firma
+              </Text>
+              <View className="mt-2 h-px" style={{ backgroundColor: colors.separator }} />
+            </View>
+
+            <View className="mt-1">
+              {renderCompanyDetailRow(t('settings.companyName'), companyName)}
+              {renderCompanyDetailRow(t('settings.companyPhone'), companyPhone)}
+              {renderCompanyDetailRow(t('settings.companyAddress'), companyAddress)}
+              {renderCompanyDetailRow(t('settings.companyPib'), companyPib)}
+              {renderCompanyDetailRow(t('settings.companyRegistrationNumberShort'), companyRegistrationNumber)}
+              {renderCompanyDetailRow(t('settings.companyAccountNumber'), companyAccountNumber)}
+            </View>
+
+            {companyMessage ? (
+              <View className="mt-5 rounded-[18px] px-4 py-3" style={{ backgroundColor: colors.successSurface }}>
+                <Text className="text-app-meta-lg" style={{ color: colors.successText }}>{companyMessage}</Text>
+              </View>
+            ) : null}
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={openCompanyEditScreen}
+              className="mt-6 flex-row items-center justify-center rounded-[16px] px-4 py-2.5"
+              style={{ backgroundColor: colors.elevatedSurface }}>
+              <Text className="text-app-row-lg font-semibold" style={{ color: colors.text }}>
+                {t('settings.editProfile')}
+              </Text>
+            </Pressable>
+          </>
+        ) : null}
+
+        {settingsScreen === 'companyEdit' ? (
+          <>
+            <Text className="mt-1 text-app-row leading-5" style={{ color: colors.secondaryText }}>
+              {t('settings.companyHelp')}
+            </Text>
+
+            <View className="mt-6">
+              <Text className="text-app-row font-semibold" style={{ color: colors.text }}>
+                {t('settings.companyLogo')}
+              </Text>
+              <View className="mt-3 flex-row items-center justify-between">
                 <View
-                  className="items-center justify-center rounded-[16px] border border-black/5 dark:border-white/10"
+                  className="items-center justify-center rounded-[18px]"
                   style={{
-                    width: 68,
-                    height: 68,
-                    backgroundColor: isDark ? '#2A2A2D' : '#F5F7FB',
+                    width: 76,
+                    height: 76,
+                    backgroundColor: colors.iconSurface,
+                    borderWidth: 1,
+                    borderColor: colors.glassBorder,
                   }}>
-                  {companyLogoUrl ? (
+                  {companyLogoDraftLocalUri || companyLogoDraftUrl ? (
                     <Image
-                      source={{ uri: companyLogoUrl }}
-                      style={{ width: 52, height: 52, borderRadius: 12 }}
+                      source={{ uri: companyLogoDraftLocalUri ?? companyLogoDraftUrl ?? undefined }}
+                      style={{ width: 58, height: 58, borderRadius: 12 }}
                       resizeMode="contain"
                     />
                   ) : (
-                    <Ionicons name="business-outline" size={24} color={colors.secondaryText} />
+                    <Ionicons name="image-outline" size={24} color={colors.secondaryText} />
                   )}
                 </View>
 
-                <View className="ml-4 flex-1">
-                  <Text className="text-app-row-lg font-bold text-[#1C2745] dark:text-white">
-                    {companyName || t('settings.companyNamePlaceholder')}
-                  </Text>
-                  {companyAddress || companyPhone ? (
-                    <View className="mt-1 flex-row items-center flex-wrap">
-                      {companyAddress ? (
-                        <Text className="text-app-meta-lg text-black/60 dark:text-white/70">
-                          {companyAddress}
-                        </Text>
-                      ) : null}
-                      {companyAddress && companyPhone ? (
-                        <Text className="text-app-meta-lg text-black/60 dark:text-white/70">{' • '}</Text>
-                      ) : null}
-                      {companyPhone ? (
-                        <Text className="text-app-meta-lg text-black/60 dark:text-white/70">
-                          {companyPhone}
-                        </Text>
-                      ) : null}
-                    </View>
-                  ) : null}
-                  {companyPib || companyRegistrationNumber ? (
-                    <Text className="mt-2 text-app-meta-lg text-black/65 dark:text-white/75" numberOfLines={1}>
-                      {companyPib ? `${t('settings.companyPib')}: ${companyPib}` : ''}
-                      {companyPib && companyRegistrationNumber ? ' • ' : ''}
-                      {companyRegistrationNumber
-                        ? `${t('settings.companyRegistrationNumberShort')}: ${companyRegistrationNumber}`
-                        : ''}
-                    </Text>
-                  ) : null}
+                <View className="ml-4 flex-1 items-end">
+                  <View className="flex-row items-center">
+                    <Pressable
+                      onPress={() => {
+                        void onPickCompanyLogo();
+                      }}
+                      disabled={companyUploading}
+                      accessibilityRole="button"
+                      accessibilityLabel={companyLogoDraftLocalUri || companyLogoDraftUrl ? t('settings.changeLogo') : t('settings.uploadLogo')}
+                      className="mr-2 h-11 w-11 items-center justify-center rounded-full disabled:opacity-60">
+                      <Ionicons name="add" size={24} color="#FFFFFF" />
+                    </Pressable>
+                    {companyLogoDraftLocalUri || companyLogoDraftUrl ? (
+                      <Pressable
+                        onPress={onRemoveCompanyLogo}
+                        disabled={companyUploading}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('settings.removeLogo')}
+                        className="h-11 w-11 items-center justify-center rounded-full disabled:opacity-60">
+                        <Ionicons name="trash-outline" size={21} color={isDark ? '#D98780' : '#A9433C'} />
+                      </Pressable>
+                    ) : null}
+                  </View>
                 </View>
               </View>
-
-              {companyAccountNumber ? (
-                <>
-                  <View className="mt-4 h-px bg-black/10 dark:bg-white/10" />
-                  <View className="mt-4 flex-row items-center justify-between">
-                    <Text className="text-app-meta-lg text-black/55 dark:text-white/65">
-                      {t('settings.companyAccountNumber')}
-                    </Text>
-                    <Text className="ml-4 flex-1 text-right text-app-meta-lg font-semibold text-[#1C2745] dark:text-white" numberOfLines={1}>
-                      {companyAccountNumber}
-                    </Text>
-                  </View>
-                </>
-              ) : null}
-            </>
-          ) : (
-            <Text className="mt-4 text-app-meta-lg text-black/60 dark:text-white/70">
-              {t('settings.companyEmpty')}
-            </Text>
-          )}
-
-          {companyMessage ? (
-            <View className="mt-4 rounded-[20px] bg-black/5 px-4 py-3 dark:bg-white/5">
-              <Text className="text-app-meta-lg text-[#2F8C57] dark:text-[#7AD69C]">{companyMessage}</Text>
             </View>
-          ) : null}
-        </View>
 
-        <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/80 dark:border-white/10 dark:bg-[#1C1C1E]/80">
-          <View className="px-4 py-4">
-            <View className="flex-row items-center justify-between">
-              <View className="flex-1 pr-4">
-                <View className="flex-row items-center">
-                  <View className="h-10 w-10 items-center justify-center rounded-[14px] bg-[#EEF3FF] dark:bg-[#243047]">
-                    <Ionicons name="moon-outline" size={18} color={colors.tint} />
-                  </View>
-                  <View className="ml-3 flex-1">
-                    <Text className="text-app-row-lg font-bold text-[#1C2745] dark:text-white">
-                      {t('settings.darkTheme')}
-                    </Text>
-                    <Text className="mt-1 text-app-meta-lg text-black/60 dark:text-white/70">
-                      {t('settings.darkThemeHelp')}
-                    </Text>
-                  </View>
-                </View>
+            {renderCompanyInput({
+              id: 'name',
+              label: t('settings.companyName'),
+              value: companyNameDraft,
+              onChangeText: setCompanyNameDraft,
+              placeholder: t('settings.companyNamePlaceholder'),
+              autoCapitalize: 'words',
+            })}
+            {renderCompanyInput({
+              id: 'phone',
+              label: t('settings.companyPhone'),
+              value: companyPhoneDraft,
+              onChangeText: setCompanyPhoneDraft,
+              placeholder: t('settings.companyPhonePlaceholder'),
+              keyboardType: 'phone-pad',
+            })}
+            {renderCompanyInput({
+              id: 'address',
+              label: t('settings.companyAddress'),
+              value: companyAddressDraft,
+              onChangeText: setCompanyAddressDraft,
+              placeholder: t('settings.companyAddressPlaceholder'),
+              autoCapitalize: 'words',
+            })}
+            {renderCompanyInput({
+              id: 'pib',
+              label: t('settings.companyPib'),
+              value: companyPibDraft,
+              onChangeText: setCompanyPibDraft,
+              placeholder: t('settings.companyPibPlaceholder'),
+              keyboardType: 'number-pad',
+              autoCapitalize: 'characters',
+            })}
+            {renderCompanyInput({
+              id: 'registration',
+              label: t('settings.companyRegistrationNumber'),
+              value: companyRegistrationNumberDraft,
+              onChangeText: setCompanyRegistrationNumberDraft,
+              placeholder: t('settings.companyRegistrationNumberPlaceholder'),
+              keyboardType: 'number-pad',
+              autoCapitalize: 'characters',
+            })}
+            {renderCompanyInput({
+              id: 'account',
+              label: t('settings.companyAccountNumber'),
+              value: companyAccountNumberDraft,
+              onChangeText: setCompanyAccountNumberDraft,
+              placeholder: t('settings.companyAccountNumberPlaceholder'),
+              autoCapitalize: 'characters',
+            })}
+
+            {companyError ? <Text className="mt-4 text-app-meta text-red-600">{companyError}</Text> : null}
+
+            <Pressable
+              onPress={() => {
+                void onSaveCompany();
+              }}
+              disabled={companySubmitting || companyUploading}
+              className="mt-6 flex-row items-center justify-center rounded-[16px] px-4 py-2.5 disabled:opacity-60"
+              style={{ backgroundColor: colors.accent }}>
+              {companySubmitting || companyUploading ? (
+                <ActivityIndicator color={colors.onAccent} />
+              ) : (
+                <Text className="text-app-row-lg font-semibold" style={{ color: colors.onAccent }}>
+                  {t('settings.saveCompany')}
+                </Text>
+              )}
+            </Pressable>
+          </>
+        ) : null}
+
+        {settingsScreen === 'theme' ? (
+          <>
+            <View className="mt-1 flex-row items-center justify-between">
+              <Text className="flex-1 pr-5 text-app-row leading-5" style={{ color: colors.secondaryText }}>
+                Izaberi izgled aplikacije ili prepusti izbor sistemskim podesavanjima uredjaja.
+              </Text>
+              <View className="h-16 w-16 items-center justify-center rounded-[22px]" style={{ backgroundColor: colors.iconSurface }}>
+                <Ionicons name="color-palette-outline" size={36} color={colors.accent} />
               </View>
-              <Switch
-                value={themeSwitchValue}
-                disabled={themeSwitchPending}
-                onValueChange={(next) => {
-                  setThemeSwitchValue(next);
-                  setThemeSwitchPending(true);
-                  setPendingThemeTarget(next);
-                  if (themeToggleTimerRef.current) {
-                    clearTimeout(themeToggleTimerRef.current);
-                  }
-                  themeToggleTimerRef.current = setTimeout(() => {
-                    setColorScheme(next ? 'dark' : 'light');
-                    themeToggleTimerRef.current = null;
-                  }, 90);
+            </View>
+
+            <View className="mt-6">
+              <Text className="text-app-row font-semibold" style={{ color: colors.secondaryText }}>
+                Tema
+              </Text>
+              <View className="mt-2 h-px" style={{ backgroundColor: colors.separator }} />
+            </View>
+
+            <View className="mt-2">
+              {themeOptions.map((option, index) => {
+                const selected = themePreference === option.value;
+                return (
+                  <React.Fragment key={option.value}>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => onSelectThemePreference(option.value)}
+                      className="flex-row items-center py-2.5">
+                      <View className="h-10 w-10 items-center justify-center rounded-[10px]" style={{ backgroundColor: option.iconBg }}>
+                        <Ionicons name={option.icon} size={18} color={option.iconColor} />
+                      </View>
+                      <Text className="ml-3 flex-1 text-base" style={{ color: colors.text }}>
+                        {option.label}
+                      </Text>
+                      {selected ? (
+                        <Ionicons name="checkmark" size={19} color="#1C60C3" />
+                      ) : null}
+                    </Pressable>
+                    {index < themeOptions.length - 1 ? (
+                      <View className="h-px" style={{ backgroundColor: colors.separator }} />
+                    ) : null}
+                  </React.Fragment>
+                );
+              })}
+            </View>
+
+            <Text className="mt-4 text-center text-app-meta-lg leading-5" style={{ color: colors.secondaryText }}>
+              Automatic prati temu podesenu na uredjaju i menja izgled aplikacije zajedno sa sistemom.
+            </Text>
+          </>
+        ) : null}
+
+        {settingsScreen === 'language' ? (
+          <>
+            <View className="mt-1 flex-row items-center justify-between">
+              <Text className="flex-1 pr-5 text-app-row leading-5" style={{ color: colors.secondaryText }}>
+                Izaberi jezik interfejsa. Promena se primenjuje odmah u celoj aplikaciji.
+              </Text>
+              <View className="h-16 w-16 items-center justify-center rounded-[22px]" style={{ backgroundColor: colors.iconSurface }}>
+                <Ionicons name="language-outline" size={36} color={colors.accent} />
+              </View>
+            </View>
+
+            <View className="mt-6">
+              <Text className="text-app-row font-semibold" style={{ color: colors.secondaryText }}>
+                Jezik
+              </Text>
+              <View className="mt-2 h-px" style={{ backgroundColor: colors.separator }} />
+            </View>
+
+            <View className="mt-2">
+              {languageOptions.map((option, index) => {
+                const selected = currentLanguage === option.value;
+                return (
+                  <React.Fragment key={option.value}>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => onSelectLanguage(option.value)}
+                      className="flex-row items-center py-2.5">
+                      <View className="h-10 w-10 items-center justify-center rounded-[10px]">
+                        <Text style={{ fontSize: 22, lineHeight: 26 }}>{option.flag}</Text>
+                      </View>
+                      <Text className="ml-3 flex-1 text-base" style={{ color: colors.text }}>
+                        {option.label}
+                      </Text>
+                      {selected ? (
+                        <Ionicons name="checkmark" size={19} color="#1C60C3" />
+                      ) : null}
+                    </Pressable>
+                    {index < languageOptions.length - 1 ? (
+                      <View className="h-px" style={{ backgroundColor: colors.separator }} />
+                    ) : null}
+                  </React.Fragment>
+                );
+              })}
+            </View>
+          </>
+        ) : null}
+
+        {settingsScreen === 'documents' ? (
+          <>
+            <View className="mt-1 flex-row items-center justify-between">
+              <Text className="flex-1 pr-5 text-app-row leading-5" style={{ color: colors.secondaryText }}>
+                Pravni dokumenti i kontakt za pomoc nalaze se na jednom mestu.
+              </Text>
+              <View className="h-16 w-16 items-center justify-center rounded-[22px]" style={{ backgroundColor: colors.iconSurface }}>
+                <Ionicons name="documents-outline" size={36} color={colors.accent} />
+              </View>
+            </View>
+
+            <View className="mt-6">
+              <Text className="text-app-row font-semibold" style={{ color: colors.secondaryText }}>
+                Linkovi
+              </Text>
+              <View className="mt-2 h-px" style={{ backgroundColor: colors.separator }} />
+            </View>
+
+            <View className="mt-2">
+              {documentInfoItems.map((item, index) => (
+                <React.Fragment key={item.key}>
+                  {renderSettingsRow({
+                    icon: item.icon,
+                    iconBg: item.iconBg,
+                    iconColor: item.iconColor,
+                    label: item.title,
+                    onPress: () => {
+                      if (item.key === 'terms' || item.key === 'privacy') {
+                        router.push(`/legal/${item.key}` as any);
+                        return;
+                      }
+                      openSettingsScreen('support');
+                    },
+                  })}
+                  {index < documentInfoItems.length - 1 ? (
+                    <View className="h-px" style={{ backgroundColor: colors.separator }} />
+                  ) : null}
+                </React.Fragment>
+              ))}
+            </View>
+          </>
+        ) : null}
+
+        {settingsScreen === 'support' ? (
+          <>
+            <View className="mt-1 flex-row items-center justify-between">
+              <Text className="flex-1 pr-5 text-app-row leading-5" style={{ color: colors.secondaryText }}>
+                Posalji nam poruku direktno iz aplikacije. Otvorice se email sa vec pripremljenim podacima.
+              </Text>
+              <View className="h-16 w-16 items-center justify-center rounded-[22px]" style={{ backgroundColor: colors.iconSurface }}>
+                <Ionicons name="mail-outline" size={36} color={colors.accent} />
+              </View>
+            </View>
+
+            <View className="mt-6">
+              <Text className="text-app-row font-semibold" style={{ color: colors.secondaryText }}>
+                Poruka
+              </Text>
+              <View className="mt-2 h-px" style={{ backgroundColor: colors.separator }} />
+            </View>
+
+            <View className="mt-4">
+              <Text className="text-app-row font-semibold" style={{ color: colors.text }}>
+                Naslov
+              </Text>
+              <AppTextInput
+                value={supportSubject}
+                onChangeText={setSupportSubject}
+                onFocus={() => setFocusedSupportField('subject')}
+                onBlur={() => setFocusedSupportField(null)}
+                autoCapitalize="sentences"
+                autoCorrect
+                className="mt-3"
+                style={{
+                  backgroundColor: settingsInputSurfaceColor,
+                  borderWidth: getInputBorderWidth(focusedSupportField === 'subject'),
+                  borderColor: getInputBorderColor(focusedSupportField === 'subject'),
+                  borderRadius: 16,
+                  color: colors.text,
+                  paddingVertical: 8,
                 }}
-                trackColor={switchTrackColor}
-                thumbColor={switchThumbColor}
-                ios_backgroundColor={switchBgColor}
               />
             </View>
-          </View>
 
-          <View className="mx-4 h-px bg-black/10 dark:bg-white/10" />
+            <View className="mt-4">
+              <Text className="text-app-row font-semibold" style={{ color: colors.text }}>
+                Opisi problem ili pitanje
+              </Text>
+              <AppTextInput
+                value={supportMessage}
+                onChangeText={setSupportMessage}
+                onFocus={() => setFocusedSupportField('message')}
+                onBlur={() => setFocusedSupportField(null)}
+                autoCapitalize="sentences"
+                autoCorrect
+                multiline
+                textAlignVertical="top"
+                placeholder="Napiši poruku..."
+                className="mt-3"
+                style={{
+                  minHeight: 116,
+                  backgroundColor: settingsInputSurfaceColor,
+                  borderWidth: getInputBorderWidth(focusedSupportField === 'message'),
+                  borderColor: getInputBorderColor(focusedSupportField === 'message'),
+                  borderRadius: 16,
+                  color: colors.text,
+                  paddingVertical: 10,
+                }}
+              />
+            </View>
 
-          <View className="px-4 py-4">
-            <View className="flex-row items-center justify-between">
+            <Text className="mt-4 text-center text-app-meta-lg leading-5" style={{ color: colors.secondaryText }}>
+              Email ce biti poslat na {SUPPORT_EMAIL}.
+            </Text>
+
+            <Pressable
+              onPress={() => {
+                void onSendSupportEmail();
+              }}
+              className="mt-6 flex-row items-center justify-center rounded-[16px] px-4 py-2.5"
+              style={{ backgroundColor: colors.accent }}>
+              <Text className="text-app-row-lg font-semibold" style={{ color: colors.onAccent }}>
+                Posalji email
+              </Text>
+            </Pressable>
+          </>
+        ) : null}
+
+        {settingsScreen === 'notifications' ? (
+          <>
+            <View className="mt-1 flex-row items-center justify-between">
+              <Text className="flex-1 pr-5 text-app-row leading-5" style={{ color: colors.secondaryText }}>
+                Podesi kako aplikacija salje podsetnike za zakazane poslove.
+              </Text>
+              <View className="h-16 w-16 items-center justify-center rounded-[22px]" style={{ backgroundColor: colors.iconSurface }}>
+                <Ionicons name="notifications-outline" size={36} color={colors.accent} />
+              </View>
+            </View>
+
+            <View className="mt-6 flex-row items-center justify-between">
               <View className="flex-1 pr-4">
-                <View className="flex-row items-center">
-                  <View className="h-10 w-10 items-center justify-center rounded-[14px] bg-[#EEF8F1] dark:bg-[#203126]">
-                    <Ionicons name="notifications-outline" size={18} color={isDark ? '#7AD69C' : '#2F8C57'} />
-                  </View>
-                  <View className="ml-3 flex-1">
-                    <Text className="text-app-row-lg font-bold text-[#1C2745] dark:text-white">
-                      {t('settings.notifications')}
-                    </Text>
-                    <Text className="mt-1 text-app-meta-lg text-black/60 dark:text-white/70">
-                      {t('settings.notificationsHelp')}
-                    </Text>
-                  </View>
-                </View>
+                <Text className="text-base" style={{ color: colors.text }}>
+                  {t('settings.notifications')}
+                </Text>
+                <Text className="mt-0.5 text-app-meta-lg" style={{ color: colors.secondaryText }}>
+                  {t('settings.notificationsHelp')}
+                </Text>
               </View>
               <Switch
                 value={notificationsEnabled ?? false}
@@ -732,454 +1549,207 @@ export default function PodesavanjaScreen() {
 
             {notificationsEnabled ? (
               <>
-                <View className="mt-4 h-px bg-black/10 dark:bg-white/10" />
-                <Text className="mt-4 text-app-meta-lg font-medium text-black/60 dark:text-white/70">
-                  {t('settings.defaultReminder')}
-                </Text>
-                <Text className="mt-1 text-app-meta-lg text-black/50 dark:text-white/60">
-                  {t('settings.defaultReminderHelp')}
-                </Text>
-                <View className="mt-3 flex-row items-center">
-                  {reminderOptions.map((option) => {
+                <View className="mt-6">
+                  <Text className="text-app-row font-semibold" style={{ color: colors.secondaryText }}>
+                    {t('settings.defaultReminder')}
+                  </Text>
+                  <View className="mt-2 h-px" style={{ backgroundColor: colors.separator }} />
+                </View>
+
+                <View className="mt-2">
+                  {reminderOptions.map((option, index) => {
                     const selected = defaultReminder === option.value;
                     return (
-                      <Pressable
-                        key={option.value}
-                        onPress={() => {
-                          setDefaultReminder(option.value);
-                          void setDefaultJobReminderPreference(option.value);
-                        }}
-                        className={[
-                          'mr-2 rounded-3xl px-3 py-2',
-                          selected ? 'bg-[#2F68ED] dark:bg-[#3A7BFF]' : 'bg-black/5 dark:bg-white/5',
-                        ].join(' ')}>
-                        <Text
-                          className={
-                            selected
-                              ? 'text-app-meta font-semibold text-white'
-                              : 'text-app-meta text-black dark:text-white'
-                          }>
-                          {option.label}
-                        </Text>
-                      </Pressable>
+                      <React.Fragment key={option.value}>
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => {
+                            setDefaultReminder(option.value);
+                            void setDefaultJobReminderPreference(option.value);
+                          }}
+                          className="flex-row items-center py-1.5">
+                          <View
+                            className="h-8 w-8 items-center justify-center">
+                            <Ionicons name={option.icon} size={18} color={colors.accent} />
+                          </View>
+                          <Text className="ml-2.5 flex-1 text-base" style={{ color: colors.text }}>
+                            {option.label}
+                          </Text>
+                          {selected ? <Ionicons name="checkmark" size={19} color="#1C60C3" /> : null}
+                        </Pressable>
+                        {index < reminderOptions.length - 1 ? (
+                          <View className="h-px" style={{ backgroundColor: colors.separator }} />
+                        ) : null}
+                      </React.Fragment>
                     );
                   })}
                 </View>
+
+                <View className="mt-6">
+                  <Text className="text-app-row font-semibold" style={{ color: colors.secondaryText }}>
+                    Vreme podsetnika
+                  </Text>
+                  <View className="mt-2 h-px" style={{ backgroundColor: colors.separator }} />
+                </View>
+
+                <View className="mt-2">
+                  {reminderTimeOptions.map((option, index) => {
+                    const selected = defaultReminderTime === option.value;
+                    return (
+                      <React.Fragment key={option.value}>
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => {
+                            setDefaultReminderTimeState(option.value);
+                            void setDefaultReminderTime(option.value);
+                          }}
+                          className="flex-row items-center py-1.5">
+                          <View
+                            className="h-8 w-8 items-center justify-center">
+                            <Ionicons name="time-outline" size={18} color={colors.accent} />
+                          </View>
+                          <Text className="ml-2.5 flex-1 text-base" style={{ color: colors.text }}>
+                            {option.label}
+                          </Text>
+                          {selected ? <Ionicons name="checkmark" size={19} color="#1C60C3" /> : null}
+                        </Pressable>
+                        {index < reminderTimeOptions.length - 1 ? (
+                          <View className="h-px" style={{ backgroundColor: colors.separator }} />
+                        ) : null}
+                      </React.Fragment>
+                    );
+                  })}
+                </View>
+
+                <Text className="mt-4 text-center text-app-meta-lg leading-5" style={{ color: colors.secondaryText }}>
+                  Vreme se koristi za sve nove zakazane podsetnike.
+                </Text>
               </>
             ) : null}
-          </View>
+          </>
+        ) : null}
 
-          <View className="mx-4 h-px bg-black/10 dark:bg-white/10" />
-
-          <View className="px-4 py-4">
-            <View className="flex-row items-center justify-between">
-              <View className="flex-row items-center">
-                <View className="h-10 w-10 items-center justify-center rounded-[14px] bg-[#F2EEFF] dark:bg-[#2D2540]">
-                  <Ionicons name="language-outline" size={18} color={isDark ? '#C0A7FF' : '#7359C8'} />
-                </View>
-                <View className="ml-3">
-                  <Text className="text-app-row-lg font-bold text-[#1C2745] dark:text-white">
-                    {t('settings.language')}
-                  </Text>
-                </View>
+        {settingsScreen === 'about' ? (
+          <>
+            <View className="mt-2 items-center">
+              <View className="items-center justify-center" style={{ width: 104, height: 104 }}>
+                <Image source={APP_ICON} style={{ width: 74, height: 74 }} resizeMode="contain" />
               </View>
-              <View className="flex-row items-center">
-                <Pressable
-                  onPress={() => {
-                    void i18n.changeLanguage('sr');
-                    void setStoredLanguage('sr');
-                  }}
-                  className={[
-                    'mr-2 rounded-3xl px-4 py-2.5',
-                    !isEnglish ? 'bg-[#2F68ED] dark:bg-[#3A7BFF]' : 'bg-black/5 dark:bg-white/5',
-                  ].join(' ')}>
-                  <Text
-                    className={
-                      !isEnglish
-                        ? 'text-app-meta font-semibold text-white'
-                        : 'text-app-meta text-black dark:text-white'
-                    }>
-                    {t('settings.serbian')}
-                  </Text>
-                </Pressable>
+              <Text className="mt-4 text-app-section font-semibold" style={{ color: colors.text }}>
+                eTefter
+              </Text>
+              <Text
+                className="mt-1 max-w-[230px] text-center text-app-meta-lg leading-5"
+                style={{ color: colors.secondaryText }}>
+                Jednostavna evidencija poslova, klijenata, dugovanja i uplata.
+              </Text>
+            </View>
 
-                <Pressable
-                  onPress={() => {
-                    void i18n.changeLanguage('en');
-                    void setStoredLanguage('en');
-                  }}
-                  className={[
-                    'rounded-3xl px-4 py-2.5',
-                    isEnglish ? 'bg-[#2F68ED] dark:bg-[#3A7BFF]' : 'bg-black/5 dark:bg-white/5',
-                  ].join(' ')}>
-                  <Text
-                    className={
-                      isEnglish
-                        ? 'text-app-meta font-semibold text-white'
-                        : 'text-app-meta text-black dark:text-white'
-                    }>
-                    {t('settings.english')}
-                  </Text>
-                </Pressable>
+            <View className="mt-7">
+              <Text className="text-app-row font-semibold" style={{ color: colors.secondaryText }}>
+                Aplikacija
+              </Text>
+              <View className="mt-2 h-px" style={{ backgroundColor: colors.separator }} />
+            </View>
+
+            <View className="mt-2">
+              <View className="flex-row items-center py-2">
+                <Text className="flex-1 text-base" style={{ color: colors.text }}>
+                  Verzija
+                </Text>
+                <Text className="text-base" style={{ color: colors.secondaryText }}>
+                  {appVersion}
+                </Text>
               </View>
-            </View>
-          </View>
-        </View>
-
-        <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/80 p-4 dark:border-white/10 dark:bg-[#1C1C1E]/80">
-          <Text className="text-app-section font-extrabold text-[#1C2745] dark:text-white">
-            {t('settings.infoSection')}
-          </Text>
-          <View className="mt-4">
-            {infoItems.map((item, index) => (
-              <View key={item.key}>
-                {index > 0 ? <View className="mx-0 h-px bg-black/10 dark:bg-white/10" /> : null}
-                <Pressable
-                  onPress={() => {
-                    if (item.key === 'terms' || item.key === 'privacy') {
-                      router.push(`/(tabs)/legal/${item.key}`);
-                      return;
-                    }
-                    setInfoModalKey(item.key);
-                  }}
-                  className="flex-row items-center py-3.5">
-                  <View
-                    className="h-10 w-10 items-center justify-center rounded-[14px]"
-                    style={{ backgroundColor: item.iconBg }}>
-                    <Ionicons name={item.icon} size={18} color={item.iconColor} />
-                  </View>
-                  <View className="ml-3 flex-1">
-                    <Text className="text-app-row-lg font-medium text-[#1C2745] dark:text-white">
-                      {item.title}
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={colors.secondaryText} />
-                </Pressable>
+              <View className="h-px" style={{ backgroundColor: colors.separator }} />
+              <View className="flex-row items-center py-2">
+                <Text className="flex-1 text-base" style={{ color: colors.text }}>
+                  Podrska
+                </Text>
+                <Text className="text-base" style={{ color: colors.secondaryText }}>
+                  {SUPPORT_EMAIL}
+                </Text>
               </View>
-            ))}
-          </View>
-        </View>
-
-        <View className="mt-4 overflow-hidden rounded-3xl border border-black/10 bg-white/80 dark:border-white/10 dark:bg-[#1C1C1E]/80">
-          <Pressable
-            onPress={() => {
-              void supabase.auth.signOut();
-            }}
-            className="flex-row items-center px-4 py-4">
-            <View className="h-10 w-10 items-center justify-center rounded-[14px] bg-[#FFE5E2] dark:bg-[#3A2020]">
-              <Ionicons name="log-out-outline" size={18} color="#FF3B30" />
-            </View>
-            <View className="ml-3 flex-1">
-              <Text className="text-app-row-lg font-medium text-[#D93025] dark:text-[#FF8A80]">
-                {t('settings.signOut')}
-              </Text>
-              <Text className="mt-1 text-app-meta-lg text-black/60 dark:text-white/70">
-                {t('settings.signOutHelp')}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color="#D93025" />
-          </Pressable>
-
-          <View className="mx-4 h-px bg-black/10 dark:bg-white/10" />
-
-          <Pressable
-            onPress={onDeleteAccount}
-            disabled={deletingAccount}
-            className="flex-row items-center px-4 py-4 disabled:opacity-70">
-            <View className="h-10 w-10 items-center justify-center rounded-[14px] bg-[#FFE8E5] dark:bg-[#3A2020]">
-              {deletingAccount ? (
-                <ActivityIndicator color="#FF3B30" />
-              ) : (
-                <Ionicons name="trash-outline" size={18} color="#FF3B30" />
-              )}
-            </View>
-            <View className="ml-3 flex-1">
-              <Text className="text-app-row-lg font-medium text-[#D93025] dark:text-[#FF8A80]">
-                {t('settings.deleteAccount')}
-              </Text>
-              <Text className="mt-1 text-app-meta-lg text-black/60 dark:text-white/70">
-                {t('settings.deleteAccountHelp')}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color="#D93025" />
-          </Pressable>
-        </View>
-      </View>
-
-      <Modal transparent visible={usernameModalOpen} animationType="fade" onRequestClose={closeUsernameModal}>
-        <View className="flex-1 items-center justify-center bg-black/35 px-6">
-          <Pressable onPress={closeUsernameModal} className="absolute inset-0" />
-          <View className="w-full max-w-[360px] overflow-hidden rounded-3xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-[#1C1C1E]">
-            <View className="flex-row items-center justify-between">
-              <Text className="text-app-section font-extrabold text-[#1C2745] dark:text-white">
-                {t('settings.editProfileTitle')}
-              </Text>
+              <View className="h-px" style={{ backgroundColor: colors.separator }} />
               <Pressable
-                onPress={closeUsernameModal}
-                className="h-8 w-8 items-center justify-center rounded-full bg-black/5 dark:bg-white/10">
-                <Ionicons name="close" size={18} color={colors.text} />
+                accessibilityRole="link"
+                onPress={() => {
+                  void Linking.openURL('https://etefter.app');
+                }}
+                className="flex-row items-center py-2">
+                <Text className="flex-1 text-base" style={{ color: colors.text }}>
+                  Sajt
+                </Text>
+                <View className="flex-row items-center">
+                  <Text className="text-base" style={{ color: colors.secondaryText }}>
+                    etefter.app
+                  </Text>
+                  <Ionicons name="open-outline" size={15} color={colors.secondaryText} style={{ marginLeft: 6 }} />
+                </View>
               </Pressable>
             </View>
+          </>
+        ) : null}
 
-            <Text className="mt-4 text-app-row font-bold text-[#1C2745] dark:text-white">
-              {t('settings.changeUsername')}
-            </Text>
-            <AppTextInput
-              value={usernameDraft}
-              onChangeText={(next) => {
-                setUsernameDraft(next);
-                if (usernameError) setUsernameError(null);
-                if (usernameMessage) setUsernameMessage(null);
-              }}
-              autoCapitalize="none"
-              autoCorrect={false}
-              placeholder={t('auth.signUp.usernamePlaceholder')}
-              className="mt-4"
-            />
-
-            {usernameError ? <Text className="mt-3 text-app-meta text-red-600">{usernameError}</Text> : null}
-
-            <Pressable
-              onPress={onSaveUsername}
-              disabled={usernameSubmitting}
-              className="mt-4 flex-row items-center justify-center rounded-3xl bg-[#2F68ED] py-3 disabled:opacity-60 dark:bg-[#0A84FF]">
-              {usernameSubmitting ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <>
-                  <Ionicons name="save-outline" size={18} color="#FFFFFF" />
-                  <Text className="ml-2 text-app-row font-semibold text-white">{t('settings.saveProfileChanges')}</Text>
-                </>
-              )}
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal transparent visible={companyModalOpen} animationType="fade" onRequestClose={closeCompanyModal}>
-        <KeyboardAvoidingView
-          className="flex-1"
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View className="flex-1 items-center justify-center bg-black/35 px-6">
-          <Pressable onPress={closeCompanyModal} className="absolute inset-0" />
-          <View className="w-full max-w-[360px] overflow-hidden rounded-3xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1C1C1E]">
-            <ScrollView
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-              automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
-              style={{ maxHeight: 640 }}>
-              <View className="flex-row items-center justify-between">
-                <Text className="text-app-section font-extrabold text-[#1C2745] dark:text-white">
-                  {t('settings.companySection')}
-                </Text>
-                <Pressable
-                  onPress={closeCompanyModal}
-                  className="h-8 w-8 items-center justify-center rounded-full bg-black/5 dark:bg-white/10">
-                  <Ionicons name="close" size={18} color={colors.text} />
-                </Pressable>
+        {settingsScreen === 'account' ? (
+          <>
+            <View className="mt-1 flex-row items-center justify-between">
+              <Text className="flex-1 pr-5 text-app-row leading-5" style={{ color: colors.secondaryText }}>
+                Upravljaj prijavom i trajnim uklanjanjem naloga sa ovog uredjaja.
+              </Text>
+              <View className="h-16 w-16 items-center justify-center rounded-[22px]" style={{ backgroundColor: colors.iconSurface }}>
+                <Ionicons name="person-circle-outline" size={38} color={colors.accent} />
               </View>
+            </View>
 
-              <Text className="mt-2 text-app-meta text-black/60 dark:text-white/70">
-                {t('settings.companyHelp')}
+            <View className="mt-6">
+              <Text className="text-app-row font-semibold" style={{ color: colors.secondaryText }}>
+                Nalog
               </Text>
+              <View className="mt-2 h-px" style={{ backgroundColor: colors.separator }} />
+            </View>
 
-              <Text className="mt-4 text-app-row font-bold text-[#1C2745] dark:text-white">
-                {t('settings.companyLogo')}
-              </Text>
-              <View className="mt-4">
-                <View className="flex-row items-center justify-between">
-                  <View
-                    className="items-center justify-center rounded-[18px] border border-black/5 dark:border-white/10"
-                    style={{
-                      width: 88,
-                      height: 88,
-                    }}>
-                    {companyLogoDraftLocalUri || companyLogoDraftUrl ? (
-                      <Image
-                        source={{ uri: companyLogoDraftLocalUri ?? companyLogoDraftUrl ?? undefined }}
-                        style={{ width: 72, height: 72, borderRadius: 14 }}
-                        resizeMode="contain"
-                      />
-                    ) : (
-                      <Ionicons name="image-outline" size={26} color={colors.secondaryText} />
-                    )}
-                  </View>
-
-                  <View className="ml-4 flex-1 items-end">
-                    <View className="flex-row items-center">
-                      <Pressable
-                        onPress={() => {
-                          void onPickCompanyLogo();
-                        }}
-                        disabled={companyUploading}
-                      accessibilityRole="button"
-                      accessibilityLabel={companyLogoDraftLocalUri || companyLogoDraftUrl ? t('settings.changeLogo') : t('settings.uploadLogo')}
-                      className="mr-2 h-11 w-11 items-center justify-center rounded-full bg-[#E8F0FF] disabled:opacity-60 dark:bg-[#243047]">
-                      <Ionicons
-                        name="add"
-                        size={20}
-                        color={isDark ? '#8FB2FF' : '#2F68ED'}
-                      />
-                      </Pressable>
-                      {companyLogoDraftLocalUri || companyLogoDraftUrl ? (
-                        <Pressable
-                          onPress={onRemoveCompanyLogo}
-                          disabled={companyUploading}
-                          accessibilityRole="button"
-                          accessibilityLabel={t('settings.removeLogo')}
-                        className="h-11 w-11 items-center justify-center rounded-full bg-[#FFF3F2] disabled:opacity-60 dark:bg-[#2A1A1A]">
-                        <Ionicons name="trash-outline" size={19} color="#FF3B30" />
-                      </Pressable>
-                    ) : null}
-                  </View>
-                </View>
-              </View>
-              </View>
-
-              <Text className="mt-4 text-app-row font-bold text-[#1C2745] dark:text-white">
-                {t('settings.companyName')}
-              </Text>
-              <AppTextInput
-                value={companyNameDraft}
-                onChangeText={(next) => {
-                  setCompanyNameDraft(next);
-                  if (companyError) setCompanyError(null);
-                  if (companyMessage) setCompanyMessage(null);
-                }}
-                autoCapitalize="words"
-                autoCorrect={false}
-                placeholder={t('settings.companyNamePlaceholder')}
-                className="mt-4"
-              />
-
-              <Text className="mt-4 text-app-row font-bold text-[#1C2745] dark:text-white">
-                {t('settings.companyPhone')}
-              </Text>
-              <AppTextInput
-                value={companyPhoneDraft}
-                onChangeText={(next) => {
-                  setCompanyPhoneDraft(next);
-                  if (companyError) setCompanyError(null);
-                  if (companyMessage) setCompanyMessage(null);
-                }}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="phone-pad"
-                placeholder={t('settings.companyPhonePlaceholder')}
-                className="mt-4"
-              />
-
-              <Text className="mt-4 text-app-row font-bold text-[#1C2745] dark:text-white">
-                {t('settings.companyAddress')}
-              </Text>
-              <AppTextInput
-                value={companyAddressDraft}
-                onChangeText={(next) => {
-                  setCompanyAddressDraft(next);
-                  if (companyError) setCompanyError(null);
-                  if (companyMessage) setCompanyMessage(null);
-                }}
-                autoCapitalize="words"
-                autoCorrect={false}
-                placeholder={t('settings.companyAddressPlaceholder')}
-                className="mt-4"
-              />
-
-              <Text className="mt-4 text-app-row font-bold text-[#1C2745] dark:text-white">
-                {t('settings.companyPib')}
-              </Text>
-              <AppTextInput
-                value={companyPibDraft}
-                onChangeText={(next) => {
-                  setCompanyPibDraft(next);
-                  if (companyError) setCompanyError(null);
-                  if (companyMessage) setCompanyMessage(null);
-                }}
-                autoCapitalize="characters"
-                autoCorrect={false}
-                keyboardType="number-pad"
-                placeholder={t('settings.companyPibPlaceholder')}
-                className="mt-4"
-              />
-
-              <Text className="mt-4 text-app-row font-bold text-[#1C2745] dark:text-white">
-                {t('settings.companyRegistrationNumber')}
-              </Text>
-              <AppTextInput
-                value={companyRegistrationNumberDraft}
-                onChangeText={(next) => {
-                  setCompanyRegistrationNumberDraft(next);
-                  if (companyError) setCompanyError(null);
-                  if (companyMessage) setCompanyMessage(null);
-                }}
-                autoCapitalize="characters"
-                autoCorrect={false}
-                keyboardType="number-pad"
-                placeholder={t('settings.companyRegistrationNumberPlaceholder')}
-                className="mt-4"
-              />
-
-              <Text className="mt-4 text-app-row font-bold text-[#1C2745] dark:text-white">
-                {t('settings.companyAccountNumber')}
-              </Text>
-              <AppTextInput
-                value={companyAccountNumberDraft}
-                onChangeText={(next) => {
-                  setCompanyAccountNumberDraft(next);
-                  if (companyError) setCompanyError(null);
-                  if (companyMessage) setCompanyMessage(null);
-                }}
-                autoCapitalize="characters"
-                autoCorrect={false}
-                placeholder={t('settings.companyAccountNumberPlaceholder')}
-                className="mt-4"
-              />
-
-              {companyError ? <Text className="mt-3 text-app-meta text-red-600">{companyError}</Text> : null}
-
+            <View className="mt-2">
               <Pressable
                 onPress={() => {
-                  void onSaveCompany();
+                  void supabase.auth.signOut();
                 }}
-                disabled={companySubmitting || companyUploading}
-                className="mt-4 flex-row items-center justify-center rounded-3xl bg-[#2F68ED] py-3 disabled:opacity-60 dark:bg-[#0A84FF]">
-                {companySubmitting || companyUploading ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <>
-                    <Ionicons name="save-outline" size={18} color="#FFFFFF" />
-                    <Text className="ml-2 text-app-row font-semibold text-white">{t('settings.saveCompany')}</Text>
-                  </>
-                )}
+                className="flex-row items-center py-2">
+                <Ionicons name="log-out-outline" size={18} color={colors.accent} />
+                <View className="ml-3 flex-1">
+                  <Text className="text-base font-medium" style={{ color: colors.text }}>
+                    {t('settings.signOut')}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.secondaryText} />
               </Pressable>
-            </ScrollView>
-          </View>
-        </View>
-        </KeyboardAvoidingView>
-      </Modal>
 
-      <Modal transparent visible={Boolean(activeInfoItem)} animationType="fade" onRequestClose={() => setInfoModalKey(null)}>
-        <View className="flex-1 items-center justify-center bg-black/35 px-6">
-          <Pressable onPress={() => setInfoModalKey(null)} className="absolute inset-0" />
-          <View className="w-full max-w-[360px] overflow-hidden rounded-3xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-[#1C1C1E]">
-            <View className="flex-row items-center justify-between">
-              <Text className="text-app-section font-extrabold text-[#1C2745] dark:text-white">
-                {activeInfoItem?.title}
-              </Text>
+              <View className="h-px" style={{ backgroundColor: colors.separator }} />
+
               <Pressable
-                onPress={() => setInfoModalKey(null)}
-                className="h-8 w-8 items-center justify-center rounded-full bg-black/5 dark:bg-white/10">
-                <Ionicons name="close" size={18} color={colors.text} />
+                onPress={onDeleteAccount}
+                disabled={deletingAccount}
+                className="flex-row items-center py-2 disabled:opacity-70">
+                {deletingAccount ? (
+                  <ActivityIndicator color={isDark ? '#D98780' : '#A9433C'} />
+                ) : (
+                  <Ionicons name="trash-outline" size={18} color={isDark ? '#D98780' : '#A9433C'} />
+                )}
+                <View className="ml-3 flex-1">
+                  <Text className="text-base font-medium text-[#A9433C] dark:text-[#D98780]">
+                    {t('settings.deleteAccount')}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={isDark ? '#B66B65' : '#A9433C'} />
               </Pressable>
             </View>
-            <Text className="mt-4 text-app-meta text-black/70 dark:text-white/75">
-              {activeInfoItem?.body}
-            </Text>
-          </View>
-        </View>
-      </Modal>
-    </ScrollView>
+          </>
+        ) : null}
+      </View>
+      </Animated.View>
+        </Animated.ScrollView>
+      </View>
+
+    </View>
   );
 }

@@ -78,6 +78,7 @@ export type Database = {
           client_id: string | null;
           title: string | null;
           description: string | null;
+          pending_reason: string | null;
           price: number | null;
           status: string | null;
           scheduled_date: string | null;
@@ -91,6 +92,7 @@ export type Database = {
           client_id?: string | null;
           title?: string | null;
           description?: string | null;
+          pending_reason?: string | null;
           price?: number | null;
           status?: string | null;
           scheduled_date?: string | null;
@@ -104,6 +106,7 @@ export type Database = {
           client_id?: string | null;
           title?: string | null;
           description?: string | null;
+          pending_reason?: string | null;
           price?: number | null;
           status?: string | null;
           scheduled_date?: string | null;

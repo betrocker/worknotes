@@ -12,13 +12,19 @@ export type JobListItem = {
   id: string;
   title: string | null;
   description: string | null;
+  pending_reason: string | null;
   price: number | null;
+  debt: number;
   status: string | null;
   scheduled_date: string | null;
   completed_at: string | null;
   archived_at: string | null;
   created_at: string | null;
   client: { name: string | null } | null;
+};
+
+type JobListRow = Omit<JobListItem, 'debt'> & {
+  payments: { amount: number | null }[] | null;
 };
 
 export type JobRecord = {
@@ -28,6 +34,7 @@ export type JobRecord = {
 export type JobInput = {
   title: string;
   description?: string | null;
+  pending_reason?: string | null;
   price?: number | null;
   status?: string | null;
   scheduled_date?: string | null;
@@ -63,14 +70,29 @@ async function resolveCompletedAt(
 export async function listJobs(userId: string, options: ListJobsOptions = {}): Promise<JobListItem[]> {
   const { data, error } = await supabase
     .from('jobs')
-    .select('id,title,description,price,status,scheduled_date,completed_at,archived_at,created_at,client:clients(name)')
+    .select('id,title,description,pending_reason,price,status,scheduled_date,completed_at,archived_at,created_at,client:clients(name),payments(amount)')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
-    .overrideTypes<JobListItem[], { merge: false }>();
+    .overrideTypes<JobListRow[], { merge: false }>();
 
   if (error) throw new Error(error.message);
-  const rows = data ?? [];
+  const rows = (data ?? []).map((job) => {
+    const paid = (job.payments ?? []).reduce((sum, payment) => sum + (payment.amount ?? 0), 0);
+    const debt = Math.max(0, (job.price ?? 0) - paid);
+    const { payments, ...rest } = job;
+    return { ...rest, debt };
+  });
   return options.includeArchived ? rows : rows.filter((job) => job.archived_at == null);
+}
+
+export async function countJobs(userId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('jobs')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId);
+
+  if (error) throw new Error(error.message);
+  return count ?? 0;
 }
 
 export async function createJob(userId: string, input: JobInput): Promise<JobRecord> {
@@ -80,6 +102,7 @@ export async function createJob(userId: string, input: JobInput): Promise<JobRec
     client_id: input.client_id ?? null,
     title: input.title,
     description: input.description ?? null,
+    pending_reason: input.status === 'pending' ? input.pending_reason ?? null : null,
     price: input.price ?? null,
     status,
     scheduled_date: input.scheduled_date ?? null,
@@ -100,6 +123,7 @@ export type JobDetail = {
   id: string;
   title: string | null;
   description: string | null;
+  pending_reason: string | null;
   price: number | null;
   status: string | null;
   scheduled_date: string | null;
@@ -116,7 +140,7 @@ type ListJobsOptions = {
 export async function getJobById(userId: string, id: string): Promise<JobDetail | null> {
   const { data, error } = await supabase
     .from('jobs')
-    .select('id,title,description,price,status,scheduled_date,completed_at,archived_at,client_id,client:clients(name,phone,address)')
+    .select('id,title,description,pending_reason,price,status,scheduled_date,completed_at,archived_at,client_id,client:clients(name,phone,address)')
     .eq('user_id', userId)
     .eq('id', id)
     .maybeSingle()
@@ -133,6 +157,7 @@ export async function updateJob(userId: string, id: string, input: JobInput): Pr
     client_id: input.client_id ?? null,
     title: input.title,
     description: input.description ?? null,
+    pending_reason: status === 'pending' ? input.pending_reason ?? null : null,
     price: input.price ?? null,
     status,
     scheduled_date: input.scheduled_date ?? null,
@@ -150,6 +175,15 @@ export async function updateJobStatus(userId: string, id: string, status: string
     completed_at: completedAt,
   };
   const { error } = await supabase.from('jobs').update(payload).eq('user_id', userId).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+export async function updateJobScheduledDate(userId: string, id: string, scheduledDate: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('jobs')
+    .update({ scheduled_date: scheduledDate })
+    .eq('user_id', userId)
+    .eq('id', id);
   if (error) throw new Error(error.message);
 }
 

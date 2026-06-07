@@ -36,8 +36,16 @@ export type HomeActivityItem = {
 };
 
 export type HomeFeed = {
-  activeJobs: HomeJobRow[];
+  upcomingJobs: HomeJobRow[];
   recentActivities: HomeActivityItem[];
+};
+
+const getLocalTodayKey = () => {
+  const now = new Date();
+  const yyyy = String(now.getFullYear());
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 };
 
 export async function getHomeFeed(userId: string): Promise<HomeFeed> {
@@ -54,14 +62,20 @@ export async function getHomeFeed(userId: string): Promise<HomeFeed> {
 
   const jobs = data ?? [];
 
-  const activeJobs = [...jobs]
-    .filter((job) => !job.archived_at && (job.status ?? '').toLowerCase() === 'in_progress')
-    .sort((a, b) => {
-      const aTs = parseDateInput(a.scheduled_date ?? a.created_at)?.getTime() ?? 0;
-      const bTs = parseDateInput(b.scheduled_date ?? b.created_at)?.getTime() ?? 0;
-      return aTs - bTs;
+  const todayKey = getLocalTodayKey();
+  const upcomingJobs = [...jobs]
+    .filter((job) => {
+      const scheduled = job.scheduled_date?.slice(0, 10) ?? null;
+      const status = (job.status ?? '').toLowerCase();
+      return !job.archived_at && status !== 'done' && (status === 'pending' || Boolean(scheduled && scheduled > todayKey));
     })
-    .slice(0, 3);
+    .sort((a, b) => {
+      const aTs = parseDateInput(a.scheduled_date)?.getTime() ?? 0;
+      const bTs = parseDateInput(b.scheduled_date)?.getTime() ?? 0;
+      if (!aTs && bTs) return 1;
+      if (aTs && !bTs) return -1;
+      return aTs - bTs;
+    });
 
   const recentActivities = jobs
     .flatMap<HomeActivityItem>((job) => {
@@ -115,5 +129,5 @@ export async function getHomeFeed(userId: string): Promise<HomeFeed> {
     })
     .slice(0, 5);
 
-  return { activeJobs, recentActivities };
+  return { upcomingJobs, recentActivities };
 }

@@ -1,47 +1,54 @@
 import React from 'react';
-import { Tabs } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { View } from 'react-native';
 
-import Colors from '@/constants/Colors';
-import { FloatingTabBar } from '@/components/FloatingTabBar';
+import { FloatingActionOverlay } from '@/components/FloatingTabBar';
+import { QuickFindSwipeDown } from '@/components/QuickFindSwipeDown';
 import { useColorScheme } from '@/components/useColorScheme';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme() ?? 'light';
   const { t } = useTranslation();
+  const colorScheme = useColorScheme() ?? 'light';
+  const backgroundColor = colorScheme === 'dark' ? '#1D2229' : '#F2F2F7';
 
   return (
-    <Tabs
-      tabBar={(props) => <FloatingTabBar {...props} />}
-      screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme].tint,
-        headerShown: false,
-        sceneStyle: {
-          backgroundColor: "#1A4FE0",
-        },
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: t('tabs.home'),
-        }}
-      />
-      <Tabs.Screen name="klijenti" options={{ title: t('tabs.clients') }} />
-      <Tabs.Screen name="poslovi" options={{ title: t('tabs.jobs') }} />
-      <Tabs.Screen name="dugovanja" options={{ title: t('tabs.debtsShort') }} />
-      <Tabs.Screen name="podesavanja" options={{ title: t('tabs.profile') }} />
-      <Tabs.Screen name="klijent/new" options={{ href: null }} />
-      <Tabs.Screen name="klijent/[id]" options={{ href: null }} />
-      <Tabs.Screen name="klijent/[id]/edit" options={{ href: null }} />
-      <Tabs.Screen name="posao/new" options={{ href: null }} />
-      <Tabs.Screen name="posao/kalendar" options={{ href: null }} />
-      <Tabs.Screen name="posao/[id]" options={{ href: null }} />
-      <Tabs.Screen name="posao/[id]/edit" options={{ href: null }} />
-      <Tabs.Screen name="posao/[id]/payment/new" options={{ href: null }} />
-      <Tabs.Screen name="posao/[id]/payment/[paymentId]/edit" options={{ href: null }} />
-      <Tabs.Screen name="posao/[id]/expense/new" options={{ href: null }} />
-      <Tabs.Screen name="posao/[id]/expense/[expenseId]/edit" options={{ href: null }} />
-      <Tabs.Screen name="legal/[slug]" options={{ href: null }} />
-    </Tabs>
+    <View style={{ flex: 1, backgroundColor }}>
+      <QuickFindSwipeDown>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: 'slide_from_right',
+          contentStyle: { backgroundColor },
+        }}>
+        <Stack.Screen name="index" options={{ title: t('tabs.home') }} />
+        <Stack.Screen name="klijenti" options={{ title: t('tabs.clients') }} />
+        <Stack.Screen name="poslovi" options={{ title: t('tabs.jobs') }} />
+        <Stack.Screen name="dugovanja" options={{ title: t('tabs.debtsShort') }} />
+        <Stack.Screen
+          name="podesavanja"
+          options={{
+            title: t('tabs.profile'),
+            presentation: 'transparentModal',
+            animation: 'fade',
+            contentStyle: { backgroundColor: 'transparent' },
+          }}
+        />
+        <Stack.Screen name="klijent/new" />
+        <Stack.Screen name="klijent/[id]" />
+        <Stack.Screen name="klijent/[id]/edit" />
+        <Stack.Screen name="posao/new" />
+        <Stack.Screen name="posao/kalendar" />
+        <Stack.Screen name="posao/[id]" />
+        <Stack.Screen name="posao/[id]/edit" />
+        <Stack.Screen name="posao/[id]/payment/new" />
+        <Stack.Screen name="posao/[id]/payment/[paymentId]/edit" />
+        <Stack.Screen name="posao/[id]/expense/new" />
+        <Stack.Screen name="posao/[id]/expense/[expenseId]/edit" />
+        <Stack.Screen name="legal/[slug]" />
+      </Stack>
+      <FloatingActionOverlay />
+      </QuickFindSwipeDown>
+    </View>
   );
 }
