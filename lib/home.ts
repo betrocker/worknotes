@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { parseDateInput } from '@/lib/date';
+import { listLocalExpenses, listLocalJobs, listLocalPayments } from '@/lib/offline/core-data';
 
 type HomeJobRow = {
   id: string;
@@ -48,20 +49,7 @@ const getLocalTodayKey = () => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
-export async function getHomeFeed(userId: string): Promise<HomeFeed> {
-  const { data, error } = await supabase
-    .from('jobs')
-    .select(
-      'id,title,status,scheduled_date,completed_at,archived_at,created_at,price,client:clients(name),payments(id,amount,payment_date,note),expenses(id,amount,title,created_at)'
-    )
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .overrideTypes<HomeJobRow[], { merge: false }>();
-
-  if (error) throw new Error(error.message);
-
-  const jobs = data ?? [];
-
+function buildHomeFeed(jobs: HomeJobRow[]): HomeFeed {
   const todayKey = getLocalTodayKey();
   const upcomingJobs = [...jobs]
     .filter((job) => {
@@ -130,4 +118,61 @@ export async function getHomeFeed(userId: string): Promise<HomeFeed> {
     .slice(0, 5);
 
   return { upcomingJobs, recentActivities };
+}
+
+async function getLocalHomeJobs(userId: string): Promise<HomeJobRow[]> {
+  const localJobs = await listLocalJobs(userId, { includeArchived: true });
+  return Promise.all(
+    localJobs.map(async (job) => ({
+      id: job.id,
+      title: job.title,
+      status: job.status,
+      scheduled_date: job.scheduled_date,
+      completed_at: job.completed_at,
+      archived_at: job.archived_at,
+      created_at: job.created_at,
+      price: job.price,
+      client: job.client,
+      payments: await listLocalPayments(job.id),
+      expenses: await listLocalExpenses(job.id),
+    }))
+  );
+}
+
+async function getLocalHomeFeed(userId: string): Promise<HomeFeed> {
+  const jobs = await getLocalHomeJobs(userId);
+  return buildHomeFeed(jobs);
+}
+
+function mergeHomeJobs(remoteJobs: HomeJobRow[], localJobs: HomeJobRow[]) {
+  const merged = new Map<string, HomeJobRow>();
+  remoteJobs.forEach((job) => {
+    merged.set(job.id, job);
+  });
+  localJobs.forEach((job) => {
+    merged.set(job.id, job);
+  });
+  return [...merged.values()];
+}
+
+export async function getHomeFeed(userId: string): Promise<HomeFeed> {
+  try {
+    const [remoteResult, localJobs] = await Promise.all([
+      supabase
+        .from('jobs')
+        .select(
+          'id,title,status,scheduled_date,completed_at,archived_at,created_at,price,client:clients(name),payments(id,amount,payment_date,note),expenses(id,amount,title,created_at)'
+        )
+        .eq('user_id', userId)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .overrideTypes<HomeJobRow[], { merge: false }>(),
+      getLocalHomeJobs(userId),
+    ]);
+
+    if (remoteResult.error) throw new Error(remoteResult.error.message);
+    return buildHomeFeed(mergeHomeJobs(remoteResult.data ?? [], localJobs));
+  } catch (error) {
+    return getLocalHomeFeed(userId);
+  }
 }

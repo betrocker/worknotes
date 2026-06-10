@@ -36,8 +36,6 @@ const CLOSED_FAB_BACKGROUND = '#4287f4';
 const APP_ICON = require('../assets/images/splash-logo.png');
 
 const demoJob = {
-  title: 'Montaža kuhinjskog bojlera',
-  clientName: 'Marko Jovanović',
   scheduledDate: new Date(2026, 5, 3),
   price: 85,
   status: 'in_progress',
@@ -244,8 +242,8 @@ export default function OnboardingScreen() {
               selected={selected}
               colorScheme={colorScheme}
               colors={colors}
-              title={demoJob.title}
-              clientName={demoJob.clientName}
+              title={t('onboarding.demoJob.title')}
+              clientName={t('onboarding.demoJob.clientName')}
               date={formatDate}
               price={formatCurrency}
               status={demoJob.status}

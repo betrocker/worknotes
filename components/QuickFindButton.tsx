@@ -268,7 +268,7 @@ export function QuickFindButton({ className, hostOnly = false, style }: Props) {
         id: `client:${client.id}`,
         type: 'client',
         title: client.name || t('common.unnamed'),
-        subtitle: client.phone || client.address || t('home.jobsCountShort', { count: client.jobs_count }),
+        subtitle: client.phone || client.address || (client.jobs_count > 0 ? t('home.jobsCountShort', { count: client.jobs_count }) : t('jobs.noActiveJobs')),
         target: { type: 'client', id: client.id },
         route: () => router.push({ pathname: '/(tabs)/klijent/[id]' as any, params: { id: client.id } }),
       }));
@@ -433,7 +433,8 @@ export function QuickFindButton({ className, hostOnly = false, style }: Props) {
                           key={item.id}
                           accessibilityRole="link"
                           onPress={() => navigate(item)}
-                          className="flex-row items-center py-1.5 pl-3">
+                          className="flex-row items-center pl-3"
+                          style={{ paddingVertical: 7 }}>
                           <Ionicons
                             name={screenIconName(item.target.routeName)}
                             size={17}

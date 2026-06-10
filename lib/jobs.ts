@@ -1,4 +1,15 @@
 import { supabase } from '@/lib/supabase';
+import {
+  countLocalJobs,
+  createLocalJob,
+  deleteLocalJob,
+  isLocalJobDeleted,
+  getLocalJobById,
+  listLocalDeletedJobIds,
+  listLocalJobs,
+  patchLocalJob,
+  updateLocalJob,
+} from '@/lib/offline/core-data';
 
 const getLocalToday = () => {
   const now = new Date();
@@ -46,6 +57,31 @@ type JobStatusRow = {
   completed_at: string | null;
 };
 
+function getJobSortTime(job: Pick<JobListItem, 'scheduled_date' | 'created_at'>) {
+  return new Date(job.scheduled_date ?? job.created_at ?? 0).getTime();
+}
+
+function mergeJobRows(
+  remoteRows: JobListItem[],
+  localRows: JobListItem[],
+  deletedLocalIds: string[],
+  options: ListJobsOptions
+) {
+  const merged = new Map<string, JobListItem>();
+  const deletedIds = new Set(deletedLocalIds);
+
+  remoteRows.forEach((job) => {
+    if (deletedIds.has(job.id)) return;
+    merged.set(job.id, job);
+  });
+  localRows.forEach((job) => {
+    merged.set(job.id, job);
+  });
+
+  const rows = [...merged.values()].sort((a, b) => getJobSortTime(b) - getJobSortTime(a));
+  return options.includeArchived ? rows : rows.filter((job) => job.archived_at == null);
+}
+
 async function resolveCompletedAt(
   userId: string,
   id: string,
@@ -53,52 +89,77 @@ async function resolveCompletedAt(
 ): Promise<string | null> {
   if (nextStatus !== 'done') return null;
 
-  const { data, error } = await supabase
-    .from('jobs')
-    .select('status,completed_at')
-    .eq('user_id', userId)
-    .eq('id', id)
-    .maybeSingle()
-    .overrideTypes<JobStatusRow, { merge: false }>();
+  try {
+    const { data, error } = await supabase
+      .from('jobs')
+      .select('status,completed_at')
+      .eq('user_id', userId)
+      .eq('id', id)
+      .maybeSingle()
+      .overrideTypes<JobStatusRow, { merge: false }>();
 
-  if (error) throw new Error(error.message);
-  if (!data) return getLocalToday();
-  if (data.status === 'done' && data.completed_at) return data.completed_at;
+    if (error) throw new Error(error.message);
+    if (!data) return getLocalToday();
+    if (data.status === 'done' && data.completed_at) return data.completed_at;
+  } catch (error) {
+    const local = await getLocalJobById(userId, id);
+    if (local?.status === 'done' && local.completed_at) return local.completed_at;
+  }
   return getLocalToday();
 }
 
 export async function listJobs(userId: string, options: ListJobsOptions = {}): Promise<JobListItem[]> {
-  const { data, error } = await supabase
-    .from('jobs')
-    .select('id,title,description,pending_reason,price,status,scheduled_date,completed_at,archived_at,created_at,client:clients(name),payments(amount)')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .overrideTypes<JobListRow[], { merge: false }>();
+  try {
+    const [remoteResult, localRows, deletedLocalIds] = await Promise.all([
+      supabase
+        .from('jobs')
+        .select('id,title,description,pending_reason,price,status,scheduled_date,completed_at,archived_at,created_at,client:clients(name),payments(amount)')
+        .eq('user_id', userId)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .overrideTypes<JobListRow[], { merge: false }>(),
+      listLocalJobs(userId, { includeArchived: true }),
+      listLocalDeletedJobIds(userId),
+    ]);
 
-  if (error) throw new Error(error.message);
-  const rows = (data ?? []).map((job) => {
-    const paid = (job.payments ?? []).reduce((sum, payment) => sum + (payment.amount ?? 0), 0);
-    const debt = Math.max(0, (job.price ?? 0) - paid);
-    const { payments, ...rest } = job;
-    return { ...rest, debt };
-  });
-  return options.includeArchived ? rows : rows.filter((job) => job.archived_at == null);
+    if (remoteResult.error) throw new Error(remoteResult.error.message);
+    const remoteRows = (remoteResult.data ?? []).map((job) => {
+      const paid = (job.payments ?? []).reduce((sum, payment) => sum + (payment.amount ?? 0), 0);
+      const debt = Math.max(0, (job.price ?? 0) - paid);
+      const { payments, ...rest } = job;
+      return { ...rest, debt };
+    });
+    return mergeJobRows(remoteRows, localRows, deletedLocalIds, options);
+  } catch (error) {
+    return listLocalJobs(userId, options);
+  }
 }
 
 export async function countJobs(userId: string): Promise<number> {
-  const { count, error } = await supabase
-    .from('jobs')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', userId);
+  try {
+    const [remoteResult, localCount, deletedLocalIds] = await Promise.all([
+      supabase
+      .from('jobs')
+        .select('id')
+      .eq('user_id', userId)
+        .is('deleted_at', null)
+        .overrideTypes<{ id: string }[], { merge: false }>(),
+      countLocalJobs(userId),
+      listLocalDeletedJobIds(userId),
+    ]);
 
-  if (error) throw new Error(error.message);
-  return count ?? 0;
+    if (remoteResult.error) throw new Error(remoteResult.error.message);
+    const deletedIds = new Set(deletedLocalIds);
+    const remoteCount = (remoteResult.data ?? []).filter((row) => !deletedIds.has(row.id)).length;
+    return Math.max(remoteCount, localCount);
+  } catch (error) {
+    return countLocalJobs(userId);
+  }
 }
 
 export async function createJob(userId: string, input: JobInput): Promise<JobRecord> {
   const status = input.status ?? null;
-  const payload = {
-    user_id: userId,
+  return createLocalJob({
     client_id: input.client_id ?? null,
     title: input.title,
     description: input.description ?? null,
@@ -107,16 +168,8 @@ export async function createJob(userId: string, input: JobInput): Promise<JobRec
     status,
     scheduled_date: input.scheduled_date ?? null,
     completed_at: status === 'done' ? getLocalToday() : null,
-  };
-
-  const { data, error } = await supabase
-    .from('jobs')
-    .insert(payload)
-    .select('id')
-    .single()
-    .overrideTypes<JobRecord, { merge: false }>();
-  if (error) throw new Error(error.message);
-  return data;
+    userId,
+  });
 }
 
 export type JobDetail = {
@@ -138,22 +191,28 @@ type ListJobsOptions = {
 };
 
 export async function getJobById(userId: string, id: string): Promise<JobDetail | null> {
-  const { data, error } = await supabase
-    .from('jobs')
-    .select('id,title,description,pending_reason,price,status,scheduled_date,completed_at,archived_at,client_id,client:clients(name,phone,address)')
-    .eq('user_id', userId)
-    .eq('id', id)
-    .maybeSingle()
-    .overrideTypes<JobDetail, { merge: false }>();
+  try {
+    if (await isLocalJobDeleted(userId, id)) return null;
+    const { data, error } = await supabase
+      .from('jobs')
+      .select('id,title,description,pending_reason,price,status,scheduled_date,completed_at,archived_at,client_id,client:clients(name,phone,address)')
+      .eq('user_id', userId)
+      .eq('id', id)
+      .is('deleted_at', null)
+      .maybeSingle()
+      .overrideTypes<JobDetail, { merge: false }>();
 
-  if (error) throw new Error(error.message);
-  return data ?? null;
+    if (error) throw new Error(error.message);
+    return data ?? null;
+  } catch (error) {
+    return getLocalJobById(userId, id);
+  }
 }
 
 export async function updateJob(userId: string, id: string, input: JobInput): Promise<void> {
   const status = input.status ?? null;
   const completedAt = await resolveCompletedAt(userId, id, status);
-  const payload = {
+  await updateLocalJob(userId, id, {
     client_id: input.client_id ?? null,
     title: input.title,
     description: input.description ?? null,
@@ -162,51 +221,26 @@ export async function updateJob(userId: string, id: string, input: JobInput): Pr
     status,
     scheduled_date: input.scheduled_date ?? null,
     completed_at: completedAt,
-  };
-
-  const { error } = await supabase.from('jobs').update(payload).eq('user_id', userId).eq('id', id);
-  if (error) throw new Error(error.message);
+  });
 }
 
 export async function updateJobStatus(userId: string, id: string, status: string | null): Promise<void> {
   const completedAt = await resolveCompletedAt(userId, id, status);
-  const payload = {
-    status,
-    completed_at: completedAt,
-  };
-  const { error } = await supabase.from('jobs').update(payload).eq('user_id', userId).eq('id', id);
-  if (error) throw new Error(error.message);
+  await patchLocalJob(userId, id, { status, completed_at: completedAt });
 }
 
 export async function updateJobScheduledDate(userId: string, id: string, scheduledDate: string | null): Promise<void> {
-  const { error } = await supabase
-    .from('jobs')
-    .update({ scheduled_date: scheduledDate })
-    .eq('user_id', userId)
-    .eq('id', id);
-  if (error) throw new Error(error.message);
+  await patchLocalJob(userId, id, { scheduled_date: scheduledDate });
 }
 
 export async function deleteJob(userId: string, id: string): Promise<void> {
-  const { error } = await supabase.from('jobs').delete().eq('user_id', userId).eq('id', id);
-  if (error) throw new Error(error.message);
+  await deleteLocalJob(userId, id);
 }
 
 export async function archiveJob(userId: string, id: string): Promise<void> {
-  const { error } = await supabase
-    .from('jobs')
-    .update({ archived_at: new Date().toISOString() })
-    .eq('user_id', userId)
-    .eq('id', id)
-    .is('archived_at', null);
-  if (error) throw new Error(error.message);
+  await patchLocalJob(userId, id, { archived_at: new Date().toISOString() });
 }
 
 export async function unarchiveJob(userId: string, id: string): Promise<void> {
-  const { error } = await supabase
-    .from('jobs')
-    .update({ archived_at: null })
-    .eq('user_id', userId)
-    .eq('id', id);
-  if (error) throw new Error(error.message);
+  await patchLocalJob(userId, id, { archived_at: null });
 }

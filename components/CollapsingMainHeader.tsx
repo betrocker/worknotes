@@ -178,19 +178,21 @@ export function MainScreenTitle({
           transform: [{ translateY }, { scale }],
         },
       ]}>
-      {imageSource ? (
-        <Image source={imageSource} resizeMode="contain" style={styles.largeImage} />
-      ) : (
-        <HeaderIcon
-          name={iconName}
-          color={resolvedIconColor}
-          size={30}
-          glyphSize={24}
-        />
-      )}
-      <Text style={[styles.largeTitle, { color: colors.text }]} numberOfLines={1}>
-        {title}
-      </Text>
+      <View style={styles.largeTitleRow}>
+        {imageSource ? (
+          <Image source={imageSource} resizeMode="contain" style={styles.largeImage} />
+        ) : (
+          <HeaderIcon
+            name={iconName}
+            color={resolvedIconColor}
+            size={30}
+            glyphSize={24}
+          />
+        )}
+        <Text style={[styles.largeTitle, { color: colors.text }]} numberOfLines={1}>
+          {title}
+        </Text>
+      </View>
     </Animated.View>
   );
 }
@@ -245,10 +247,14 @@ const styles = StyleSheet.create({
     right: 18,
   },
   large: {
+    alignItems: 'flex-start',
+    paddingBottom: 20,
+  },
+  largeTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingBottom: 20,
+    width: '100%',
   },
   largeTitle: {
     flex: 1,

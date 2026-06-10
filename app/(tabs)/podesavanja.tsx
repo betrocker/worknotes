@@ -75,6 +75,7 @@ export default function PodesavanjaScreen() {
 
   const isDark = colorScheme === 'dark';
   const currentLanguage = (i18n.resolvedLanguage ?? i18n.language).toLowerCase().split('-')[0];
+  const defaultSupportSubject = t('settings.supportEmailSubject');
   const [notificationsEnabled, setNotificationsEnabledState] = useState<boolean | null>(null);
   const [notificationsSaving, setNotificationsSaving] = useState(false);
   const [defaultReminder, setDefaultReminder] = useState<JobReminderOption>('same_day');
@@ -107,13 +108,14 @@ export default function PodesavanjaScreen() {
   const [companyUploading, setCompanyUploading] = useState(false);
   const [companyError, setCompanyError] = useState<string | null>(null);
   const [companyMessage, setCompanyMessage] = useState<string | null>(null);
-  const [supportSubject, setSupportSubject] = useState('Podrska za eTefter');
+  const [supportSubject, setSupportSubject] = useState(defaultSupportSubject);
   const [supportMessage, setSupportMessage] = useState('');
   const [focusedSupportField, setFocusedSupportField] = useState<string | null>(null);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [settingsScreen, setSettingsScreen] = useState<SettingsScreenKey>('menu');
   const settingsSlideX = useRef(new Animated.Value(0)).current;
   const settingsScrollRef = useRef<ScrollView | null>(null);
+  const lastDefaultSupportSubjectRef = useRef(defaultSupportSubject);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const user = session?.user ?? null;
   const email = user?.email ?? '—';
@@ -156,7 +158,7 @@ export default function PodesavanjaScreen() {
         icon: 'information-circle-outline' as const,
         iconBg: isDark ? '#261F38' : '#E6DFF7',
         iconColor: isDark ? '#C0A7FF' : '#7359C8',
-        title: 'O aplikaciji',
+        title: t('settings.aboutTitle'),
         body: `eTefter ${appVersion}`,
       },
     ],
@@ -173,31 +175,31 @@ export default function PodesavanjaScreen() {
   const settingsScreenTitle = useMemo(() => {
     switch (settingsScreen) {
       case 'profile':
-        return 'Korisnicki profil';
+        return t('settings.profileTitle');
       case 'profileEdit':
         return t('settings.editProfileTitle');
       case 'subscription':
-        return 'Pretplata / Status';
+        return t('settings.subscriptionTitle');
       case 'company':
-        return 'Podaci firme';
+        return t('settings.companySection');
       case 'companyEdit':
         return t('settings.companySection');
       case 'theme':
-        return 'Tema aplikacije';
+        return t('settings.themeTitle');
       case 'language':
-        return 'Jezik aplikacije';
+        return t('settings.languageTitle');
       case 'documents':
-        return 'Dokumenti';
+        return t('settings.documentsTitle');
       case 'support':
         return t('settings.support');
       case 'notifications':
         return t('settings.notifications');
       case 'about':
-        return 'O aplikaciji';
+        return t('settings.aboutTitle');
       case 'account':
         return t('settings.accountSection');
       default:
-        return 'Podesavanja';
+        return t('tabs.settings');
     }
   }, [settingsScreen, t]);
   const reminderOptions = useMemo(
@@ -220,27 +222,27 @@ export default function PodesavanjaScreen() {
     () => [
       {
         value: 'light' as const,
-        label: 'Light',
+        label: t('settings.themeLight'),
         icon: 'sunny-outline' as const,
         iconBg: isDark ? colors.elevatedSurface : '#F2F4F7',
         iconColor: isDark ? '#F4C16A' : '#B76E0D',
       },
       {
         value: 'dark' as const,
-        label: 'Dark',
+        label: t('settings.themeDark'),
         icon: 'moon-outline' as const,
         iconBg: isDark ? colors.elevatedSurface : '#F2F4F7',
         iconColor: isDark ? '#C0A7FF' : '#7359C8',
       },
       {
         value: 'system' as const,
-        label: 'Automatic',
+        label: t('settings.themeAutomatic'),
         icon: 'phone-portrait-outline' as const,
         iconBg: isDark ? colors.elevatedSurface : '#F2F4F7',
         iconColor: isDark ? '#8FB2FF' : '#2F68ED',
       },
     ],
-    [colors.elevatedSurface, isDark]
+    [colors.elevatedSurface, isDark, t]
   );
   const languageOptions = useMemo(
     () => [
@@ -298,28 +300,36 @@ export default function PodesavanjaScreen() {
   }, [i18n]);
 
   const onSendSupportEmail = useCallback(async () => {
-    const subject = supportSubject.trim() || 'Podrska za eTefter';
+    const subject = supportSubject.trim() || t('settings.supportEmailSubject');
     const message = supportMessage.trim();
     const body = [
       message,
       '',
       '---',
-      `Korisnik: ${email}`,
-      `Verzija aplikacije: ${appVersion}`,
+      `${t('settings.supportEmailUser')}: ${email}`,
+      `${t('settings.supportEmailVersion')}: ${appVersion}`,
     ].join('\n');
     const url = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
     try {
       const supported = await Linking.canOpenURL(url);
       if (!supported) {
-        Alert.alert('Email nije dostupan', `Mozes nas kontaktirati direktno na ${SUPPORT_EMAIL}.`);
+        Alert.alert(t('settings.supportEmailUnavailableTitle'), t('settings.supportEmailUnavailableBody', { email: SUPPORT_EMAIL }));
         return;
       }
       await Linking.openURL(url);
     } catch {
-      Alert.alert('Email nije dostupan', `Mozes nas kontaktirati direktno na ${SUPPORT_EMAIL}.`);
+      Alert.alert(t('settings.supportEmailUnavailableTitle'), t('settings.supportEmailUnavailableBody', { email: SUPPORT_EMAIL }));
     }
-  }, [appVersion, email, supportMessage, supportSubject]);
+  }, [appVersion, email, supportMessage, supportSubject, t]);
+
+  useEffect(() => {
+    setSupportSubject((current) => {
+      const shouldReplace = !current.trim() || current === lastDefaultSupportSubjectRef.current;
+      lastDefaultSupportSubjectRef.current = defaultSupportSubject;
+      return shouldReplace ? defaultSupportSubject : current;
+    });
+  }, [defaultSupportSubject]);
 
   useEffect(() => {
     let mounted = true;
@@ -711,7 +721,7 @@ export default function PodesavanjaScreen() {
         className="ml-4 flex-1 text-right text-app-row font-semibold"
         style={{ color: value ? colors.text : colors.secondaryText }}
         numberOfLines={2}>
-        {value || 'Nije uneto'}
+        {value || t('settings.notEntered')}
       </Text>
     </View>
   );
@@ -836,7 +846,7 @@ export default function PodesavanjaScreen() {
                   icon: 'person-outline',
                   iconBg: colors.iconSurface,
                   iconColor: colors.accent,
-                  label: 'Korisnicki profil',
+                  label: t('settings.profileTitle'),
                   onPress: () => openSettingsScreen('profile'),
                 })}
               </React.Fragment>,
@@ -845,7 +855,7 @@ export default function PodesavanjaScreen() {
                   icon: 'card-outline',
                   iconBg: isDark ? '#1C2B22' : '#DDEFE2',
                   iconColor: isDark ? '#7AD69C' : '#2F8C57',
-                  label: 'Pretplata / Status',
+                  label: t('settings.subscriptionTitle'),
                   onPress: () => openSettingsScreen('subscription'),
                 })}
               </React.Fragment>,
@@ -854,7 +864,7 @@ export default function PodesavanjaScreen() {
                   icon: 'business-outline',
                   iconBg: isDark ? '#292111' : '#F3E2C9',
                   iconColor: isDark ? '#F4C16A' : '#B76E0D',
-                  label: 'Podaci firme',
+                  label: t('settings.companySection'),
                   onPress: () => openSettingsScreen('company'),
                 })}
               </React.Fragment>,
@@ -863,7 +873,7 @@ export default function PodesavanjaScreen() {
                   icon: 'moon-outline',
                   iconBg: isDark ? '#261F38' : '#E6DFF7',
                   iconColor: isDark ? '#C0A7FF' : '#7359C8',
-                  label: 'Tema aplikacije',
+                  label: t('settings.themeTitle'),
                   onPress: () => openSettingsScreen('theme'),
                 })}
               </React.Fragment>,
@@ -872,7 +882,7 @@ export default function PodesavanjaScreen() {
                   icon: 'language-outline',
                   iconBg: isDark ? '#182A39' : '#DCEAF7',
                   iconColor: isDark ? '#72C4FF' : '#1C73B8',
-                  label: 'Jezik aplikacije',
+                  label: t('settings.languageTitle'),
                   onPress: () => openSettingsScreen('language'),
                 })}
               </React.Fragment>,
@@ -893,7 +903,7 @@ export default function PodesavanjaScreen() {
                   icon: 'documents-outline',
                   iconBg: isDark ? '#202B40' : '#DFE8FA',
                   iconColor: isDark ? '#8FB2FF' : '#2F68ED',
-                  label: 'Dokumenti i podrska',
+                  label: t('settings.documentsAndSupport'),
                   onPress: () => openSettingsScreen('documents'),
                 })}
               </React.Fragment>,
@@ -930,7 +940,7 @@ export default function PodesavanjaScreen() {
           <>
             <View className="mt-1 flex-row items-center justify-between">
               <Text className="flex-1 pr-5 text-app-row leading-5" style={{ color: colors.secondaryText }}>
-                Osnovni podaci naloga koriste se za prikaz profila i komunikaciju u aplikaciji.
+                {t('settings.profileHelp')}
               </Text>
               <View className="h-16 w-16 items-center justify-center rounded-[22px]" style={{ backgroundColor: colors.iconSurface }}>
                 <Ionicons name="person-circle-outline" size={40} color={colors.accent} />
@@ -939,7 +949,7 @@ export default function PodesavanjaScreen() {
 
             <View className="mt-6">
               <Text className="text-app-row font-semibold" style={{ color: colors.secondaryText }}>
-                Korisnik
+                {t('settings.profileSection')}
               </Text>
               <View className="mt-2 h-px" style={{ backgroundColor: colors.separator }} />
             </View>
@@ -976,7 +986,7 @@ export default function PodesavanjaScreen() {
         {settingsScreen === 'profileEdit' ? (
           <>
             <Text className="mt-1 text-app-row leading-5" style={{ color: colors.secondaryText }}>
-              Promeni ime koje se prikazuje u aplikaciji. Email adresa ostaje vezana za nalog.
+              {t('settings.profileEditHelp')}
             </Text>
 
             <View className="mt-6">
@@ -1009,7 +1019,7 @@ export default function PodesavanjaScreen() {
 
             <View className="mt-5">
               <Text className="text-app-row font-semibold" style={{ color: colors.text }}>
-                Email
+                {t('common.email')}
               </Text>
               <Text className="mt-2 text-app-row-lg" style={{ color: colors.secondaryText }} numberOfLines={1}>
                 {email}
@@ -1036,7 +1046,7 @@ export default function PodesavanjaScreen() {
           <>
             <View className="mt-1 flex-row items-center justify-between">
               <Text className="flex-1 pr-5 text-app-row leading-5" style={{ color: colors.secondaryText }}>
-                Prati trenutni status naloga i upravljaj pristupom Premium funkcijama.
+                {t('settings.subscriptionHelp')}
               </Text>
               <View className="h-16 w-16 items-center justify-center rounded-[22px]" style={{ backgroundColor: colors.iconSurface }}>
                 <Ionicons name={hasSubscription ? 'shield-checkmark-outline' : 'card-outline'} size={36} color={subscriptionStatusColor} />
@@ -1045,7 +1055,7 @@ export default function PodesavanjaScreen() {
 
             <View className="mt-6">
               <Text className="text-app-row font-semibold" style={{ color: colors.secondaryText }}>
-                Status
+                {t('settings.statusSection')}
               </Text>
               <View className="mt-2 h-px" style={{ backgroundColor: colors.separator }} />
             </View>
@@ -1056,7 +1066,7 @@ export default function PodesavanjaScreen() {
               </Text>
               {hasSubscription ? (
                 <Text className="mt-0.5 text-app-row" style={{ color: colors.secondaryText }}>
-                  Premium funkcije su dostupne na ovom nalogu.
+                  {t('settings.premiumAvailable')}
                 </Text>
               ) : null}
             </View>
@@ -1065,22 +1075,22 @@ export default function PodesavanjaScreen() {
               className="mt-5 rounded-[18px] px-4 py-3"
               style={{ backgroundColor: subscriptionStatusSurfaceColor }}>
               <Text className="text-app-meta-lg font-semibold" style={{ color: subscriptionStatusColor }}>
-                {hasSubscription ? t('settings.subscriptionStatus') : 'Ogranicenja plana'}
+                {hasSubscription ? t('settings.subscriptionStatus') : t('settings.planLimitsTitle')}
               </Text>
               {hasSubscription ? (
                 <Text className="mt-1 text-app-meta-lg" style={{ color: colors.secondaryText }}>
-                  Tvoj nalog trenutno koristi aktivan Premium status.
+                  {t('settings.premiumStatusBody')}
                 </Text>
               ) : (
                 <>
                   <Text className="mt-1 text-app-meta-lg" style={{ color: colors.secondaryText }}>
-                    Besplatni plan ukljucuje:
+                    {t('settings.freePlanIncludes')}
                   </Text>
                   <Text className="mt-1 text-app-meta-lg" style={{ color: colors.secondaryText }}>
-                    • 3 klijenta
+                    {t('settings.freePlanClientsLimit')}
                   </Text>
                   <Text className="text-app-meta-lg" style={{ color: colors.secondaryText }}>
-                    • 3 posla
+                    {t('settings.freePlanJobsLimit')}
                   </Text>
                 </>
               )}
@@ -1089,7 +1099,7 @@ export default function PodesavanjaScreen() {
             {!hasSubscription ? (
               <Pressable
                 accessibilityRole="button"
-                onPress={() => router.push({ pathname: '/paywall', params: { preview: '1' } })}
+                onPress={() => router.replace({ pathname: '/paywall', params: { preview: '1' } })}
                 className="mt-6 flex-row items-center justify-center rounded-[16px] px-4 py-2.5"
                 style={{ backgroundColor: colors.accent }}>
                 <Text className="text-app-row-lg font-semibold" style={{ color: colors.onAccent }}>
@@ -1104,7 +1114,7 @@ export default function PodesavanjaScreen() {
           <>
             <View className="mt-1 flex-row items-center justify-between">
               <Text className="flex-1 pr-5 text-app-row leading-5" style={{ color: colors.secondaryText }}>
-                Podaci firme koriste se za racune, dokumente i informacije koje saljes klijentima.
+                {t('settings.companyDetailsHelp')}
               </Text>
               <View className="h-16 w-16 items-center justify-center rounded-[22px]" style={{ backgroundColor: colors.iconSurface }}>
                 {companyLogoUrl ? (
@@ -1117,7 +1127,7 @@ export default function PodesavanjaScreen() {
 
             <View className="mt-6">
               <Text className="text-app-row font-semibold" style={{ color: colors.secondaryText }}>
-                Firma
+                {t('settings.companyDetailsSection')}
               </Text>
               <View className="mt-2 h-px" style={{ backgroundColor: colors.separator }} />
             </View>
@@ -1282,7 +1292,7 @@ export default function PodesavanjaScreen() {
           <>
             <View className="mt-1 flex-row items-center justify-between">
               <Text className="flex-1 pr-5 text-app-row leading-5" style={{ color: colors.secondaryText }}>
-                Izaberi izgled aplikacije ili prepusti izbor sistemskim podesavanjima uredjaja.
+                {t('settings.themeHelp')}
               </Text>
               <View className="h-16 w-16 items-center justify-center rounded-[22px]" style={{ backgroundColor: colors.iconSurface }}>
                 <Ionicons name="color-palette-outline" size={36} color={colors.accent} />
@@ -1291,7 +1301,7 @@ export default function PodesavanjaScreen() {
 
             <View className="mt-6">
               <Text className="text-app-row font-semibold" style={{ color: colors.secondaryText }}>
-                Tema
+                {t('settings.themeSection')}
               </Text>
               <View className="mt-2 h-px" style={{ backgroundColor: colors.separator }} />
             </View>
@@ -1324,7 +1334,7 @@ export default function PodesavanjaScreen() {
             </View>
 
             <Text className="mt-4 text-center text-app-meta-lg leading-5" style={{ color: colors.secondaryText }}>
-              Automatic prati temu podesenu na uredjaju i menja izgled aplikacije zajedno sa sistemom.
+              {t('settings.themeAutomaticHelp')}
             </Text>
           </>
         ) : null}
@@ -1333,7 +1343,7 @@ export default function PodesavanjaScreen() {
           <>
             <View className="mt-1 flex-row items-center justify-between">
               <Text className="flex-1 pr-5 text-app-row leading-5" style={{ color: colors.secondaryText }}>
-                Izaberi jezik interfejsa. Promena se primenjuje odmah u celoj aplikaciji.
+                {t('settings.languageHelpDetailed')}
               </Text>
               <View className="h-16 w-16 items-center justify-center rounded-[22px]" style={{ backgroundColor: colors.iconSurface }}>
                 <Ionicons name="language-outline" size={36} color={colors.accent} />
@@ -1342,7 +1352,7 @@ export default function PodesavanjaScreen() {
 
             <View className="mt-6">
               <Text className="text-app-row font-semibold" style={{ color: colors.secondaryText }}>
-                Jezik
+                {t('settings.languageSection')}
               </Text>
               <View className="mt-2 h-px" style={{ backgroundColor: colors.separator }} />
             </View>
@@ -1380,7 +1390,7 @@ export default function PodesavanjaScreen() {
           <>
             <View className="mt-1 flex-row items-center justify-between">
               <Text className="flex-1 pr-5 text-app-row leading-5" style={{ color: colors.secondaryText }}>
-                Pravni dokumenti i kontakt za pomoc nalaze se na jednom mestu.
+                {t('settings.documentsHelp')}
               </Text>
               <View className="h-16 w-16 items-center justify-center rounded-[22px]" style={{ backgroundColor: colors.iconSurface }}>
                 <Ionicons name="documents-outline" size={36} color={colors.accent} />
@@ -1389,7 +1399,7 @@ export default function PodesavanjaScreen() {
 
             <View className="mt-6">
               <Text className="text-app-row font-semibold" style={{ color: colors.secondaryText }}>
-                Linkovi
+                {t('settings.documentsSection')}
               </Text>
               <View className="mt-2 h-px" style={{ backgroundColor: colors.separator }} />
             </View>
@@ -1423,7 +1433,7 @@ export default function PodesavanjaScreen() {
           <>
             <View className="mt-1 flex-row items-center justify-between">
               <Text className="flex-1 pr-5 text-app-row leading-5" style={{ color: colors.secondaryText }}>
-                Posalji nam poruku direktno iz aplikacije. Otvorice se email sa vec pripremljenim podacima.
+                {t('settings.supportEmailHelp')}
               </Text>
               <View className="h-16 w-16 items-center justify-center rounded-[22px]" style={{ backgroundColor: colors.iconSurface }}>
                 <Ionicons name="mail-outline" size={36} color={colors.accent} />
@@ -1432,14 +1442,14 @@ export default function PodesavanjaScreen() {
 
             <View className="mt-6">
               <Text className="text-app-row font-semibold" style={{ color: colors.secondaryText }}>
-                Poruka
+                {t('settings.supportMessageSection')}
               </Text>
               <View className="mt-2 h-px" style={{ backgroundColor: colors.separator }} />
             </View>
 
             <View className="mt-4">
               <Text className="text-app-row font-semibold" style={{ color: colors.text }}>
-                Naslov
+                {t('settings.supportSubjectLabel')}
               </Text>
               <AppTextInput
                 value={supportSubject}
@@ -1462,7 +1472,7 @@ export default function PodesavanjaScreen() {
 
             <View className="mt-4">
               <Text className="text-app-row font-semibold" style={{ color: colors.text }}>
-                Opisi problem ili pitanje
+                {t('settings.supportMessageLabel')}
               </Text>
               <AppTextInput
                 value={supportMessage}
@@ -1473,7 +1483,7 @@ export default function PodesavanjaScreen() {
                 autoCorrect
                 multiline
                 textAlignVertical="top"
-                placeholder="Napiši poruku..."
+                placeholder={t('settings.supportMessagePlaceholder')}
                 className="mt-3"
                 style={{
                   minHeight: 116,
@@ -1488,7 +1498,7 @@ export default function PodesavanjaScreen() {
             </View>
 
             <Text className="mt-4 text-center text-app-meta-lg leading-5" style={{ color: colors.secondaryText }}>
-              Email ce biti poslat na {SUPPORT_EMAIL}.
+              {t('settings.supportEmailNote', { email: SUPPORT_EMAIL })}
             </Text>
 
             <Pressable
@@ -1498,7 +1508,7 @@ export default function PodesavanjaScreen() {
               className="mt-6 flex-row items-center justify-center rounded-[16px] px-4 py-2.5"
               style={{ backgroundColor: colors.accent }}>
               <Text className="text-app-row-lg font-semibold" style={{ color: colors.onAccent }}>
-                Posalji email
+                {t('settings.supportEmailSend')}
               </Text>
             </Pressable>
           </>
@@ -1508,7 +1518,7 @@ export default function PodesavanjaScreen() {
           <>
             <View className="mt-1 flex-row items-center justify-between">
               <Text className="flex-1 pr-5 text-app-row leading-5" style={{ color: colors.secondaryText }}>
-                Podesi kako aplikacija salje podsetnike za zakazane poslove.
+                {t('settings.notificationsDetailHelp')}
               </Text>
               <View className="h-16 w-16 items-center justify-center rounded-[22px]" style={{ backgroundColor: colors.iconSurface }}>
                 <Ionicons name="notifications-outline" size={36} color={colors.accent} />
@@ -1587,7 +1597,7 @@ export default function PodesavanjaScreen() {
 
                 <View className="mt-6">
                   <Text className="text-app-row font-semibold" style={{ color: colors.secondaryText }}>
-                    Vreme podsetnika
+                    {t('settings.reminderTime')}
                   </Text>
                   <View className="mt-2 h-px" style={{ backgroundColor: colors.separator }} />
                 </View>
@@ -1622,7 +1632,7 @@ export default function PodesavanjaScreen() {
                 </View>
 
                 <Text className="mt-4 text-center text-app-meta-lg leading-5" style={{ color: colors.secondaryText }}>
-                  Vreme se koristi za sve nove zakazane podsetnike.
+                  {t('settings.reminderTimeHelp')}
                 </Text>
               </>
             ) : null}
@@ -1641,13 +1651,13 @@ export default function PodesavanjaScreen() {
               <Text
                 className="mt-1 max-w-[230px] text-center text-app-meta-lg leading-5"
                 style={{ color: colors.secondaryText }}>
-                Jednostavna evidencija poslova, klijenata, dugovanja i uplata.
+                {t('settings.aboutBody')}
               </Text>
             </View>
 
             <View className="mt-7">
               <Text className="text-app-row font-semibold" style={{ color: colors.secondaryText }}>
-                Aplikacija
+                {t('settings.aboutSection')}
               </Text>
               <View className="mt-2 h-px" style={{ backgroundColor: colors.separator }} />
             </View>
@@ -1655,7 +1665,7 @@ export default function PodesavanjaScreen() {
             <View className="mt-2">
               <View className="flex-row items-center py-2">
                 <Text className="flex-1 text-base" style={{ color: colors.text }}>
-                  Verzija
+                  {t('settings.versionLabel')}
                 </Text>
                 <Text className="text-base" style={{ color: colors.secondaryText }}>
                   {appVersion}
@@ -1664,7 +1674,7 @@ export default function PodesavanjaScreen() {
               <View className="h-px" style={{ backgroundColor: colors.separator }} />
               <View className="flex-row items-center py-2">
                 <Text className="flex-1 text-base" style={{ color: colors.text }}>
-                  Podrska
+                  {t('settings.support')}
                 </Text>
                 <Text className="text-base" style={{ color: colors.secondaryText }}>
                   {SUPPORT_EMAIL}
@@ -1678,7 +1688,7 @@ export default function PodesavanjaScreen() {
                 }}
                 className="flex-row items-center py-2">
                 <Text className="flex-1 text-base" style={{ color: colors.text }}>
-                  Sajt
+                  {t('settings.websiteLabel')}
                 </Text>
                 <View className="flex-row items-center">
                   <Text className="text-base" style={{ color: colors.secondaryText }}>
@@ -1695,7 +1705,7 @@ export default function PodesavanjaScreen() {
           <>
             <View className="mt-1 flex-row items-center justify-between">
               <Text className="flex-1 pr-5 text-app-row leading-5" style={{ color: colors.secondaryText }}>
-                Upravljaj prijavom i trajnim uklanjanjem naloga sa ovog uredjaja.
+                {t('settings.accountHelp')}
               </Text>
               <View className="h-16 w-16 items-center justify-center rounded-[22px]" style={{ backgroundColor: colors.iconSurface }}>
                 <Ionicons name="person-circle-outline" size={38} color={colors.accent} />
@@ -1704,7 +1714,7 @@ export default function PodesavanjaScreen() {
 
             <View className="mt-6">
               <Text className="text-app-row font-semibold" style={{ color: colors.secondaryText }}>
-                Nalog
+                {t('settings.accountSection')}
               </Text>
               <View className="mt-2 h-px" style={{ backgroundColor: colors.separator }} />
             </View>

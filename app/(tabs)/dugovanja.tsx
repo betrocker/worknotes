@@ -10,6 +10,7 @@ import Colors from '@/constants/Colors';
 import { CollapsingMainHeader, MainScreenTitle } from '@/components/CollapsingMainHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { PaymentJobPickerModal } from '@/components/PaymentJobPickerModal';
+import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
 import { useQuickFindSwipeDown } from '@/components/useQuickFindSwipeDown';
 import { useColorScheme } from '@/components/useColorScheme';
 import { listClientOpenDebtJobs, listClientsWithDebt, type ClientOpenDebtJob, type ClientWithDebt } from '@/lib/clients';
@@ -625,6 +626,7 @@ export default function DugovanjaScreen() {
         <Text className="-mt-4 mb-4 text-app-subtitle text-black/60 dark:text-white/70">
           {subtitle}
         </Text>
+        <SyncStatusIndicator />
 
         {error ? <Text className="mt-3 text-app-meta text-red-600 dark:text-red-400">{error}</Text> : null}
 
@@ -798,7 +800,7 @@ export default function DugovanjaScreen() {
 
             <View className="px-4 pb-5">
               {reminderClient ? (
-                <Text className="mb-4 text-center text-app-meta-lg leading-5" style={{ color: colors.secondaryText }}>
+                <Text className="mb-4 text-center text-app-row leading-5" style={{ color: colors.secondaryText }}>
                   {buildReminderMessage(reminderClient)}
                 </Text>
               ) : null}

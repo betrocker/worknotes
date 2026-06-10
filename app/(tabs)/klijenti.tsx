@@ -10,9 +10,10 @@ import Colors from '@/constants/Colors';
 import { EmptyState } from '@/components/EmptyState';
 import { PaymentJobPickerModal } from '@/components/PaymentJobPickerModal';
 import { CollapsingMainHeader, MainScreenTitle } from '@/components/CollapsingMainHeader';
+import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
 import { useQuickFindSwipeDown } from '@/components/useQuickFindSwipeDown';
 import { useColorScheme } from '@/components/useColorScheme';
-import { listClientOpenDebtJobs, listClientsWithDebt, type ClientOpenDebtJob, type ClientWithDebt } from '@/lib/clients';
+import { deleteClient, listClientOpenDebtJobs, listClientsWithDebt, type ClientOpenDebtJob, type ClientWithDebt } from '@/lib/clients';
 import { setMainFloatingActionsHidden } from '@/lib/floating-actions-visibility';
 import { goBackOrReplace } from '@/lib/navigation';
 import { triggerSelectionHaptic } from '@/lib/haptics';
@@ -180,7 +181,7 @@ function ClientSwipeSelectRow({
   const activeRowBackground = colorScheme === 'dark' ? '#30333A' : '#E4E6EA';
   const movingRowBackground = swiping ? activeRowBackground : 'transparent';
   const revealBackgroundColor = colorScheme === 'dark' ? '#315FAD' : '#1C60C3';
-  const secondaryText = item.phone || item.address || formatJobsLabel(item.jobs_count);
+  const secondaryText = item.phone || item.address || (item.jobs_count > 0 ? formatJobsLabel(item.jobs_count) : null);
 
   return (
     <Animated.View
@@ -245,11 +246,13 @@ function ClientSwipeSelectRow({
               <Text style={{ color: colors.text, fontSize: 16, fontWeight: '400' }} numberOfLines={1}>
                 {item.name || '-'}
               </Text>
-              <View style={{ marginTop: -1, flexDirection: 'row', alignItems: 'center' }}>
-                <Text style={{ color: colors.secondaryText, fontSize: 12 }} numberOfLines={1}>
-                  {secondaryText}
-                </Text>
-              </View>
+              {secondaryText ? (
+                <View style={{ marginTop: -1, flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={{ color: colors.secondaryText, fontSize: 12 }} numberOfLines={1}>
+                    {secondaryText}
+                  </Text>
+                </View>
+              ) : null}
             </View>
 
             {item.debt > 0 ? (
@@ -330,7 +333,6 @@ export default function KlijentiScreen() {
     [items, selectedClientId]
   );
   const canContactSelectedClient = Boolean(singleSelectedClient?.phone);
-  const canMapSelectedClient = Boolean(singleSelectedClient?.address?.trim());
   const selectionBarProgress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -478,6 +480,16 @@ export default function KlijentiScreen() {
     },
     [i18n.language, t]
   );
+  const formatJobsShortLabel = useCallback(
+    (count: number) => {
+      if (i18n.language === 'sr') {
+        const form = getSerbianPluralForm(count);
+        return `${count} ${t(`jobs.jobsCountForms.${form}`)}`;
+      }
+      return `${count} ${count === 1 ? t('jobs.jobsCountForms.one') : t('jobs.jobsCountForms.other')}`;
+    },
+    [i18n.language, t]
+  );
   const formatDebtsShortLabel = useCallback(
     (count: number) => {
       if (i18n.language === 'sr') {
@@ -520,16 +532,38 @@ export default function KlijentiScreen() {
     setContactClient(singleSelectedClient);
   }, [clearSelection, singleSelectedClient]);
 
-  const onOpenSelectedClientMap = useCallback(() => {
-    const address = singleSelectedClient?.address?.trim();
-    if (!address) {
-      Alert.alert(t('clients.noAddressTitle'), t('clients.noAddressBody'));
-      return;
-    }
+  const onEditSelectedClient = useCallback(() => {
+    const clientId = selectedClientId;
+    if (!clientId) return;
     clearSelection();
-    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-    void openUrl(url);
-  }, [clearSelection, openUrl, singleSelectedClient?.address, t]);
+    router.push({ pathname: '/(tabs)/klijent/[id]/edit' as any, params: { id: clientId } });
+  }, [clearSelection, router, selectedClientId]);
+
+  const onDeleteSelectedClient = useCallback(() => {
+    if (!userId || !singleSelectedClient) return;
+    Alert.alert(t('clients.deleteConfirmTitle'), t('clients.deleteConfirmMessage'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('clients.delete'),
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            const previousItems = items;
+            const clientId = singleSelectedClient.id;
+            setItems((current) => current.filter((item) => item.id !== clientId));
+            clearSelection();
+            try {
+              await deleteClient(userId, clientId);
+              await load();
+            } catch (e: unknown) {
+              setItems(previousItems);
+              setError(e instanceof Error ? e.message : String(e));
+            }
+          })();
+        },
+      },
+    ]);
+  }, [clearSelection, items, load, singleSelectedClient, t, userId]);
 
   const renderClientRow = (item: ClientWithDebt) => (
     <ClientSwipeSelectRow
@@ -540,7 +574,7 @@ export default function KlijentiScreen() {
       colors={colors}
       colorScheme={colorScheme}
       paymentLabel={t('jobs.payment')}
-      formatJobsLabel={formatClientsShortLabel}
+      formatJobsLabel={formatJobsShortLabel}
       formatMoney={formatMoney}
       onOpen={openClient}
       onToggleSelected={toggleSelectedClient}
@@ -594,13 +628,18 @@ export default function KlijentiScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t('tabs.profile')}
-              onPress={() => router.push('/(tabs)/podesavanja' as any)}
+              disabled={selectionMode}
+              onPress={() => {
+                if (selectionMode) return;
+                router.push('/(tabs)/podesavanja' as any);
+              }}
               hitSlop={8}
               style={{
                 width: 38,
                 height: 38,
                 alignItems: 'center',
                 justifyContent: 'center',
+                opacity: selectionMode ? 0 : 1,
               }}>
               <Ionicons name="person-outline" size={20} color="#717983" />
             </Pressable>
@@ -623,6 +662,7 @@ export default function KlijentiScreen() {
         <Text className="-mt-4 mb-4 text-app-subtitle text-black/60 dark:text-white/70">
           {headerSubtitle}
         </Text>
+        <SyncStatusIndicator />
 
         {error ? <Text className="mt-3 text-app-meta text-red-600">{error}</Text> : null}
 
@@ -659,6 +699,8 @@ export default function KlijentiScreen() {
               }),
             },
           ],
+          flexDirection: 'row',
+          alignItems: 'center',
         }}>
         <Pressable
           accessibilityRole="button"
@@ -728,22 +770,24 @@ export default function KlijentiScreen() {
             </Pressable>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={t('clients.newJob')}
+              accessibilityLabel={t('clients.edit')}
+              disabled={!singleSelectedClient}
+              onPress={onEditSelectedClient}
               className="min-h-[42px] flex-1 flex-row items-center justify-center rounded-full px-1 disabled:opacity-35">
-              <Ionicons name="briefcase-outline" size={17} color="#FFFFFF" />
+              <Ionicons name="create-outline" size={17} color="#FFFFFF" />
               <Text className="ml-1.5 text-app-row-lg font-semibold" style={{ color: '#FFFFFF' }} numberOfLines={1}>
-                {t('clients.newJob')}
+                {t('jobs.editShort')}
               </Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={t('clients.map')}
-              disabled={!canMapSelectedClient}
-              onPress={onOpenSelectedClientMap}
+              accessibilityLabel={t('clients.delete')}
+              disabled={!singleSelectedClient}
+              onPress={onDeleteSelectedClient}
               className="min-h-[42px] flex-1 flex-row items-center justify-center rounded-full px-1 disabled:opacity-35">
-              <Ionicons name="map-outline" size={17} color="#FFFFFF" />
+              <Ionicons name="trash-outline" size={17} color="#FFFFFF" />
               <Text className="ml-1.5 text-app-row-lg font-semibold" style={{ color: '#FFFFFF' }} numberOfLines={1}>
-                {t('clients.map')}
+                {t('clients.delete')}
               </Text>
             </Pressable>
           </View>
@@ -783,7 +827,7 @@ export default function KlijentiScreen() {
 
             <View className="px-4 pb-5">
               {contactClient?.phone ? (
-                <Text className="mb-3 text-center text-app-meta-lg" style={{ color: colors.secondaryText }} numberOfLines={1}>
+                <Text className="mb-4 text-center text-app-row" style={{ color: colors.secondaryText }} numberOfLines={1}>
                   {contactClient.phone}
                 </Text>
               ) : null}

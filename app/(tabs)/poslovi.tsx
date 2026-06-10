@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Colors from '@/constants/Colors';
 import { CollapsingMainHeader, MainScreenTitle } from '@/components/CollapsingMainHeader';
+import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
 import { useQuickFindSwipeDown } from '@/components/useQuickFindSwipeDown';
 import { useColorScheme } from '@/components/useColorScheme';
 import { parseDateInput } from '@/lib/date';
@@ -820,6 +821,7 @@ export default function PosloviScreen() {
         <Text className="-mt-4 mb-4 text-app-subtitle text-black/60 dark:text-white/70">
           {jobsSubtitle}
         </Text>
+        <SyncStatusIndicator />
 
         {error ? <Text className="mt-3 text-app-meta text-red-600">{error}</Text> : null}
 
@@ -876,7 +878,7 @@ export default function PosloviScreen() {
             </View>
 
             <View className="px-4 pb-5">
-              <Text className="mb-3 text-center text-app-meta-lg" style={{ color: colors.secondaryText }} numberOfLines={1}>
+              <Text className="mb-4 text-center text-app-row" style={{ color: colors.secondaryText }} numberOfLines={1}>
                 {postponeJob?.title || t('jobs.untitled')}
               </Text>
               <View className="overflow-hidden rounded-[16px]" style={{ backgroundColor: isDark ? colors.elevatedSurface : '#F2F4F7' }}>

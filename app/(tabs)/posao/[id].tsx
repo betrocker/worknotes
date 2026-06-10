@@ -34,6 +34,7 @@ import { CollapsingMainHeader, MainScreenTitle } from '@/components/CollapsingMa
 import { HeaderOverflowMenu } from '@/components/HeaderOverflowMenu';
 import { JobDetailFloatingActions, type JobDetailFloatingAction } from '@/components/JobDetailFloatingActions';
 import Colors from '@/constants/Colors';
+import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
 import { useQuickFindSwipeDown } from '@/components/useQuickFindSwipeDown';
 import { useColorScheme } from '@/components/useColorScheme';
 import { parseDateInput } from '@/lib/date';
@@ -98,6 +99,10 @@ type InvoiceItemInlineFormRowProps = {
 const INVOICE_ITEM_ACTION_WIDTH = 78;
 const INVOICE_ITEM_ACTION_STRETCH = 12;
 const INVOICE_ITEM_ROW_GAP = 4;
+
+function getJobImageUri(item: JobImageRow | null | undefined) {
+  return item?.image_url ?? item?.local_uri ?? null;
+}
 
 function InvoiceItemInlineFormRow({
   marginTop = 0,
@@ -1245,11 +1250,18 @@ export default function JobDetailScreen() {
   }, []);
 
   const downloadImageToCache = useCallback(async (item: JobImageRow) => {
-    if (!item.image_url) return null;
-    const extension = item.image_url.split('?')[0]?.split('.').pop()?.toLowerCase() || 'jpg';
+    const uri = getJobImageUri(item);
+    if (!uri) return null;
+    const extension = uri.split('?')[0]?.split('.').pop()?.toLowerCase() || 'jpg';
     const normalizedExtension = extension === 'png' ? 'png' : 'jpg';
+    if (uri.startsWith('file://')) {
+      return {
+        uri,
+        extension: normalizedExtension,
+      };
+    }
     const localFile = new File(Paths.cache, `job-image-${item.id}.${extension}`);
-    await File.downloadFileAsync(item.image_url, localFile);
+    await File.downloadFileAsync(uri, localFile);
     return {
       uri: localFile.uri,
       extension: normalizedExtension,
@@ -1257,15 +1269,16 @@ export default function JobDetailScreen() {
   }, []);
 
   const onShareImageItem = useCallback(async (item: JobImageRow) => {
-    if (!item.image_url) return;
+    const uri = getJobImageUri(item);
+    if (!uri) return;
     try {
       const downloadedFile = await downloadImageToCache(item);
       if (!downloadedFile) return;
       const canShare = await Sharing.isAvailableAsync();
       if (!canShare) {
         await Share.share({
-          url: item.image_url,
-          message: item.image_url,
+          url: uri,
+          message: uri,
         });
         return;
       }
@@ -1284,15 +1297,16 @@ export default function JobDetailScreen() {
   }, [onShareImageItem, previewImage]);
 
   const onSaveImageItem = useCallback(async (item: JobImageRow) => {
-    if (!item.image_url) return;
+    const uri = getJobImageUri(item);
+    if (!uri) return;
     try {
       const downloadedFile = await downloadImageToCache(item);
       if (!downloadedFile) return;
       const canShare = await Sharing.isAvailableAsync();
       if (!canShare) {
         await Share.share({
-          url: item.image_url,
-          message: item.image_url,
+          url: uri,
+          message: uri,
         });
         return;
       }
@@ -1487,8 +1501,8 @@ export default function JobDetailScreen() {
                     onLongPress={() => toggleImageSelection(entry.item.id)}
                     style={{ marginRight: GRID_GAP }}>
                     <View>
-                      <Image
-                        source={{ uri: entry.item.image_url ?? undefined }}
+                  <Image
+                        source={{ uri: getJobImageUri(entry.item) ?? undefined }}
                         style={{
                           width: carouselThumbSize,
                           height: carouselThumbSize,
@@ -1656,6 +1670,7 @@ export default function JobDetailScreen() {
             </Text>
           </View>
         ) : null}
+        <SyncStatusIndicator />
         {renderSectionHeader(t('jobs.overviewTitle'))}
         <View style={{ marginLeft: 12, marginTop: 8 }}>
           {loading && !job ? (
@@ -1987,7 +2002,7 @@ export default function JobDetailScreen() {
               ) : null}
               <Pressable
                 onPress={onShareImage}
-                disabled={!previewImage?.image_url}
+                disabled={!getJobImageUri(previewImage)}
                 className="mr-2 h-10 w-10 items-center justify-center rounded-full bg-white/12 disabled:opacity-40">
                 <Ionicons name="share-outline" size={18} color="white" />
               </Pressable>
@@ -1997,7 +2012,7 @@ export default function JobDetailScreen() {
                     void onSaveImageItem(previewImage);
                   }
                 }}
-                disabled={!previewImage?.image_url}
+                disabled={!getJobImageUri(previewImage)}
                 className="mr-2 h-10 w-10 items-center justify-center rounded-full bg-white/12 disabled:opacity-40">
                 <Ionicons name="download-outline" size={18} color="white" />
               </Pressable>
@@ -2086,7 +2101,7 @@ export default function JobDetailScreen() {
                   bouncesZoom={false}
                   centerContent>
                   <Image
-                    source={{ uri: item.image_url ?? undefined }}
+                    source={{ uri: getJobImageUri(item) ?? undefined }}
                     resizeMode="contain"
                     style={{
                       width: screenWidth,
@@ -2107,7 +2122,7 @@ export default function JobDetailScreen() {
                     paddingBottom: previewBottomInset,
                   }}>
                   <Animated.Image
-                    source={{ uri: item.image_url ?? undefined }}
+                    source={{ uri: getJobImageUri(item) ?? undefined }}
                     resizeMode="contain"
                     style={{
                       width: screenWidth,

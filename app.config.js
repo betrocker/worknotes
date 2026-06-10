@@ -90,6 +90,7 @@ module.exports = () => {
             defaultChannel: 'job-reminders',
           },
         ],
+        'expo-sqlite',
         '@react-native-community/datetimepicker',
         'expo-web-browser',
         googleSigninPlugin,

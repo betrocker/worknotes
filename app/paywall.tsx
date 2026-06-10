@@ -52,7 +52,7 @@ export default function PaywallScreen() {
   const { height } = useWindowDimensions();
   const router = useRouter();
   const params = useLocalSearchParams<{ preview?: string }>();
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const colorScheme = useColorScheme() ?? 'light';
   const reapplyColorScheme = useReapplyColorScheme();
   const isDark = colorScheme === 'dark';
@@ -203,9 +203,7 @@ export default function PaywallScreen() {
     () => packages.find((entry) => entry.identifier === selectedPackageId) ?? null,
     [packages, selectedPackageId]
   );
-  const paywallTitle = (i18n.resolvedLanguage ?? i18n.language).toLowerCase().startsWith('sr')
-    ? 'Nikad više ne zaboravi ko ti duguje'
-    : t('paywall.title');
+  const paywallTitle = t('paywall.title');
   const screenBackground = isDark ? colors.background : '#FFFFFF';
   const titleColor = isDark ? '#F7F7F8' : '#25272C';
   const bodyColor = colors.secondaryText;
@@ -298,7 +296,7 @@ export default function PaywallScreen() {
 
   const onClose = async () => {
     if (isPreview) {
-      router.replace('/(tabs)/podesavanja' as any);
+      router.replace('/(tabs)' as any);
     }
   };
 
@@ -502,9 +500,41 @@ export default function PaywallScreen() {
               </Pressable>
             )}
 
-            <Text className="mt-4 text-center text-app-meta" style={{ color: colors.secondaryText }}>
-              {t('paywall.footerNote')}
-            </Text>
+            <View className="mt-4 flex-row flex-wrap items-center justify-center">
+              <Text className="text-center text-app-meta" style={{ color: colors.secondaryText }}>
+                {t('paywall.footerRenew')}
+              </Text>
+              <Text className="text-center text-app-meta" style={{ color: colors.secondaryText }}>
+                {' • '}
+              </Text>
+              <Text className="text-center text-app-meta" style={{ color: colors.secondaryText }}>
+                {t('paywall.footerCancel')}
+              </Text>
+              <Text className="text-center text-app-meta" style={{ color: colors.secondaryText }}>
+                {' • '}
+              </Text>
+              <Pressable
+                accessibilityRole="link"
+                accessibilityLabel={t('paywall.footerTerms')}
+                onPress={() => router.push('/(tabs)/legal/terms' as any)}
+                hitSlop={6}>
+                <Text className="text-center text-app-meta font-semibold" style={{ color: colors.accent }}>
+                  {t('paywall.footerTerms')}
+                </Text>
+              </Pressable>
+              <Text className="text-center text-app-meta" style={{ color: colors.secondaryText }}>
+                {' • '}
+              </Text>
+              <Pressable
+                accessibilityRole="link"
+                accessibilityLabel={t('paywall.footerPrivacy')}
+                onPress={() => router.push('/(tabs)/legal/privacy' as any)}
+                hitSlop={6}>
+                <Text className="text-center text-app-meta font-semibold" style={{ color: colors.accent }}>
+                  {t('paywall.footerPrivacy')}
+                </Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       </ScrollView>

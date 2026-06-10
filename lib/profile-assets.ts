@@ -1,3 +1,4 @@
+import { File } from 'expo-file-system';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 
 import { supabase } from '@/lib/supabase';
@@ -6,6 +7,10 @@ export const PROFILE_ASSETS_BUCKET = 'profile-assets';
 const MAX_LOGO_DIMENSION = 1200;
 
 async function fileToArrayBuffer(uri: string): Promise<ArrayBuffer> {
+  if (uri.startsWith('file://')) {
+    return await new File(uri).arrayBuffer();
+  }
+
   const response = await fetch(uri);
   return await response.arrayBuffer();
 }

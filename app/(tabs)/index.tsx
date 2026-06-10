@@ -9,6 +9,7 @@ import { PaymentJobPickerModal } from '@/components/PaymentJobPickerModal';
 import { CollapsingMainHeader, MainScreenTitle } from '@/components/CollapsingMainHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { JobStatusText } from '@/components/JobStatusText';
+import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
 import { useQuickFindSwipeDown } from '@/components/useQuickFindSwipeDown';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
@@ -336,6 +337,7 @@ export default function TabOneScreen() {
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}>
         <MainScreenTitle title={t('home.dayOverviewTitle')} iconName="today" scrollY={scrollY} />
+        <SyncStatusIndicator />
 
         {renderHomeSection('today', t('home.todayJobs'), (
           <>

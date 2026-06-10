@@ -6,9 +6,11 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import {
   ActivityIndicator,
   Animated,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   Text,
   View,
 } from 'react-native';
@@ -41,6 +43,7 @@ export default function EditJobScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const scrollY = useRef(new Animated.Value(0)).current;
+  const scrollRef = useRef<ScrollView>(null);
 
   const userId = session?.user?.id ?? null;
   const id = typeof params.id === 'string' ? params.id : null;
@@ -60,7 +63,31 @@ export default function EditJobScreen() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const placeholderTextColor = usePlaceholderTextColor(submitting);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates?.height ?? 0);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const scrollToFormEnd = useCallback(() => {
+    setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, Platform.OS === 'android' ? 260 : 120);
+  }, []);
 
   const selectedClient = useMemo(
     () => clients.find((client) => client.id === clientId) ?? null,
@@ -269,14 +296,16 @@ export default function EditJobScreen() {
       />
 
       <Animated.ScrollView
+        ref={scrollRef}
         className="flex-1"
-        contentContainerClassName="pb-32 pt-4"
+        contentContainerStyle={{ paddingTop: 16, paddingBottom: 128 + keyboardHeight }}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
           { useNativeDriver: true }
         )}
         scrollEventThrottle={16}
-        keyboardShouldPersistTaps="handled">
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="always">
         <View className="px-6">
           <Text className="mb-1 text-[28px] font-semibold leading-[34px] text-black dark:text-white">
             {t('jobs.edit')}
@@ -470,6 +499,7 @@ export default function EditJobScreen() {
                 <AppTextInput
                   value={price}
                   onChangeText={setPrice}
+                  onFocus={scrollToFormEnd}
                   keyboardType="decimal-pad"
                   placeholder={t('jobs.priceLabel')}
                   placeholderTextColor={placeholderTextColor}
@@ -484,6 +514,7 @@ export default function EditJobScreen() {
                 <AppTextInput
                   value={description}
                   onChangeText={setDescription}
+                  onFocus={scrollToFormEnd}
                   multiline
                   textAlignVertical="top"
                   placeholder={t('jobs.descriptionLabel')}

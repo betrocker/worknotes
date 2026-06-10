@@ -3,13 +3,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, Animated, Easing, PanResponder, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Easing, Linking, PanResponder, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CollapsingMainHeader, MainScreenTitle } from '@/components/CollapsingMainHeader';
 import { HeaderOverflowMenu } from '@/components/HeaderOverflowMenu';
 import Colors from '@/constants/Colors';
 import { JobStatusText } from '@/components/JobStatusText';
+import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
 import { useQuickFindSwipeDown } from '@/components/useQuickFindSwipeDown';
 import { useColorScheme } from '@/components/useColorScheme';
 import { parseDateInput } from '@/lib/date';
@@ -516,6 +517,21 @@ export default function ClientDetailScreen() {
     router.push({ pathname: '/(tabs)/klijent/[id]/edit' as any, params: { id } });
   };
 
+  const onNewJob = () => {
+    if (!id) return;
+    router.push({ pathname: '/(tabs)/posao/new' as any, params: { clientId: id } });
+  };
+
+  const onOpenMap = () => {
+    const address = client?.address?.trim();
+    if (!address) {
+      Alert.alert(t('clients.noAddressTitle'), t('clients.noAddressBody'));
+      return;
+    }
+    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+    void Linking.openURL(url);
+  };
+
   const openJob = useCallback(
     (jobId: string) => {
       router.push({ pathname: '/(tabs)/posao/[id]' as any, params: { id: jobId } });
@@ -645,6 +661,8 @@ export default function ClientDetailScreen() {
           <HeaderOverflowMenu
             accessibilityLabel={t('common.more')}
             actions={[
+              { label: t('clients.newJob'), iconName: 'briefcase-outline', onPress: onNewJob },
+              { label: t('clients.map'), iconName: 'map-outline', onPress: onOpenMap },
               { label: t('clients.edit'), iconName: 'create-outline', onPress: onEdit },
               { label: t('clients.delete'), iconName: 'trash-outline', onPress: onDelete, destructive: true },
             ]}
@@ -676,6 +694,7 @@ export default function ClientDetailScreen() {
             <Text className="text-app-body italic text-black/80 dark:text-white/85">{client.note.trim()}</Text>
           </View>
         ) : null}
+        <SyncStatusIndicator />
         {error ? <Text className="mb-3 text-app-meta text-red-600">{error}</Text> : null}
 
         {loading ? (

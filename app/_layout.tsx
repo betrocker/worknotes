@@ -23,6 +23,7 @@ import { getStoredLanguage, guessInitialLanguage } from "@/lib/language";
 import { initializeNotifications } from "@/lib/notifications";
 import { getStoredThemePreference, type AppThemePreference } from "@/lib/theme";
 import { useBilling, BillingProvider } from "@/providers/BillingProvider";
+import { OfflineSyncProvider } from "@/providers/OfflineSyncProvider";
 import { OnboardingProvider, useOnboarding } from "@/providers/OnboardingProvider";
 import { ThemePreferenceProvider, useThemePreference } from "@/providers/ThemePreferenceProvider";
 
@@ -115,13 +116,7 @@ export default function RootLayout() {
     let mounted = true;
     (async () => {
       try {
-        await Asset.loadAsync([
-          require("../assets/images/onboarding-hero.png"),
-          require("../assets/images/auth-sign-in-hero.png"),
-          require("../assets/images/auth-sign-up-hero.png"),
-          require("../assets/images/auth-reset-hero.png"),
-          require("../assets/images/splash-logo.png"),
-        ]);
+        await Asset.loadAsync([require("../assets/images/splash-logo.png")]);
       } finally {
         if (mounted) setAssetsReady(true);
       }
@@ -154,7 +149,9 @@ function RootLayoutNav({ initialTheme }: { initialTheme: AppThemePreference }) {
     <ThemePreferenceProvider initialTheme={initialTheme}>
       <OnboardingProvider>
         <BillingProvider>
-          <RootNavigationContent initialized={initialized} />
+          <OfflineSyncProvider>
+            <RootNavigationContent initialized={initialized} />
+          </OfflineSyncProvider>
         </BillingProvider>
       </OnboardingProvider>
     </ThemePreferenceProvider>

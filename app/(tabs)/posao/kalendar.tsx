@@ -8,6 +8,7 @@ import { ActivityIndicator, Animated, Pressable, Text, View } from 'react-native
 import Colors from '@/constants/Colors';
 import { CollapsingMainHeader, MainScreenTitle } from '@/components/CollapsingMainHeader';
 import { JobStatusText } from '@/components/JobStatusText';
+import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
 import { useColorScheme } from '@/components/useColorScheme';
 import { parseDateInput } from '@/lib/date';
 import { listJobs, type JobListItem } from '@/lib/jobs';
@@ -216,6 +217,7 @@ export default function JobsCalendarScreen() {
         <Text className="-mt-4 mb-4 text-app-subtitle text-black/60 dark:text-white/70">
           {t('jobs.calendarSubtitle')}
         </Text>
+        <SyncStatusIndicator />
         {error ? <Text className="mb-3 text-app-meta text-red-600">{error}</Text> : null}
 
         <View className="mt-5 flex-row items-center justify-between">

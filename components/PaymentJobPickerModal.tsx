@@ -87,7 +87,7 @@ export function PaymentJobPickerModal({ visible, clientName, jobs, onClose, onSe
             showsVerticalScrollIndicator={false}
             style={{ maxHeight: modalMaxHeight - 64 }}
             contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 18 }}>
-            <Text className="mb-3 text-center text-app-meta-lg" style={{ color: colors.secondaryText }}>
+            <Text className="mb-4 text-center text-app-row" style={{ color: colors.secondaryText }}>
               {t('clients.selectPaymentJob')}
             </Text>
             {jobs.map((job) => (
@@ -95,17 +95,17 @@ export function PaymentJobPickerModal({ visible, clientName, jobs, onClose, onSe
                 key={job.id}
                 onPress={() => onSelect(job.id)}
                 className="flex-row items-center py-2.5">
-                <View className="flex-1 flex-row items-start justify-between">
+                <View className="flex-1 flex-row items-center justify-between">
                   <View className="mr-3 flex-1">
-                    <Text className="text-base font-medium" style={{ color: colors.text }} numberOfLines={1}>
+                    <Text className="text-base" style={{ color: colors.text }} numberOfLines={1}>
                       {job.title || t('jobs.untitled')}
                     </Text>
                     <Text className="text-app-meta-lg" style={{ color: colors.secondaryText }} numberOfLines={1}>
                       {job.clientName ? `${job.clientName} • ${formatDate(job.scheduled_date)}` : formatDate(job.scheduled_date)}
                     </Text>
                   </View>
-                  <View className="items-end">
-                    <Text className="text-app-row font-extrabold text-[#C84D4D] dark:text-[#FF8A8A]">
+                  <View className="items-end justify-center">
+                    <Text className="text-app-row text-[#C84D4D] dark:text-[#FF8A8A]">
                       {moneyFormatter.format(job.debt)}
                     </Text>
                   </View>
