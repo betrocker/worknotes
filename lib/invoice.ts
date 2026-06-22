@@ -1,5 +1,6 @@
 import * as Print from 'expo-print';
 
+import { createMoneyFormatter, type AppCurrency } from '@/lib/currency';
 import { parseDateInput } from '@/lib/date';
 
 type InvoiceParty = {
@@ -34,6 +35,7 @@ type InvoiceLineItem = {
 
 export type InvoiceDocumentInput = {
   locale: string;
+  currency: AppCurrency;
   invoiceNumberValue: string;
   issueDateValue: string;
   labels: {
@@ -85,10 +87,8 @@ function escapeHtml(value: string | null | undefined) {
     .replace(/'/g, '&#39;');
 }
 
-function formatCurrency(locale: string, value: number | null | undefined) {
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency: 'EUR',
+function formatCurrency(locale: string, currency: AppCurrency, value: number | null | undefined) {
+  return createMoneyFormatter(locale, currency, {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(value ?? 0);
@@ -113,7 +113,7 @@ function formatDate(locale: string, value: string | null | undefined) {
 }
 
 export function buildInvoiceHtml(input: InvoiceDocumentInput) {
-  const { labels, locale, company, client, job, invoiceNumberValue, issueDateValue } = input;
+  const { labels, locale, currency, company, client, job, invoiceNumberValue, issueDateValue } = input;
   const issueDate = formatDate(locale, issueDateValue);
   const invoiceNumber = invoiceNumberValue;
   const serviceDate = formatDate(locale, job.completedAt || job.scheduledDate);
@@ -131,10 +131,10 @@ export function buildInvoiceHtml(input: InvoiceDocumentInput) {
           },
         ];
   const invoiceTotal = invoiceItems.reduce((sum, item) => sum + item.total, 0);
-  const totalPrice = formatCurrency(locale, invoiceTotal || job.price);
-  const totalPaid = formatCurrency(locale, job.totalPaid);
-  const outstanding = formatCurrency(locale, job.outstanding);
-  const tip = formatCurrency(locale, job.tipAmount);
+  const totalPrice = formatCurrency(locale, currency, invoiceTotal || job.price);
+  const totalPaid = formatCurrency(locale, currency, job.totalPaid);
+  const outstanding = formatCurrency(locale, currency, job.outstanding);
+  const tip = formatCurrency(locale, currency, job.tipAmount);
 
   return `
   <html>
@@ -337,8 +337,8 @@ export function buildInvoiceHtml(input: InvoiceDocumentInput) {
                   </td>
                   <td class="num">${escapeHtml(item.unit || labels.unitService)}</td>
                   <td class="num">${escapeHtml(formatNumber(locale, item.quantity))}</td>
-                  <td class="num">${escapeHtml(formatCurrency(locale, item.unitPrice))}</td>
-                  <td class="num">${escapeHtml(formatCurrency(locale, item.total))}</td>
+                  <td class="num">${escapeHtml(formatCurrency(locale, currency, item.unitPrice))}</td>
+                  <td class="num">${escapeHtml(formatCurrency(locale, currency, item.total))}</td>
                 </tr>
               `
             )

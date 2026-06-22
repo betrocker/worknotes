@@ -9,9 +9,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Colors from '@/constants/Colors';
 import { CollapsingMainHeader, MainScreenTitle } from '@/components/CollapsingMainHeader';
-import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
+import { EmptyState } from '@/components/EmptyState';
 import { useQuickFindSwipeDown } from '@/components/useQuickFindSwipeDown';
 import { useColorScheme } from '@/components/useColorScheme';
+import { useMoneyFormatter } from '@/components/useMoneyFormatter';
 import { parseDateInput } from '@/lib/date';
 import { deleteJob, listJobs, updateJobScheduledDate, updateJobStatus, type JobListItem } from '@/lib/jobs';
 import { setMainFloatingActionsHidden } from '@/lib/floating-actions-visibility';
@@ -445,31 +446,26 @@ export default function PosloviScreen() {
       {
         key: 'active' as const,
         title: t('jobs.filters.active'),
-        empty: t('jobs.sectionEmpty.active'),
         jobs: sortedItems.filter((job) => !job.archived_at && job.status === 'in_progress'),
       },
       {
         key: 'pending' as const,
         title: t('jobs.filters.pending'),
-        empty: t('jobs.sectionEmpty.pending'),
         jobs: sortedItems.filter((job) => !job.archived_at && job.status === 'pending'),
       },
       {
         key: 'scheduled' as const,
         title: t('jobs.filters.scheduled'),
-        empty: t('jobs.sectionEmpty.scheduled'),
         jobs: sortedItems.filter((job) => !job.archived_at && job.status === 'scheduled'),
       },
       {
         key: 'done' as const,
         title: t('jobs.filters.done'),
-        empty: t('jobs.sectionEmpty.done'),
         jobs: sortedItems.filter((job) => !job.archived_at && job.status === 'done'),
       },
       {
         key: 'archived' as const,
         title: t('jobs.filters.archived'),
-        empty: t('jobs.sectionEmpty.archived'),
         jobs: sortedItems.filter((job) => Boolean(job.archived_at)),
       },
     ],
@@ -501,16 +497,13 @@ export default function PosloviScreen() {
     });
   }, []);
 
+  const moneyFormatter = useMoneyFormatter({ maximumFractionDigits: 0 });
   const formatPrice = useCallback(
     (value: number | null) => {
       if (value == null) return null;
-      return new Intl.NumberFormat(locale, {
-        style: 'currency',
-        currency: 'EUR',
-        maximumFractionDigits: 0,
-      }).format(value);
+      return moneyFormatter.format(value);
     },
-    [locale]
+    [moneyFormatter]
   );
 
   const formatJobsShortLabel = useCallback(
@@ -562,6 +555,7 @@ export default function PosloviScreen() {
     [items]
   );
   const jobsSubtitle = `${formatJobsShortLabel(items.filter((job) => !job.archived_at).length)} • ${formatActiveShortLabel(activeJobsCount)}`;
+  const hasAnyJobs = sortedItems.length > 0;
 
   const openJob = useCallback(
     (item: JobListItem) => {
@@ -735,10 +729,8 @@ export default function PosloviScreen() {
         <View style={{ marginLeft: 12, marginTop: 8 }}>
           {visibleJobs.length > 0 ? (
             visibleJobs.map((item) => renderJobRow(item))
-          ) : section.jobs.length === 0 ? (
-            <Text className="py-3 text-app-meta italic text-black/55 dark:text-white/60">{section.empty}</Text>
           ) : (
-            <View className="h-2" />
+            <View className="h-0" />
           )}
           {remainingCount > 0 || (summaryOnly && expanded && section.jobs.length > 0) ? (
             <Pressable
@@ -821,7 +813,6 @@ export default function PosloviScreen() {
         <Text className="-mt-4 mb-4 text-app-subtitle text-black/60 dark:text-white/70">
           {jobsSubtitle}
         </Text>
-        <SyncStatusIndicator />
 
         {error ? <Text className="mt-3 text-app-meta text-red-600">{error}</Text> : null}
 
@@ -832,6 +823,11 @@ export default function PosloviScreen() {
         ) : (
           <View className="mt-6">
             {sections.map(renderSection)}
+            {!hasAnyJobs ? (
+              <View className="mt-3">
+                <EmptyState title={t('jobs.emptyTitle')} body={t('jobs.emptyBody')} />
+              </View>
+            ) : null}
           </View>
         )}
       </Animated.ScrollView>

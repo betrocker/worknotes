@@ -24,6 +24,7 @@ import { useTranslation } from 'react-i18next';
 import { CollapsingMainHeader, MainScreenTitle } from '@/components/CollapsingMainHeader';
 import { JobStatusText } from '@/components/JobStatusText';
 import { useColorScheme } from '@/components/useColorScheme';
+import { useMoneyFormatter } from '@/components/useMoneyFormatter';
 import Colors from '@/constants/Colors';
 import { useOnboarding } from '@/providers/OnboardingProvider';
 
@@ -86,15 +87,8 @@ export default function OnboardingScreen() {
     [locale]
   );
 
-  const formatCurrency = useMemo(
-    () =>
-      new Intl.NumberFormat(locale, {
-        style: 'currency',
-        currency: 'EUR',
-        maximumFractionDigits: 0,
-      }).format(demoJob.price),
-    [locale]
-  );
+  const moneyFormatter = useMoneyFormatter({ maximumFractionDigits: 0 });
+  const formatCurrency = useMemo(() => moneyFormatter.format(demoJob.price), [moneyFormatter]);
 
   const setDemoSelected = useCallback(
     (nextSelected: boolean) => {

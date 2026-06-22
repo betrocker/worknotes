@@ -10,9 +10,9 @@ import { CollapsingMainHeader, MainScreenTitle } from '@/components/CollapsingMa
 import { HeaderOverflowMenu } from '@/components/HeaderOverflowMenu';
 import Colors from '@/constants/Colors';
 import { JobStatusText } from '@/components/JobStatusText';
-import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
 import { useQuickFindSwipeDown } from '@/components/useQuickFindSwipeDown';
 import { useColorScheme } from '@/components/useColorScheme';
+import { useMoneyFormatter } from '@/components/useMoneyFormatter';
 import { parseDateInput } from '@/lib/date';
 import { deleteClient, getClientDetail, type ClientDetail } from '@/lib/clients';
 import { deleteJob, updateJobStatus } from '@/lib/jobs';
@@ -298,15 +298,7 @@ export default function ClientDetailScreen() {
     () => new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'long', year: 'numeric' }),
     [locale]
   );
-  const moneyFormatter = useMemo(
-    () =>
-      new Intl.NumberFormat(locale, {
-        style: 'currency',
-        currency: 'EUR',
-        maximumFractionDigits: 0,
-      }),
-    [locale]
-  );
+  const moneyFormatter = useMoneyFormatter({ maximumFractionDigits: 0 });
   const monthFormatter = useMemo(
     () => new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }),
     [locale]
@@ -514,7 +506,7 @@ export default function ClientDetailScreen() {
 
   const onEdit = () => {
     if (!id) return;
-    router.push({ pathname: '/(tabs)/klijent/[id]/edit' as any, params: { id } });
+    router.push({ pathname: '/(tabs)/klijent/[id]/edit' as any, params: { id, source: 'client-detail' } });
   };
 
   const onNewJob = () => {
@@ -622,7 +614,7 @@ export default function ClientDetailScreen() {
     if (client?.phone && client?.address) return `${client.phone} • ${client.address}`;
     if (client?.phone) return client.phone;
     if (client?.address) return client.address;
-    return t('clients.contact');
+    return t('clients.noContactInfo');
   }, [client?.address, client?.phone, t]);
 
   const sectionSeparatorColor = colorScheme === 'dark' ? 'rgba(84,84,88,0.38)' : 'rgba(60,60,67,0.14)';
@@ -694,7 +686,6 @@ export default function ClientDetailScreen() {
             <Text className="text-app-body italic text-black/80 dark:text-white/85">{client.note.trim()}</Text>
           </View>
         ) : null}
-        <SyncStatusIndicator />
         {error ? <Text className="mb-3 text-app-meta text-red-600">{error}</Text> : null}
 
         {loading ? (

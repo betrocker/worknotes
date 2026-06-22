@@ -20,11 +20,13 @@ import { AppTextInput } from '@/components/AppTextInput';
 import { parseDateInput } from '@/lib/date';
 import { createPayment } from '@/lib/job-finance';
 import { goBackOrReplace } from '@/lib/navigation';
+import { useCurrency } from '@/providers/CurrencyProvider';
 
 export default function NewPaymentScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string; returnTo?: string; clientId?: string }>();
   const { t, i18n } = useTranslation();
+  const { currency } = useCurrency();
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -204,7 +206,7 @@ export default function NewPaymentScreen() {
               className={fieldInputClassName}
               style={fieldInputStyle}
             />
-            <Text className="mt-1 text-app-meta text-black/50 dark:text-white/60">{t('jobs.amountEurNote')}</Text>
+            <Text className="mt-1 text-app-meta text-black/50 dark:text-white/60">{t('jobs.amountEurNote', { currency })}</Text>
 
             <Text className="mt-4 text-app-meta-lg font-medium text-black/60 dark:text-white/70">
               {t('jobs.paymentDateLabel')}

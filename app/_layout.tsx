@@ -14,6 +14,7 @@ import { Animated, Easing, Text, TextInput, View } from "react-native";
 import "../global.css";
 
 import { AuthProvider, useAuth } from "@/providers/AuthProvider";
+import { AppToastViewport, ToastProvider } from "@/components/AppToast";
 import { AppSplashScreen } from "@/components/AppSplashScreen";
 import { SplashVisibilityProvider } from "@/components/SplashVisibilityContext";
 import { useColorScheme } from "@/components/useColorScheme";
@@ -23,6 +24,7 @@ import { getStoredLanguage, guessInitialLanguage } from "@/lib/language";
 import { initializeNotifications } from "@/lib/notifications";
 import { getStoredThemePreference, type AppThemePreference } from "@/lib/theme";
 import { useBilling, BillingProvider } from "@/providers/BillingProvider";
+import { CurrencyProvider } from "@/providers/CurrencyProvider";
 import { OfflineSyncProvider } from "@/providers/OfflineSyncProvider";
 import { OnboardingProvider, useOnboarding } from "@/providers/OnboardingProvider";
 import { ThemePreferenceProvider, useThemePreference } from "@/providers/ThemePreferenceProvider";
@@ -149,9 +151,13 @@ function RootLayoutNav({ initialTheme }: { initialTheme: AppThemePreference }) {
     <ThemePreferenceProvider initialTheme={initialTheme}>
       <OnboardingProvider>
         <BillingProvider>
-          <OfflineSyncProvider>
-            <RootNavigationContent initialized={initialized} />
-          </OfflineSyncProvider>
+          <CurrencyProvider>
+            <OfflineSyncProvider>
+              <ToastProvider>
+                <RootNavigationContent initialized={initialized} />
+              </ToastProvider>
+            </OfflineSyncProvider>
+          </CurrencyProvider>
         </BillingProvider>
       </OnboardingProvider>
     </ThemePreferenceProvider>
@@ -295,6 +301,7 @@ function RootNavigationContent({ initialized }: { initialized: boolean }) {
           </Stack>
         </ThemeProvider>
       </SplashVisibilityProvider>
+      <AppToastViewport />
     </View>
   );
 

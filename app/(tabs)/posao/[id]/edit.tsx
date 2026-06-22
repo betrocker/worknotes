@@ -32,14 +32,16 @@ import {
 } from '@/lib/notifications';
 import { goBackOrReplace } from '@/lib/navigation';
 import { useAuth } from '@/providers/AuthProvider';
+import { useCurrency } from '@/providers/CurrencyProvider';
 
 type ClientOption = { id: string; name: string | null };
 
 export default function EditJobScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ id?: string }>();
+  const params = useLocalSearchParams<{ id?: string; source?: string }>();
   const { t, i18n } = useTranslation();
   const { session } = useAuth();
+  const { currency } = useCurrency();
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -47,6 +49,7 @@ export default function EditJobScreen() {
 
   const userId = session?.user?.id ?? null;
   const id = typeof params.id === 'string' ? params.id : null;
+  const openedFromJobDetail = params.source === 'job-detail';
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -235,7 +238,11 @@ export default function EditJobScreen() {
       } else {
         await cancelJobReminder(id);
       }
-      router.replace({ pathname: '/(tabs)/posao/[id]' as any, params: { id } });
+      if (openedFromJobDetail) {
+        goBackOrReplace(router, { pathname: '/(tabs)/posao/[id]' as any, params: { id } });
+      } else {
+        router.replace({ pathname: '/(tabs)/posao/[id]' as any, params: { id } });
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -506,7 +513,7 @@ export default function EditJobScreen() {
                   className={fieldInputClassName}
                   style={fieldInputStyle}
                 />
-                <Text className="mt-1 text-app-meta text-black/50 dark:text-white/60">{t('jobs.amountEurNote')}</Text>
+                <Text className="mt-1 text-app-meta text-black/50 dark:text-white/60">{t('jobs.amountEurNote', { currency })}</Text>
                 </View>
 
                 {renderFormSection(t('jobs.descriptionLabel'))}

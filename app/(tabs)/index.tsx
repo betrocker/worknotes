@@ -9,9 +9,9 @@ import { PaymentJobPickerModal } from '@/components/PaymentJobPickerModal';
 import { CollapsingMainHeader, MainScreenTitle } from '@/components/CollapsingMainHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { JobStatusText } from '@/components/JobStatusText';
-import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
 import { useQuickFindSwipeDown } from '@/components/useQuickFindSwipeDown';
 import { useColorScheme } from '@/components/useColorScheme';
+import { useMoneyFormatter } from '@/components/useMoneyFormatter';
 import Colors from '@/constants/Colors';
 import { listClientOpenDebtJobs, listClientsWithDebt, type ClientOpenDebtJob, type ClientWithDebt } from '@/lib/clients';
 import { parseDateInput } from '@/lib/date';
@@ -61,15 +61,8 @@ export default function TabOneScreen() {
     () => [...clientsWithDebt].filter((client) => client.debt > 0).sort((a, b) => b.debt - a.debt),
     [clientsWithDebt]
   );
-  const formatCurrency = useCallback(
-    (value: number | null | undefined) =>
-      new Intl.NumberFormat(i18n.language === 'sr' ? 'sr-Latn-RS' : i18n.language, {
-        style: 'currency',
-        currency: 'EUR',
-        maximumFractionDigits: 0,
-      }).format(value ?? 0),
-    [i18n.language]
-  );
+  const moneyFormatter = useMoneyFormatter({ maximumFractionDigits: 0 });
+  const formatCurrency = useCallback((value: number | null | undefined) => moneyFormatter.format(value ?? 0), [moneyFormatter]);
   const getStatusLabel = useCallback(
     (status: string | null | undefined) => {
       switch ((status ?? '').toLowerCase()) {
@@ -337,7 +330,6 @@ export default function TabOneScreen() {
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}>
         <MainScreenTitle title={t('home.dayOverviewTitle')} iconName="today" scrollY={scrollY} />
-        <SyncStatusIndicator />
 
         {renderHomeSection('today', t('home.todayJobs'), (
           <>

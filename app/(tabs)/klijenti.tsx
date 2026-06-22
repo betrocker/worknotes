@@ -10,9 +10,9 @@ import Colors from '@/constants/Colors';
 import { EmptyState } from '@/components/EmptyState';
 import { PaymentJobPickerModal } from '@/components/PaymentJobPickerModal';
 import { CollapsingMainHeader, MainScreenTitle } from '@/components/CollapsingMainHeader';
-import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
 import { useQuickFindSwipeDown } from '@/components/useQuickFindSwipeDown';
 import { useColorScheme } from '@/components/useColorScheme';
+import { useMoneyFormatter } from '@/components/useMoneyFormatter';
 import { deleteClient, listClientOpenDebtJobs, listClientsWithDebt, type ClientOpenDebtJob, type ClientWithDebt } from '@/lib/clients';
 import { setMainFloatingActionsHidden } from '@/lib/floating-actions-visibility';
 import { goBackOrReplace } from '@/lib/navigation';
@@ -26,6 +26,7 @@ type ClientSwipeSelectRowProps = {
   colors: typeof Colors.light;
   colorScheme: 'light' | 'dark';
   paymentLabel: string;
+  noContactLabel: string;
   formatJobsLabel: (count: number) => string;
   formatMoney: Intl.NumberFormat;
   onOpen: (item: ClientWithDebt) => void;
@@ -72,6 +73,7 @@ function ClientSwipeSelectRow({
   colors,
   colorScheme,
   paymentLabel,
+  noContactLabel,
   formatJobsLabel,
   formatMoney,
   onOpen,
@@ -181,7 +183,7 @@ function ClientSwipeSelectRow({
   const activeRowBackground = colorScheme === 'dark' ? '#30333A' : '#E4E6EA';
   const movingRowBackground = swiping ? activeRowBackground : 'transparent';
   const revealBackgroundColor = colorScheme === 'dark' ? '#315FAD' : '#1C60C3';
-  const secondaryText = item.phone || item.address || (item.jobs_count > 0 ? formatJobsLabel(item.jobs_count) : null);
+  const secondaryText = item.phone || item.address || (item.jobs_count > 0 ? formatJobsLabel(item.jobs_count) : noContactLabel);
 
   return (
     <Animated.View
@@ -381,15 +383,7 @@ export default function KlijentiScreen() {
     [items, locale]
   );
 
-  const formatMoney = useMemo(
-    () =>
-      new Intl.NumberFormat(locale, {
-        style: 'currency',
-        currency: 'EUR',
-        maximumFractionDigits: 0,
-      }),
-    [locale]
-  );
+  const formatMoney = useMoneyFormatter({ maximumFractionDigits: 0 });
 
   const openUrl = useCallback(
     async (url: string) => {
@@ -574,6 +568,7 @@ export default function KlijentiScreen() {
       colors={colors}
       colorScheme={colorScheme}
       paymentLabel={t('jobs.payment')}
+      noContactLabel={t('clients.noContactInfo')}
       formatJobsLabel={formatJobsShortLabel}
       formatMoney={formatMoney}
       onOpen={openClient}
@@ -662,7 +657,6 @@ export default function KlijentiScreen() {
         <Text className="-mt-4 mb-4 text-app-subtitle text-black/60 dark:text-white/70">
           {headerSubtitle}
         </Text>
-        <SyncStatusIndicator />
 
         {error ? <Text className="mt-3 text-app-meta text-red-600">{error}</Text> : null}
 

@@ -10,9 +10,9 @@ import Colors from '@/constants/Colors';
 import { CollapsingMainHeader, MainScreenTitle } from '@/components/CollapsingMainHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { PaymentJobPickerModal } from '@/components/PaymentJobPickerModal';
-import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
 import { useQuickFindSwipeDown } from '@/components/useQuickFindSwipeDown';
 import { useColorScheme } from '@/components/useColorScheme';
+import { useMoneyFormatter } from '@/components/useMoneyFormatter';
 import { listClientOpenDebtJobs, listClientsWithDebt, type ClientOpenDebtJob, type ClientWithDebt } from '@/lib/clients';
 import { setMainFloatingActionsHidden } from '@/lib/floating-actions-visibility';
 import { goBackOrReplace } from '@/lib/navigation';
@@ -305,16 +305,7 @@ export default function DugovanjaScreen() {
     }, [load])
   );
 
-  const locale = i18n.language === 'sr' ? 'sr-Latn-RS' : i18n.language;
-  const formatMoney = useMemo(
-    () =>
-      new Intl.NumberFormat(locale, {
-        style: 'currency',
-        currency: 'EUR',
-        maximumFractionDigits: 0,
-      }),
-    [locale]
-  );
+  const formatMoney = useMoneyFormatter({ maximumFractionDigits: 0 });
 
   const sortedItems = useMemo(
     () =>
@@ -626,7 +617,6 @@ export default function DugovanjaScreen() {
         <Text className="-mt-4 mb-4 text-app-subtitle text-black/60 dark:text-white/70">
           {subtitle}
         </Text>
-        <SyncStatusIndicator />
 
         {error ? <Text className="mt-3 text-app-meta text-red-600 dark:text-red-400">{error}</Text> : null}
 

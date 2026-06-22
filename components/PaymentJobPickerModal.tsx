@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
+import { useMoneyFormatter } from '@/components/useMoneyFormatter';
 import { parseDateInput } from '@/lib/date';
 import type { ClientOpenDebtJob } from '@/lib/clients';
 
@@ -29,15 +30,7 @@ export function PaymentJobPickerModal({ visible, clientName, jobs, onClose, onSe
   const modalBorderColor = isDark ? 'rgba(255,255,255,0.18)' : 'rgba(60,60,67,0.12)';
   const modalBackdropColor = isDark ? 'rgba(0,0,0,0.42)' : 'rgba(16,24,40,0.22)';
 
-  const moneyFormatter = useMemo(
-    () =>
-      new Intl.NumberFormat(locale, {
-        style: 'currency',
-        currency: 'EUR',
-        maximumFractionDigits: 0,
-      }),
-    [locale]
-  );
+  const moneyFormatter = useMoneyFormatter({ maximumFractionDigits: 0 });
 
   const dateFormatter = useMemo(
     () => new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'long', year: 'numeric' }),

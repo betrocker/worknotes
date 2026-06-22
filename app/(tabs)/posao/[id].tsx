@@ -34,9 +34,10 @@ import { CollapsingMainHeader, MainScreenTitle } from '@/components/CollapsingMa
 import { HeaderOverflowMenu } from '@/components/HeaderOverflowMenu';
 import { JobDetailFloatingActions, type JobDetailFloatingAction } from '@/components/JobDetailFloatingActions';
 import Colors from '@/constants/Colors';
-import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
+import { useToast } from '@/components/AppToast';
 import { useQuickFindSwipeDown } from '@/components/useQuickFindSwipeDown';
 import { useColorScheme } from '@/components/useColorScheme';
+import { useMoneyFormatter } from '@/components/useMoneyFormatter';
 import { parseDateInput } from '@/lib/date';
 import { generateInvoicePdf } from '@/lib/invoice';
 import { getOrCreateInvoiceForJob } from '@/lib/invoices';
@@ -59,6 +60,7 @@ import {
 import { getUserDisplayName } from '@/lib/user';
 import { goBackOrReplace } from '@/lib/navigation';
 import { useAuth } from '@/providers/AuthProvider';
+import { useCurrency } from '@/providers/CurrencyProvider';
 
 type InvoiceItemSwipeRowProps = {
   item: JobInvoiceItemRow;
@@ -99,6 +101,30 @@ type InvoiceItemInlineFormRowProps = {
 const INVOICE_ITEM_ACTION_WIDTH = 78;
 const INVOICE_ITEM_ACTION_STRETCH = 12;
 const INVOICE_ITEM_ROW_GAP = 4;
+
+function sanitizeFileName(value: string) {
+  const sanitized = value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\\/:*?"<>|]+/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return sanitized || 'Faktura';
+}
+
+function copyPdfWithInvoiceFileName(uri: string, invoiceTitle: string, invoiceNumber: string) {
+  const sourceFile = new File(uri);
+  const fileName = `${sanitizeFileName(`${invoiceTitle} ${invoiceNumber}`)}.pdf`;
+  const destinationFile = new File(Paths.cache, fileName);
+
+  if (destinationFile.exists) {
+    destinationFile.delete();
+  }
+
+  sourceFile.copy(destinationFile);
+  return destinationFile;
+}
 
 function getJobImageUri(item: JobImageRow | null | undefined) {
   return item?.image_url ?? item?.local_uri ?? null;
@@ -498,6 +524,8 @@ export default function JobDetailScreen() {
   const { session } = useAuth();
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
+  const { showToast } = useToast();
+  const { currency } = useCurrency();
   const insets = useSafeAreaInsets();
   const scrollY = useRef(new Animated.Value(0)).current;
   const quickFindSwipe = useQuickFindSwipeDown();
@@ -621,7 +649,7 @@ export default function JobDetailScreen() {
 
   const onEdit = () => {
     if (!id) return;
-    router.push({ pathname: '/(tabs)/posao/[id]/edit' as any, params: { id } });
+    router.push({ pathname: '/(tabs)/posao/[id]/edit' as any, params: { id, source: 'job-detail' } });
   };
 
   const onDelete = () => {
@@ -735,17 +763,13 @@ export default function JobDetailScreen() {
     [t]
   );
 
+  const priceFormatter = useMoneyFormatter({ minimumFractionDigits: 0, maximumFractionDigits: 2 });
   const formatPrice = useCallback(
     (value: number | null) => {
       if (value == null) return t('jobs.priceUnknown');
-      return new Intl.NumberFormat(locale, {
-        style: 'currency',
-        currency: 'EUR',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2,
-      }).format(value);
+      return priceFormatter.format(value);
     },
-    [locale, t]
+    [priceFormatter, t]
   );
 
   const formatListDate = useCallback(
@@ -819,12 +843,14 @@ export default function JobDetailScreen() {
     try {
       const invoiceRecord = await getOrCreateInvoiceForJob(userId, job.id);
 
+      const invoiceTitle = t('jobs.invoice.title');
       const file = await generateInvoicePdf({
         locale,
+        currency,
         invoiceNumberValue: invoiceRecord.invoice_number,
         issueDateValue: invoiceRecord.issued_at,
         labels: {
-          invoiceTitle: t('jobs.invoice.title'),
+          invoiceTitle,
           invoiceNumber: t('jobs.invoice.number'),
           issueDate: t('jobs.invoice.issueDate'),
           serviceDate: t('jobs.invoice.serviceDate'),
@@ -902,17 +928,20 @@ export default function JobDetailScreen() {
 
       generated = true;
       setInvoiceSubmitting(false);
+      const shareFile = copyPdfWithInvoiceFileName(file.uri, invoiceTitle, invoiceRecord.invoice_number);
 
       const canShare = await Sharing.isAvailableAsync();
       if (!canShare) {
-        await Print.printAsync({ uri: file.uri });
+        await Print.printAsync({ uri: shareFile.uri });
+        showToast({ message: t('toast.invoiceShared'), intent: 'success' });
         return;
       }
 
-      await Sharing.shareAsync(file.uri, {
+      await Sharing.shareAsync(shareFile.uri, {
         mimeType: 'application/pdf',
         dialogTitle: t('jobs.invoice.shareAction'),
       });
+      showToast({ message: t('toast.invoiceShared'), intent: 'success' });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
       setInvoiceSubmitting(false);
@@ -921,7 +950,7 @@ export default function JobDetailScreen() {
         setInvoiceSubmitting(false);
       }
     }
-  }, [invoiceItems, job, locale, outstanding, session?.user, t, tipAmount, totalPaid, userId, userMeta]);
+  }, [currency, invoiceItems, job, locale, outstanding, session?.user, showToast, t, tipAmount, totalPaid, userId, userMeta]);
 
   const resetItemForm = useCallback(() => {
     setEditingItem(null);
@@ -939,14 +968,11 @@ export default function JobDetailScreen() {
 
   const openNewItemForm = useCallback(() => {
     resetItemForm();
-    if (!hasInvoiceItems && job?.price) {
-      setItemUnitPrice(String(job.price));
-    }
     setError(null);
     setOpenInvoiceItemSwipeId(null);
     setItemFormClosing(false);
     setItemFormOpen(true);
-  }, [hasInvoiceItems, job?.price, resetItemForm]);
+  }, [resetItemForm]);
 
   const openEditItemForm = useCallback((item: JobInvoiceItemRow) => {
     setEditingItem(item);
@@ -1280,16 +1306,18 @@ export default function JobDetailScreen() {
           url: uri,
           message: uri,
         });
+        showToast({ message: t('toast.imageShared'), intent: 'success' });
         return;
       }
       await Sharing.shareAsync(downloadedFile.uri, {
         mimeType: `image/${downloadedFile.extension === 'png' ? 'png' : 'jpeg'}`,
         dialogTitle: t('jobs.imageShareAction'),
       });
+      showToast({ message: t('toast.imageShared'), intent: 'success' });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [downloadImageToCache, t]);
+  }, [downloadImageToCache, showToast, t]);
 
   const onShareImage = useCallback(async () => {
     if (!previewImage) return;
@@ -1308,16 +1336,18 @@ export default function JobDetailScreen() {
           url: uri,
           message: uri,
         });
+        showToast({ message: t('toast.imageSaved'), intent: 'success' });
         return;
       }
       await Sharing.shareAsync(downloadedFile.uri, {
         mimeType: `image/${downloadedFile.extension === 'png' ? 'png' : 'jpeg'}`,
         dialogTitle: t('jobs.imageSaveAction'),
       });
+      showToast({ message: t('toast.imageSaved'), intent: 'success' });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [downloadImageToCache, t]);
+  }, [downloadImageToCache, showToast, t]);
 
   const onShareAllImages = useCallback(async () => {
     const urls = images.map((item) => item.image_url).filter(Boolean) as string[];
@@ -1326,10 +1356,11 @@ export default function JobDetailScreen() {
       await Share.share({
         message: [t('jobs.images'), ...urls].join('\n'),
       });
+      showToast({ message: t('toast.imagesShared'), intent: 'success' });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [images, t]);
+  }, [images, showToast, t]);
 
   const onShareSelectedImages = useCallback(
     async (items: JobImageRow[]) => {
@@ -1344,12 +1375,13 @@ export default function JobDetailScreen() {
           await Share.share({
             message: [t('jobs.images'), ...urls].join('\n'),
           });
+          showToast({ message: t('toast.imagesShared'), intent: 'success' });
         }
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : String(e));
       }
     },
-    [onShareImageItem, selectedImageIds, t]
+    [onShareImageItem, selectedImageIds, showToast, t]
   );
 
   const onDeleteSelectedImages = useCallback(
@@ -1670,7 +1702,6 @@ export default function JobDetailScreen() {
             </Text>
           </View>
         ) : null}
-        <SyncStatusIndicator />
         {renderSectionHeader(t('jobs.overviewTitle'))}
         <View style={{ marginLeft: 12, marginTop: 8 }}>
           {loading && !job ? (

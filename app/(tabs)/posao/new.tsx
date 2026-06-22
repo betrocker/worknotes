@@ -34,6 +34,7 @@ import {
 } from '@/lib/notifications';
 import { useAuth } from '@/providers/AuthProvider';
 import { useBilling } from '@/providers/BillingProvider';
+import { useCurrency } from '@/providers/CurrencyProvider';
 
 type ClientOption = { id: string; name: string | null };
 
@@ -55,6 +56,7 @@ export default function NewJobScreen() {
   const { t, i18n } = useTranslation();
   const { session } = useAuth();
   const { hasAccess } = useBilling();
+  const { currency } = useCurrency();
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -519,7 +521,7 @@ export default function NewJobScreen() {
               className={fieldInputClassName}
               style={fieldInputStyle}
             />
-            <Text className="mt-1 text-app-meta text-black/50 dark:text-white/60">{t('jobs.amountEurNote')}</Text>
+            <Text className="mt-1 text-app-meta text-black/50 dark:text-white/60">{t('jobs.amountEurNote', { currency })}</Text>
           </View>
 
           {renderFormSection(t('jobs.descriptionLabel'))}

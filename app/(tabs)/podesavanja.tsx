@@ -23,6 +23,7 @@ import { AppTextInput } from '@/components/AppTextInput';
 import Colors from '@/constants/Colors';
 import { useColorScheme, useSetColorScheme } from '@/components/useColorScheme';
 import { deleteCurrentAccount } from '@/lib/account';
+import { getCurrencySymbol, type AppCurrency } from '@/lib/currency';
 import { setStoredLanguage } from '@/lib/language';
 import type { AppLanguage } from '@/lib/i18n';
 import type { AppThemePreference } from '@/lib/theme';
@@ -42,6 +43,7 @@ import { getUserDisplayName } from '@/lib/user';
 import { goBackOrReplace } from '@/lib/navigation';
 import { useAuth } from '@/providers/AuthProvider';
 import { useBilling } from '@/providers/BillingProvider';
+import { useCurrency } from '@/providers/CurrencyProvider';
 import { useThemePreference } from '@/providers/ThemePreferenceProvider';
 
 type SettingsScreenKey =
@@ -53,6 +55,7 @@ type SettingsScreenKey =
   | 'companyEdit'
   | 'theme'
   | 'language'
+  | 'currency'
   | 'documents'
   | 'support'
   | 'notifications'
@@ -68,6 +71,7 @@ export default function PodesavanjaScreen() {
   const { themePreference } = useThemePreference();
   const { t, i18n } = useTranslation();
   const { session } = useAuth();
+  const { currency, setCurrency } = useCurrency();
   const router = useRouter();
   const colors = Colors[colorScheme];
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -188,6 +192,8 @@ export default function PodesavanjaScreen() {
         return t('settings.themeTitle');
       case 'language':
         return t('settings.languageTitle');
+      case 'currency':
+        return t('settings.currencyTitle');
       case 'documents':
         return t('settings.documentsTitle');
       case 'support':
@@ -254,6 +260,14 @@ export default function PodesavanjaScreen() {
     ],
     []
   );
+  const currencyOptions = useMemo(
+    () => [
+      { value: 'RSD' as const, label: t('settings.currencyRsd'), icon: 'cash-outline' as const },
+      { value: 'EUR' as const, label: t('settings.currencyEur'), icon: 'logo-euro' as const },
+      { value: 'USD' as const, label: t('settings.currencyUsd'), icon: 'logo-usd' as const },
+    ],
+    [t]
+  );
 
   const switchTrackColor = useMemo(
     () => ({
@@ -265,7 +279,7 @@ export default function PodesavanjaScreen() {
   const switchThumbColor = notificationsEnabled ? '#FFFFFF' : isDark ? '#DDE3EA' : '#F7F8FA';
   const switchBgColor = isDark ? '#4A4F58' : '#C8CDD6';
   const modalWidth = Math.max(280, Math.round(windowWidth * 0.8));
-  const modalMaxHeight = Math.max(320, Math.min(480, Math.round(windowHeight * 0.69)));
+  const modalMaxHeight = Math.max(320, Math.min(560, Math.round(windowHeight * 0.78)));
   const modalContentMaxHeight = Math.max(240, modalMaxHeight - 64);
   const modalBackgroundColor = isDark ? Colors.dark.menuSurface : '#FFFFFF';
   const modalBorderColor = isDark ? 'rgba(255,255,255,0.18)' : 'rgba(60,60,67,0.12)';
@@ -298,6 +312,10 @@ export default function PodesavanjaScreen() {
     void i18n.changeLanguage(nextLanguage);
     void setStoredLanguage(nextLanguage);
   }, [i18n]);
+
+  const onSelectCurrency = useCallback((nextCurrency: AppCurrency) => {
+    setCurrency(nextCurrency);
+  }, [setCurrency]);
 
   const onSendSupportEmail = useCallback(async () => {
     const subject = supportSubject.trim() || t('settings.supportEmailSubject');
@@ -886,6 +904,15 @@ export default function PodesavanjaScreen() {
                   onPress: () => openSettingsScreen('language'),
                 })}
               </React.Fragment>,
+              <React.Fragment key="currency">
+                {renderSettingsRow({
+                  icon: 'cash-outline',
+                  iconBg: isDark ? '#182A39' : '#DCEAF7',
+                  iconColor: isDark ? '#72C4FF' : '#1C73B8',
+                  label: t('settings.currencyTitle'),
+                  onPress: () => openSettingsScreen('currency'),
+                })}
+              </React.Fragment>,
             ], true)}
 
             {renderMenuSection([
@@ -1377,6 +1404,53 @@ export default function PodesavanjaScreen() {
                       ) : null}
                     </Pressable>
                     {index < languageOptions.length - 1 ? (
+                      <View className="h-px" style={{ backgroundColor: colors.separator }} />
+                    ) : null}
+                  </React.Fragment>
+                );
+              })}
+            </View>
+          </>
+        ) : null}
+
+        {settingsScreen === 'currency' ? (
+          <>
+            <View className="mt-1 flex-row items-center justify-between">
+              <Text className="flex-1 pr-5 text-app-row leading-5" style={{ color: colors.secondaryText }}>
+                {t('settings.currencyHelp')}
+              </Text>
+              <View className="h-16 w-16 items-center justify-center rounded-[22px]" style={{ backgroundColor: colors.iconSurface }}>
+                <Ionicons name="cash-outline" size={36} color={colors.accent} />
+              </View>
+            </View>
+
+            <View className="mt-6">
+              <Text className="text-app-row font-semibold" style={{ color: colors.secondaryText }}>
+                {t('settings.currencySection')}
+              </Text>
+              <View className="mt-2 h-px" style={{ backgroundColor: colors.separator }} />
+            </View>
+
+            <View className="mt-2">
+              {currencyOptions.map((option, index) => {
+                const selected = currency === option.value;
+                return (
+                  <React.Fragment key={option.value}>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => onSelectCurrency(option.value)}
+                      className="flex-row items-center py-2.5">
+                      <View className="h-8 w-8 items-center justify-center">
+                        <Ionicons name={option.icon} size={18} color={colors.accent} />
+                      </View>
+                      <Text className="ml-3 flex-1 text-base" style={{ color: colors.text }}>
+                        {option.label} <Text style={{ color: colors.secondaryText }}>{getCurrencySymbol(option.value)}</Text>
+                      </Text>
+                      {selected ? (
+                        <Ionicons name="checkmark" size={19} color="#1C60C3" />
+                      ) : null}
+                    </Pressable>
+                    {index < currencyOptions.length - 1 ? (
                       <View className="h-px" style={{ backgroundColor: colors.separator }} />
                     ) : null}
                   </React.Fragment>

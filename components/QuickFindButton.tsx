@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
 import Colors from '@/constants/Colors';
+import { useMoneyFormatter } from '@/components/useMoneyFormatter';
 import { listClientsWithDebt, type ClientWithDebt } from '@/lib/clients';
 import { listJobs, type JobListItem } from '@/lib/jobs';
 import { subscribeQuickFindOpen } from '@/lib/quick-find';
@@ -52,7 +53,7 @@ function normalize(value: string | null | undefined) {
 export function QuickFindButton({ className, hostOnly = false, style }: Props) {
   const router = useRouter();
   const segments = useSegments();
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { session } = useAuth();
   const userId = session?.user?.id ?? null;
   const insets = useSafeAreaInsets();
@@ -68,16 +69,7 @@ export function QuickFindButton({ className, hostOnly = false, style }: Props) {
   const [clients, setClients] = useState<ClientWithDebt[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const locale = i18n.language === 'sr' ? 'sr-Latn-RS' : i18n.language;
-  const moneyFormatter = useMemo(
-    () =>
-      new Intl.NumberFormat(locale, {
-        style: 'currency',
-        currency: 'EUR',
-        maximumFractionDigits: 0,
-      }),
-    [locale]
-  );
+  const moneyFormatter = useMoneyFormatter({ maximumFractionDigits: 0 });
 
   const loadData = useCallback(async () => {
     if (!userId) {
@@ -178,8 +170,8 @@ export function QuickFindButton({ className, hostOnly = false, style }: Props) {
 
   const currentScreenRoute = useMemo<ResultTarget['routeName']>(() => {
     const focusedRoute = segments[1] ?? 'index';
-    if (focusedRoute === 'poslovi') return 'jobs';
-    if (focusedRoute === 'klijenti') return 'clients';
+    if (focusedRoute === 'poslovi' || focusedRoute === 'posao') return 'jobs';
+    if (focusedRoute === 'klijenti' || focusedRoute === 'klijent') return 'clients';
     if (focusedRoute === 'dugovanja') return 'debts';
     if (focusedRoute === 'podesavanja') return 'profile';
     return 'home';
@@ -268,7 +260,7 @@ export function QuickFindButton({ className, hostOnly = false, style }: Props) {
         id: `client:${client.id}`,
         type: 'client',
         title: client.name || t('common.unnamed'),
-        subtitle: client.phone || client.address || (client.jobs_count > 0 ? t('home.jobsCountShort', { count: client.jobs_count }) : t('jobs.noActiveJobs')),
+        subtitle: client.phone || client.address || (client.jobs_count > 0 ? t('home.jobsCountShort', { count: client.jobs_count }) : t('clients.noContactInfo')),
         target: { type: 'client', id: client.id },
         route: () => router.push({ pathname: '/(tabs)/klijent/[id]' as any, params: { id: client.id } }),
       }));

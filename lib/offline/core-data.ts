@@ -673,36 +673,6 @@ async function getNewLocalInvoiceItemPosition(jobId: string) {
   return row?.position == null ? 1 : row.position - 1;
 }
 
-async function syncLocalJobPriceFromInvoiceItems(jobId: string): Promise<void> {
-  const owner = await getLocalJobOwner(jobId);
-  if (!owner?.user_id) throw new Error('Job not found');
-
-  const db = await getOfflineDatabase();
-  const row = await db.getFirstAsync<{ total: number | null; count: number }>(
-    `
-    SELECT COALESCE(SUM(total), 0) AS total, COUNT(*) AS count
-    FROM job_invoice_items
-    WHERE job_id = ? AND deleted_at IS NULL
-    `,
-    jobId
-  );
-  const nextPrice = row && row.count > 0 ? toMoney(row.total ?? 0) : null;
-  const timestamp = nowIso();
-
-  await db.runAsync(
-    "UPDATE jobs SET price = ?, updated_at = ?, dirty = 1, sync_status = 'pending' WHERE id = ? AND user_id = ?",
-    nextPrice,
-    timestamp,
-    jobId,
-    owner.user_id
-  );
-
-  const job = await getLocalJobRawById(owner.user_id, jobId);
-  if (job) {
-    await enqueueSyncOperation({ tableName: 'jobs', rowId: jobId, operation: 'upsert', payload: job });
-  }
-}
-
 export async function createLocalJobInvoiceItem(userId: string, jobId: string, input: JobInvoiceItemInput): Promise<void> {
   const db = await getOfflineDatabase();
   const timestamp = nowIso();
@@ -740,7 +710,6 @@ export async function createLocalJobInvoiceItem(userId: string, jobId: string, i
   );
 
   await enqueueSyncOperation({ tableName: 'job_invoice_items', rowId: row.id, operation: 'upsert', payload: row });
-  await syncLocalJobPriceFromInvoiceItems(jobId);
 }
 
 export async function updateLocalJobInvoiceItem(id: string, jobId: string, input: JobInvoiceItemInput): Promise<void> {
@@ -772,7 +741,6 @@ export async function updateLocalJobInvoiceItem(id: string, jobId: string, input
   );
 
   await enqueueSyncOperation({ tableName: 'job_invoice_items', rowId: id, operation: 'upsert', payload: row });
-  await syncLocalJobPriceFromInvoiceItems(jobId);
 }
 
 export async function deleteLocalJobInvoiceItem(id: string, jobId: string): Promise<void> {
@@ -794,7 +762,6 @@ export async function deleteLocalJobInvoiceItem(id: string, jobId: string): Prom
     operation: 'delete',
     payload: { id, user_id: existing.user_id, deleted_at: timestamp },
   });
-  await syncLocalJobPriceFromInvoiceItems(jobId);
 }
 
 export async function createLocalJobImage(input: {

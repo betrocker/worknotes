@@ -19,7 +19,7 @@ module.exports = () => {
       slug: 'tefter',
       version: '1.0.0',
       orientation: 'default',
-      icon: './assets/images/icon.png',
+      icon: './assets/images/android-chrome-512x512.png',
       scheme: 'tefter',
       userInterfaceStyle: 'automatic',
       splash: {
@@ -46,14 +46,14 @@ module.exports = () => {
         ],
         adaptiveIcon: {
           backgroundColor: '#E6F4FE',
-          foregroundImage: './assets/images/icon.png',
+          foregroundImage: './assets/images/android-icon-foreground.png',
         },
         predictiveBackGestureEnabled: false,
       },
       web: {
         bundler: 'metro',
         output: 'static',
-        favicon: './assets/images/favicon.png',
+        favicon: './assets/images/favicon.ico',
       },
       plugins: [
         'expo-router',
@@ -85,7 +85,7 @@ module.exports = () => {
         [
           'expo-notifications',
           {
-            icon: './assets/images/icon.png',
+            icon: './assets/images/android-chrome-192x192.png',
             color: '#1A4FE0',
             defaultChannel: 'job-reminders',
           },

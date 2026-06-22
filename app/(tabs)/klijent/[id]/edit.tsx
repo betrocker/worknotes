@@ -13,7 +13,7 @@ import { useAuth } from '@/providers/AuthProvider';
 
 export default function EditClientScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ id?: string }>();
+  const params = useLocalSearchParams<{ id?: string; source?: string }>();
   const { t } = useTranslation();
   const { session } = useAuth();
   const colorScheme = useColorScheme() ?? 'light';
@@ -21,6 +21,7 @@ export default function EditClientScreen() {
 
   const userId = session?.user?.id ?? null;
   const id = typeof params.id === 'string' ? params.id : null;
+  const openedFromClientDetail = params.source === 'client-detail';
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -72,7 +73,11 @@ export default function EditClientScreen() {
         address: address.trim() || null,
         note: note.trim() || null,
       });
-      router.replace({ pathname: '/(tabs)/klijent/[id]' as any, params: { id } });
+      if (openedFromClientDetail) {
+        goBackOrReplace(router, { pathname: '/(tabs)/klijent/[id]' as any, params: { id } });
+      } else {
+        router.replace({ pathname: '/(tabs)/klijent/[id]' as any, params: { id } });
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
