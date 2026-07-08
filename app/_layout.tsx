@@ -21,6 +21,7 @@ import { useColorScheme } from "@/components/useColorScheme";
 import Colors from "@/constants/Colors";
 import i18n from "@/lib/i18n";
 import { getStoredLanguage, guessInitialLanguage } from "@/lib/language";
+import { initializeMetaAds } from "@/lib/meta-ads";
 import { initializeNotifications } from "@/lib/notifications";
 import { getStoredThemePreference, type AppThemePreference } from "@/lib/theme";
 import { useBilling, BillingProvider } from "@/providers/BillingProvider";
@@ -132,6 +133,7 @@ export default function RootLayout() {
     if (!loaded || !i18nReady || !assetsReady || !themePreferenceReady) return;
     void SplashScreen.hideAsync();
     void initializeNotifications();
+    void initializeMetaAds();
   }, [assetsReady, i18nReady, loaded, themePreferenceReady]);
 
   if (!loaded || !i18nReady || !assetsReady || !themePreferenceReady) {
